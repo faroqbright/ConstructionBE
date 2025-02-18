@@ -436,7 +436,16 @@ const getProjectById = asyncHandler(async (req, res) => {
     // Find the project by ID, populate members
     const project = await editProject
       .findOne({ _id: projectId })
-      .populate("members", "userName avatar"); // Populate `name` and `avatar` from the `members` field
+      .populate({
+        path: "members",
+        select: "userName avatar role",
+        populate: {
+          path: "role", // Populate the `role` field inside `members`
+          select: "roleName", // Adjust to the specific fields you want from the `role` model
+        },
+      })
+      // .populate("members", "userName avatar"); 
+      // Populate `name` and `avatar` from the `members` field
 
     if (!project) {
       throw new ApiError(404, "Project not found");
