@@ -8,11 +8,11 @@ const roleSchema = new mongoose.Schema(
       trim: true,
       unique: true, // Ensure role names are unique
     },
-    // createdBy: {
-    //   type: String,
-    //   required: true,
-    
-    // },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User', // Referencing the User model
+      required: true,
+    },    
     status: {
       type: String,
       required: true,
