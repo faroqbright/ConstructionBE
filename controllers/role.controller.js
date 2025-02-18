@@ -15,11 +15,11 @@ const createRole = asyncHandler(async (req, res) => {
     if (existingRole) {
       throw new ApiError(400, "Role already exists");
     }
-    // const createdBy = await User.findOne(req.user._id);
+    const createdBy = await User.findOne(req.user._id);
     const roleData = {
       roleName,
-      // createdBy:createdBy?.userName,
-      // createdById:createdBy?._id,
+      createdBy:createdBy?.userName,
+      createdById:createdBy?._id,
       "permissions": [
         {
             "module": "ProjectsManagement",
