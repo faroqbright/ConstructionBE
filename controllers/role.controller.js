@@ -7,10 +7,7 @@ import { io } from "../index.js";
 
 // Create a new role
 const createRole = asyncHandler(async (req, res) => {
-  console.log("Request Body:", req.body);
-  console.log("User:", req.user);
-  console.log("Created By:", createdBy);
-    try {
+  try {
     const { roleName, permissions, status } = req.body;
 
     // Check if roleName already exists
@@ -18,7 +15,7 @@ const createRole = asyncHandler(async (req, res) => {
     if (existingRole) {
       throw new ApiError(400, "Role already exists");
     }
-    const createdBy = await User.findById(req.user._id);
+    const createdBy = await User.findOne(req.user._id);
     const roleData = {
       roleName,
       createdBy:createdBy?.userName,
