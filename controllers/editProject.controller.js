@@ -51,30 +51,28 @@ import { User } from "../models/user.model.js";
 const createProject = asyncHandler(async (req, res) => {
   try {
     const { projectName, projectOwnerId, projectOwner, description, location, status, deadline, physicalEducationRange, daysLeft } = req.body;
-    const { body, files } = req;
-    console.log("🚀 ~ createProject ~ files:", files)
+    const { files } = req;
+    console.log("🚀 ~ createProject ~ files:", files);
 
     // Handling project banner file upload
-    let projectBannerLocalPath;
-    // if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
-    //   projectBannerLocalPath = files.projectBanner[0].path;
-    //   console.log("🚀 ~ createProject ~ projectBannerLocalPath:", projectBannerLocalPath);
-    // }
+    let projectBanner;
     if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
       const projectBannerFile = files.projectBanner[0];
-  
-      // Assuming uploadToS3 expects a buffer, file name, and mimetype
-      projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
-  }
-  
-    let projectBanner;
-    if (projectBannerLocalPath) {
-      // Use S3 to upload the project banner image
-      projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
-      console.log("🚀 ~ createProject ~ projectBanner:", projectBanner);
-
+      // Upload banner image to S3
+      projectBanner = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
       if (!projectBanner) {
         throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
+      }
+    }
+
+    // Handling attachment file upload
+    let attachment;
+    if (files && Array.isArray(files.attachment) && files.attachment.length > 0) {
+      const attachmentFile = files.attachment[0];
+      // Upload attachment file to S3 (or other service)
+      attachment = await uploadToS3(attachmentFile.buffer, attachmentFile.originalname, attachmentFile.mimetype);
+      if (!attachment) {
+        throw new ApiError(400, "Failed to upload attachment", [], { attachment: "Failed to upload attachment" });
       }
     }
 
@@ -89,7 +87,8 @@ const createProject = asyncHandler(async (req, res) => {
       deadline,
       physicalEducationRange,
       daysLeft,
-      projectBanner: projectBanner ? projectBanner : undefined, // Save Cloudinary or S3 URL in database
+      projectBanner: projectBanner ? projectBanner : undefined, // Save Cloudinary or S3 URL
+      attachment: attachment ? attachment : undefined, // Save Cloudinary or S3 URL for attachment
     };
 
     // Create the project
@@ -443,9 +442,7 @@ const getProjectById = asyncHandler(async (req, res) => {
           path: "role", // Populate the `role` field inside `members`
           select: "roleName", // Adjust to the specific fields you want from the `role` model
         },
-      })
-      // .populate("members", "userName avatar"); 
-      // Populate `name` and `avatar` from the `members` field
+      });
 
     if (!project) {
       throw new ApiError(404, "Project not found");
@@ -454,14 +451,11 @@ const getProjectById = asyncHandler(async (req, res) => {
     // Sort logs by timestamp to get the most recent log entry
     const latestLog = project.logs.sort((a, b) => b.timestamp - a.timestamp)[0];
 
-    // Add hardcoded fields and latest log to the response
+    // Add fields, latest log, and attach the lastDelivered as the attachment URL (if exists)
     const responseData = {
       ...project.toObject(), // Convert Mongoose document to plain object
-      lastDelivered: "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-      older: [
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf"
-      ],
+      lastDelivered: project.attachment || "No attachment provided", // Use the attachment URL if available
+      older: project.attachment ? [project.attachment] : [], // Include the attachment in the older array if it exists
       nextMilestone: "Deliver the final scope",
       latestLog, // Include the latest log in the response
     };

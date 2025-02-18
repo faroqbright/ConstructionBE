@@ -1,5 +1,3 @@
-import mongoose from "mongoose";
-
 const editProjectSchema = new mongoose.Schema(
   {
     projectOwner: {
@@ -28,7 +26,10 @@ const editProjectSchema = new mongoose.Schema(
     },
     projectBanner: {
       type: String, // Assuming you store the image URL
-  },
+    },
+    attachment: {
+      type: String, // Assuming you store the attachment URL
+    },
     status: {
       type: String,
       required: true,
@@ -41,7 +42,7 @@ const editProjectSchema = new mongoose.Schema(
         "On Hold",
         "Cancelled",
         "Archived",
-      ], // Professional project statuses
+      ],
       default: "Pending",
     },
     deadline: {
@@ -52,8 +53,8 @@ const editProjectSchema = new mongoose.Schema(
     physicalEducationRange: {
       type: Number,
       required: true,
-      min: 1, // Minimum value
-      max: 100, // Maximum value
+      min: 1,
+      max: 100,
     },
     daysLeft: {
       type: String,
@@ -63,19 +64,19 @@ const editProjectSchema = new mongoose.Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-       },
+      },
     ],
     logs: [
       {
-        actionType: { type: String, required: true }, // Type of action (e.g., "status update", "name change")
-        message: { type: String, required: true }, // Descriptive message of the action
+        actionType: { type: String, required: true },
+        message: { type: String, required: true },
         timestamp: { type: Date, default: Date.now },
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Optional, who performed the action
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
       },
     ],
   },
   {
-    timestamps: true, // Adds createdAt and updatedAt timestamps
+    timestamps: true,
   }
 );
 
