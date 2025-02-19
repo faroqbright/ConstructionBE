@@ -51,28 +51,30 @@ import { User } from "../models/user.model.js";
 const createProject = asyncHandler(async (req, res) => {
   try {
     const { projectName, projectOwnerId, projectOwner, description, location, status, deadline, physicalEducationRange, daysLeft } = req.body;
-    const { files } = req;
-    console.log("🚀 ~ createProject ~ files:", files);
+    const { body, files } = req;
+    console.log("🚀 ~ createProject ~ files:", files)
 
     // Handling project banner file upload
-    let projectBanner;
-    if (files && files.projectBanner && files.projectBanner.length > 0) {
+    let projectBannerLocalPath;
+    // if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
+    //   projectBannerLocalPath = files.projectBanner[0].path;
+    //   console.log("🚀 ~ createProject ~ projectBannerLocalPath:", projectBannerLocalPath);
+    // }
+    if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
       const projectBannerFile = files.projectBanner[0];
-      projectBanner = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
-      
+  
+      // Assuming uploadToS3 expects a buffer, file name, and mimetype
+      projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
+  }
+  
+    let projectBanner;
+    if (projectBannerLocalPath) {
+      // Use S3 to upload the project banner image
+      projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
+      console.log("🚀 ~ createProject ~ projectBanner:", projectBanner);
+
       if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image");
-      }
-    }
-
-    // Handling single attachments upload
-    let attachments;
-    if (files && files.attachments && files.attachments.length > 0) {
-      const attachmentsFile = files.attachments[0];
-      attachments = await uploadToS3(attachmentsFile.buffer, attachmentsFile.originalname, attachmentsFile.mimetype);
-
-      if (!attachments) {
-        throw new ApiError(400, "Failed to upload attachments");
+        throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
       }
     }
 
@@ -87,8 +89,7 @@ const createProject = asyncHandler(async (req, res) => {
       deadline,
       physicalEducationRange,
       daysLeft,
-      projectBanner: projectBanner || undefined,
-      attachments: attachments || undefined, // Single file URL
+      projectBanner: projectBanner ? projectBanner : undefined, // Save Cloudinary or S3 URL in database
     };
 
     // Create the project
@@ -96,8 +97,7 @@ const createProject = asyncHandler(async (req, res) => {
 
     res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
-    console.error("Error creating project:", error);
-    res.status(500).json(new ApiError(500, error.message || "Internal Server Error"));
+    throw new ApiError(400, error.message);
   }
 });
 
