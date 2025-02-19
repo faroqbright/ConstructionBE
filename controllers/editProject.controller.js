@@ -51,31 +51,29 @@ import { User } from "../models/user.model.js";
 const createProject = asyncHandler(async (req, res) => {
   try {
     const { projectName, projectOwnerId, projectOwner, description, location, status, deadline, physicalEducationRange, daysLeft } = req.body;
-    const { body, files } = req;
-    console.log("🚀 ~ createProject ~ files:", files)
+    const { files } = req;
+    console.log("🚀 ~ createProject ~ files:", files);
 
     // Handling project banner file upload
-    let projectBannerLocalPath;
-    // if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
-    //   projectBannerLocalPath = files.projectBanner[0].path;
-    //   console.log("🚀 ~ createProject ~ projectBannerLocalPath:", projectBannerLocalPath);
-    // }
+    let projectBanner;
     if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
       const projectBannerFile = files.projectBanner[0];
-  
-      // Assuming uploadToS3 expects a buffer, file name, and mimetype
-      projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
-  }
-  
-    let projectBanner;
-    if (projectBannerLocalPath) {
-      // Use S3 to upload the project banner image
-      projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
-      console.log("🚀 ~ createProject ~ projectBanner:", projectBanner);
-
+      projectBanner = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
+      
       if (!projectBanner) {
         throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
       }
+    }
+
+    // Handling attachment upload
+    let attachment = [];
+    if (files && Array.isArray(files.attachment) && files.attachment.length > 0) {
+      attachment = await Promise.all(
+        files.attachment.map(async (file) => {
+          const fileUrl = await uploadToS3(file.buffer, file.originalname, file.mimetype);
+          return fileUrl;
+        })
+      );
     }
 
     // Prepare project creation data
@@ -89,7 +87,8 @@ const createProject = asyncHandler(async (req, res) => {
       deadline,
       physicalEducationRange,
       daysLeft,
-      projectBanner: projectBanner ? projectBanner : undefined, // Save Cloudinary or S3 URL in database
+      projectBanner: projectBanner || undefined,
+      attachment, // Store uploaded file URLs in the database
     };
 
     // Create the project
