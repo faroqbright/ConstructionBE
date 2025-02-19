@@ -8,7 +8,7 @@ const editProjectSchema = new mongoose.Schema(
     description: { type: String, required: true, trim: true },
     location: { type: String, required: true, trim: true },
     projectBanner: { type: String }, // Store the image URL
-    attachments: [{ type: String }], // Array of attachment file URLs
+    attachments: { type: String }, // Array of attachment file URLs
     status: {
       type: String,
       required: true,

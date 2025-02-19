@@ -56,24 +56,24 @@ const createProject = asyncHandler(async (req, res) => {
 
     // Handling project banner file upload
     let projectBanner;
-    if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
+    if (files && files.projectBanner && files.projectBanner.length > 0) {
       const projectBannerFile = files.projectBanner[0];
       projectBanner = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
       
       if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
+        throw new ApiError(400, "Failed to upload project banner image");
       }
     }
 
-    // Handling attachment upload
-    let attachment = [];
-    if (files && Array.isArray(files.attachment) && files.attachment.length > 0) {
-      attachment = await Promise.all(
-        files.attachment.map(async (file) => {
-          const fileUrl = await uploadToS3(file.buffer, file.originalname, file.mimetype);
-          return fileUrl;
-        })
-      );
+    // Handling single attachments upload
+    let attachments;
+    if (files && files.attachments && files.attachments.length > 0) {
+      const attachmentsFile = files.attachments[0];
+      attachments = await uploadToS3(attachmentsFile.buffer, attachmentsFile.originalname, attachmentsFile.mimetype);
+
+      if (!attachments) {
+        throw new ApiError(400, "Failed to upload attachments");
+      }
     }
 
     // Prepare project creation data
@@ -88,7 +88,7 @@ const createProject = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
       projectBanner: projectBanner || undefined,
-      attachment, // Store uploaded file URLs in the database
+      attachments: attachments || undefined, // Single file URL
     };
 
     // Create the project
@@ -96,7 +96,8 @@ const createProject = asyncHandler(async (req, res) => {
 
     res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
-    throw new ApiError(400, error.message);
+    console.error("Error creating project:", error);
+    res.status(500).json(new ApiError(500, error.message || "Internal Server Error"));
   }
 });
 
