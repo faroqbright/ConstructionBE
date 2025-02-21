@@ -60,8 +60,8 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
 
 const registerUser = asyncHandler(async (req, res) => {
-  const { email, password, fcmDeviceToken } = req.body;
-  console.log("🚀 ~ registerUser ~ req.body:", req.body)
+  const { email, password, fcmDeviceToken, userName } = req.body;
+  console.log("🚀 ~ registerUser ~ req.body:", req.body);
 
   // Check if the user already exists
   const existingUser = await User.findOne({ email });
@@ -69,11 +69,11 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Email is already in use");
   }
 
-
   const newUser = new User({
     email,
     password,
-    isMain:true,
+    userName, // Store userName
+    isMain: true,
     fcmDeviceToken,
   });
 
@@ -83,23 +83,23 @@ const registerUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     newUser._id
   );
-  // const loggedInUser = await User.findById(existingUser._id).select(
-  //   "-password -refreshToken"
-  // );
 
   const options = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "Strict",
   };
-  res.status(200)
-    .status(200)
-    .cookie("accessToken", accessToken, { ...options, maxAge: 4 * 24 * 60 * 60 * 1000, })
+
+  res
+    .status(201)
+    .cookie("accessToken", accessToken, { ...options, maxAge: 4 * 24 * 60 * 60 * 1000 })
     .cookie("refreshToken", refreshToken, {
       ...options,
       maxAge: 10 * 24 * 60 * 60 * 1000,
     })
-    .json(new ApiResponse(201, { email, accessToken, refreshToken }, "User registered successfully"));
+    .json(
+      new ApiResponse(201, { email, userName, accessToken, refreshToken }, "User registered successfully")
+    );
 });
 
 const login = asyncHandler(async (req, res) => {
@@ -150,6 +150,7 @@ const login = asyncHandler(async (req, res) => {
       )
     );
 });
+
 const forgetPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
   const user = await User.findOne({ email });
