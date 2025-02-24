@@ -18,6 +18,7 @@ import userRouter from './routes/user.routes.js'
 import notificationsRouter from './routes/notifications.routes.js'
 import projectRouter from './routes/project.routes.js'
 import teamMemberRouter from './routes/teamMember.routes.js'
+import documentRoutes from './routes/documentRoutes.js'
 import rolesRouter from './routes/roles.routes.js'
 import rolesUserRouter from './routes/rolesUser.routes.js'
 import clientsRouter from './routes/clients.routes.js'
@@ -31,6 +32,7 @@ app.use("/api/v1/users", userRouter)
 app.use("/api/v1/notifications", notificationsRouter)
 app.use("/api/v1/projects", projectRouter)
 app.use("/api/v1/teamMember", teamMemberRouter)
+app.use('/api/v1/documents', documentRoutes);
 
 app.use((err, req, res, next) => {
     if (err instanceof ApiError) {

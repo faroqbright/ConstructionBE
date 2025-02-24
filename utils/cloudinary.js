@@ -1,11 +1,8 @@
 import { v2 as cloudinary } from "cloudinary"
 import fs from "fs"
-import multer from "multer";
 import dotenv from "dotenv";
 dotenv.config();
-import { S3Client } from "@aws-sdk/client-s3";
 
-import { Upload } from "@aws-sdk/lib-storage";
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -27,30 +24,13 @@ const uploadOnCloudinary = async (localFilePath) => {
     }
 }
 
-
-
 /**
  * Upload a file to S3
  * @param {object} file - File object from multer or similar library
  * @returns {Promise<{fileName: string, url: string}>} Uploaded file information
  */
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 import AWS from 'aws-sdk';
-
 
 const s3 = new AWS.S3({
     region: process.env.AWS_REGION,
