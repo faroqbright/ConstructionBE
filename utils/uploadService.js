@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -44,11 +44,10 @@ const deleteFromS3 = async (fileKey) => {
     };
 
     try {
-        await s3.send(new DeleteObjectCommand(params));
+        await s3.deleteObject(params).promise();
         console.log(`File deleted from S3: ${fileKey}`);
     } catch (error) {
         console.error("Error deleting from S3:", error);
-        throw new Error("File deletion failed");
     }
 };
 
