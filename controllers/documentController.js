@@ -24,7 +24,7 @@ const uploadFile = async (req, res) => {
       fileName: req.file.originalname,
       fileSize: req.file.size, // Capture file size in bytes
       fileUrl: fileUrl,
-      user: req.user.id, // Assuming `req.user` has user info
+      user: req.body.user, // Assuming `req.user` has user info
       status: "pending",
     });
 
