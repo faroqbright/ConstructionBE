@@ -66,11 +66,9 @@ const userSchema = new mongoose.Schema(
     userType: {
       type: String,
       enum: ["Finance", "Production"],
-      required: true,
     },
     companyName: {
       type: String,
-      required: true,
       trim: true,
     },
   },

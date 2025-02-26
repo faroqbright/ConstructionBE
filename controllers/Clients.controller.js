@@ -14,7 +14,7 @@ const createClient = asyncHandler(async (req, res) => {
 
     // Validate userType
     if (!ALLOWED_USER_TYPES.includes(body.userType)) {
-      throw new ApiError(400, "Invalid userType. Allowed: finance, production.");
+      throw new ApiError(400, "Invalid userType.");
     }
 
     // Validate companyName
@@ -68,7 +68,7 @@ const editClient = asyncHandler(async (req, res) => {
 
     // Validate userType if being updated
     if (body.userType && !ALLOWED_USER_TYPES.includes(body.userType)) {
-      throw new ApiError(400, "Invalid userType. Allowed: finance, production.");
+      throw new ApiError(400, "Invalid userType.");
     }
 
     // Validate companyName if being updated
