@@ -6,6 +6,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { teamMember } from "../models/teamMember.model.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
 import { User } from "../models/user.model.js";
+import UserDocument from "../models/userdocumentModel.js";
 
 // Create a project
 // const createProject = asyncHandler(async (req, res) => {
@@ -50,9 +51,19 @@ import { User } from "../models/user.model.js";
 // });
 const createProject = asyncHandler(async (req, res) => {
   try {
-    const { projectName, projectOwnerId, projectOwner, description, location, status, deadline, physicalEducationRange, daysLeft } = req.body;
+    const {
+      projectName,
+      projectOwnerId,
+      projectOwner,
+      description,
+      location,
+      status,
+      deadline,
+      physicalEducationRange,
+      daysLeft,
+    } = req.body;
     const { body, files } = req;
-    console.log("🚀 ~ createProject ~ files:", files)
+    console.log("🚀 ~ createProject ~ files:", files);
 
     // Handling project banner file upload
     let projectBannerLocalPath;
@@ -60,21 +71,35 @@ const createProject = asyncHandler(async (req, res) => {
     //   projectBannerLocalPath = files.projectBanner[0].path;
     //   console.log("🚀 ~ createProject ~ projectBannerLocalPath:", projectBannerLocalPath);
     // }
-    if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
+    if (
+      files &&
+      Array.isArray(files.projectBanner) &&
+      files.projectBanner.length > 0
+    ) {
       const projectBannerFile = files.projectBanner[0];
-  
+
       // Assuming uploadToS3 expects a buffer, file name, and mimetype
-      projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
-  }
-  
+      projectBannerLocalPath = await uploadToS3(
+        projectBannerFile.buffer,
+        projectBannerFile.originalname,
+        projectBannerFile.mimetype
+      );
+    }
+
     let projectBanner;
     if (projectBannerLocalPath) {
       // Use S3 to upload the project banner image
-      projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
+      projectBanner = await uploadToS3(
+        files.projectBanner[0].buffer,
+        files.projectBanner[0].originalname,
+        files.projectBanner[0].mimetype
+      );
       console.log("🚀 ~ createProject ~ projectBanner:", projectBanner);
 
       if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
+        throw new ApiError(400, "Failed to upload project banner image", [], {
+          projectBanner: "Failed to upload project banner image",
+        });
       }
     }
 
@@ -95,7 +120,9 @@ const createProject = asyncHandler(async (req, res) => {
     // Create the project
     const project = await editProject.create(projectData);
 
-    res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
+    res
+      .status(201)
+      .json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
@@ -159,7 +186,6 @@ const createProject = asyncHandler(async (req, res) => {
 //   }
 // });
 
-
 // const editProjects = asyncHandler(async (req, res) => {
 //   try {
 //     const { projectId } = req.params;
@@ -196,7 +222,7 @@ const createProject = asyncHandler(async (req, res) => {
 //     let projectBannerLocalPath;
 //     if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
 //       const projectBannerFile = files.projectBanner[0];
-  
+
 //       // Assuming uploadToS3 expects a buffer, file name, and mimetype
 //       projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
 //   }
@@ -277,16 +303,30 @@ const editProjects = asyncHandler(async (req, res) => {
 
     // Handle file upload for project banner
     let projectBannerLocalPath;
-    if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
+    if (
+      files &&
+      Array.isArray(files.projectBanner) &&
+      files.projectBanner.length > 0
+    ) {
       const projectBannerFile = files.projectBanner[0];
-      projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
+      projectBannerLocalPath = await uploadToS3(
+        projectBannerFile.buffer,
+        projectBannerFile.originalname,
+        projectBannerFile.mimetype
+      );
     }
 
     let projectBanner;
     if (projectBannerLocalPath) {
-      projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
+      projectBanner = await uploadToS3(
+        files.projectBanner[0].buffer,
+        files.projectBanner[0].originalname,
+        files.projectBanner[0].mimetype
+      );
       if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
+        throw new ApiError(400, "Failed to upload project banner image", [], {
+          projectBanner: "Failed to upload project banner image",
+        });
       }
     }
 
@@ -312,8 +352,8 @@ const editProjects = asyncHandler(async (req, res) => {
 
     // Track changes for logs
     const logs = [];
-    const newUser = await User.find({ _id:  req.user._id  });
-    console.log("🚀 ~ editProjects ~ newUser:", newUser)
+    const newUser = await User.find({ _id: req.user._id });
+    console.log("🚀 ~ editProjects ~ newUser:", newUser);
     if (existingProject.status !== status && status) {
       const statusLogMessage = `Status updated from "${existingProject.status}" to "${status}" by  ${req.user.userName}`;
       logs.push({
@@ -356,16 +396,19 @@ const editProjects = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    res.status(200).json(new ApiResponse(200, updatedProject, "Project updated successfully"));
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, updatedProject, "Project updated successfully")
+      );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
 });
 
-
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, page = 1,projectOwnerId } = req.query; // Extract status and page number from query
+    const { status, page = 1, projectOwnerId } = req.query; // Extract status and page number from query
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -390,7 +433,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
     };
     const filter = {
- // Filter by the logged-in user's ID
+      // Filter by the logged-in user's ID
       ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
     };
 
@@ -414,15 +457,21 @@ const getAllProjects = asyncHandler(async (req, res) => {
       .limit(pageSize);
 
     // Total project count for pagination metadata
-    const totalProjects = await editProject.countDocuments(projectOwnerId?filterByProjectOwnerId:filter);
+    const totalProjects = await editProject.countDocuments(
+      projectOwnerId ? filterByProjectOwnerId : filter
+    );
 
     res.status(200).json(
-      new ApiResponse(200, {
-        projects,
-        currentPage: parseInt(page, 10),
-        totalPages: Math.ceil(totalProjects / pageSize),
-        totalProjects,
-      }, "Projects retrieved successfully")
+      new ApiResponse(
+        200,
+        {
+          projects,
+          currentPage: parseInt(page, 10),
+          totalPages: Math.ceil(totalProjects / pageSize),
+          totalProjects,
+        },
+        "Projects retrieved successfully"
+      )
     );
   } catch (error) {
     throw new ApiError(400, error.message);
@@ -440,172 +489,53 @@ const getProjectById = asyncHandler(async (req, res) => {
         path: "members",
         select: "userName avatar role",
         populate: {
-          path: "role", // Populate the `role` field inside `members`
-          select: "roleName", // Adjust to the specific fields you want from the `role` model
+          path: "role",
+          select: "roleName",
         },
-      })
-      // .populate("members", "userName avatar"); 
-      // Populate `name` and `avatar` from the `members` field
+      });
 
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
+    // Fetch documents where projName matches the project's name
+    const projectDocuments = await UserDocument.find({
+      projName: project.projectName,
+    });
+
+    // Extract only fileName and fileUrl
+    const filteredDocuments = projectDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+    }));
+
     // Sort logs by timestamp to get the most recent log entry
     const latestLog = project.logs.sort((a, b) => b.timestamp - a.timestamp)[0];
 
-    // Add hardcoded fields and latest log to the response
+    // Construct response with attached documents
     const responseData = {
-      ...project.toObject(), // Convert Mongoose document to plain object
-      lastDelivered: "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
+      ...project.toObject(),
+      documents: filteredDocuments, // Only fileName and fileUrl
+      lastDelivered:
+        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
       older: [
         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf"
+        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
       ],
       nextMilestone: "Deliver the final scope",
-      latestLog, // Include the latest log in the response
+      latestLog,
     };
 
-    res.status(200).json(
-      new ApiResponse(200, responseData, "Project retrieved successfully")
-    );
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, responseData, "Project retrieved successfully")
+      );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
 });
 
-// const getProjectById = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-
-//     // // Ensure the user is authenticated
-//     // const projectOwnerId = req?.user?._id;
-//     // if (!projectOwnerId) {
-//     //   throw new ApiError(401, "Unauthorized");
-//     // }
-
-//     // Find the project by ID, filter by project owner, and populate members
-//     const project = await editProject
-//       .findOne({ _id: projectId }) // Ensure the project belongs to the logged-in user
-//       .populate("members", "userName avatar"); // Populate `name` and `avatar` from the `members` field
-
-//     if (!project) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     // Add hardcoded fields
-//     const responseData = {
-//       ...project.toObject(), // Convert Mongoose document to plain object
-//       lastDelivered: "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-//       older: [
-//         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-//         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf"
-//       ],
-//       nextMilestone: "Deliver the final scope"
-//     };
-
-//     res.status(200).json(
-//       new ApiResponse(200, responseData, "Project retrieved successfully")
-//     );
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-
-
-// const getAllProjects = asyncHandler(async (req, res) => {
-//   try {
-//     const { status, page = 1 } = req.query; // Extract status and page number from query
-//     const validStatuses = ["Ongoing", "Pending", "Completed"];
-
-//     // Filter by status if provided and valid
-//     const filter = status && validStatuses.includes(status) ? { status } : {};
-
-//     // Pagination settings
-//     const pageSize = 10;
-//     const skip = (page - 1) * pageSize;
-
-//     // Fetch projects with filtering, pagination, and populate members
-//     const projects = await editProject
-//       .find(filter)
-//       .populate("members", "userName avatar") // Populate `name` and `avatar` from the `members` field
-//       .skip(skip)
-//       .limit(pageSize);
-
-//     // Total project count for pagination metadata
-//     const totalProjects = await editProject.countDocuments(filter);
-
-//     if (projects.length === 0) {
-//       throw new ApiError(404, "No projects found");
-//     }
-
-//     res.status(200).json(
-//       new ApiResponse(200, {
-//         projects,
-//         currentPage: parseInt(page, 10),
-//         totalPages: Math.ceil(totalProjects / pageSize),
-//         totalProjects,
-//       }, "Projects retrieved successfully")
-//     );
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-// const getProjectById = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-
-//     // Find the project by ID and populate members
-//     const project = await editProject
-//       .findById(projectId)
-//       .populate("members", "userName avatar"); // Populate `name` and `avatar` from the `members` field
-
-//     if (!project) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     res.status(200).json(
-//       new ApiResponse(200, project, "Project retrieved successfully")
-//     );
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-// const getProjectById = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-
-//     // Find the project by ID and populate members
-//     const project = await editProject
-//       .findById(projectId)
-//       .populate("members", "userName avatar"); // Populate `name` and `avatar` from the `members` field
-
-//     if (!project) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     // Add hardcoded fields
-//     const responseData = {
-//       ...project.toObject(), // Convert Mongoose document to plain object
-//       lastDelivered: "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-//       older: [
-//         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-//         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf"
-//       ],
-//       nextMilestone: "Deliver the final scope"
-//     };
-
-//     res.status(200).json(
-//       new ApiResponse(200, responseData, "Project retrieved successfully")
-//     );
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-
-
-
-// Delete a project
 const deleteProject = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -616,7 +546,9 @@ const deleteProject = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    res.status(200).json(new ApiResponse(200, project, "Project deleted successfully"));
+    res
+      .status(200)
+      .json(new ApiResponse(200, project, "Project deleted successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }

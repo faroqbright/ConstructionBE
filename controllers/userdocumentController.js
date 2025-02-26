@@ -1,10 +1,20 @@
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import UserDocument from "../models/userdocumentModel.js";
+import { editProject } from "../models/project.model.js";
 
 const uploadUserDocument = async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const { projName, user } = req.body;
+
+    // Check if the project exists in editProject schema
+    const projectExists = await editProject.findOne({ projectName: projName });
+
+    if (!projectExists) {
+      return res.status(404).json({ message: "Project not found" });
     }
 
     // Upload file to AWS S3
@@ -20,23 +30,22 @@ const uploadUserDocument = async (req, res) => {
 
     // Create document entry in MongoDB
     const userDocument = new UserDocument({
-      projName: req.body.projName || null, // Optional for regular users
+      projName,
       fileName: req.file.originalname,
-      fileUrl: fileUrl,
-      user: req.body.user,
+      fileUrl,
+      user,
     });
 
     await userDocument.save();
 
     res.status(201).json({ message: "File uploaded successfully!", userDocument });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error uploading file", error: error.message });
+    res.status(500).json({ message: "Error uploading file", error: error.message });
   }
 };
 
 /**
+ * 
  * Fetch all uploaded user documents
  */
 const getUserDocuments = async (req, res) => {
