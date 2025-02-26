@@ -224,7 +224,7 @@ const editProjects = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, page = 1, projectOwnerId } = req.query; // Extract status and page number from query
+    const { status, page = 1, projectOwnerId } = req.query;
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -235,21 +235,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Archived",
     ];
 
-    // Ensure the user is authenticated
-    // const projectOwnerId = req?.user?._id;
-    // console.log("🚀 ~ getAllProjects ~ projectOwnerId:", projectOwnerId)
-
-    // if (!projectOwnerId) {
-    //   throw new ApiError(401, "Unauthorized");
-    // }
-
     // Build the filter object
-    const filterByProjectOwnerId = {
-      projectOwnerId, // Filter by the logged-in user's ID
-      ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
-    };
     const filter = {
-      // Filter by the logged-in user's ID
       ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
     };
 
@@ -264,24 +251,67 @@ const getAllProjects = asyncHandler(async (req, res) => {
         path: "members",
         select: "userName avatar role",
         populate: {
-          path: "role", // Populate the `role` field inside `members`
-          select: "roleName", // Adjust to the specific fields you want from the `role` model
+          path: "role",
+          select: "roleName",
         },
       })
-      // .populate("members", "userName avatar role") // Populate `name` and `avatar` from the `members` field
       .skip(skip)
       .limit(pageSize);
 
-    // Total project count for pagination metadata
-    const totalProjects = await editProject.countDocuments(
-      projectOwnerId ? filterByProjectOwnerId : filter
+    // Fetch finance documents for each project
+    const projectsWithDocuments = await Promise.all(
+      projects.map(async (project) => {
+        const projectDocuments = await UserDocument.find({
+          projName: project.projectName,
+        });
+
+        const financeDocuments = await FinanceDocument.find({
+          projName: project.projectName,
+        });
+
+        // Extract relevant fields from documents
+        const filteredDocuments = projectDocuments.map((doc) => ({
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          user: doc.user,
+        }));
+
+        const financeDetails = financeDocuments.map((doc) => ({
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          user: doc.user,
+          financialExecution: doc.financialExecution,
+          physicalExecution: doc.physicalExecution,
+        }));
+
+        // Sort logs by timestamp to get the most recent log entry
+        const latestLog =
+          project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
+        return {
+          ...project.toObject(),
+          documents: filteredDocuments,
+          financeDocuments: financeDetails,
+          lastDelivered:
+            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
+          older: [
+            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
+            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
+          ],
+          nextMilestone: "Deliver the final scope",
+          latestLog,
+        };
+      })
     );
+
+    // Total project count for pagination metadata
+    const totalProjects = await editProject.countDocuments(filter);
 
     res.status(200).json(
       new ApiResponse(
         200,
         {
-          projects,
+          projects: projectsWithDocuments,
           currentPage: parseInt(page, 10),
           totalPages: Math.ceil(totalProjects / pageSize),
           totalProjects,
