@@ -7,6 +7,13 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 const createCompany = asyncHandler(async (req, res) => {
   try {
     const { name, email, number } = req.body;
+
+    // Check if email already exists
+    const existingCompany = await Company.findOne({ email });
+    if (existingCompany) {
+      throw new ApiError(400, "Email already exists");
+    }
+
     const newCompany = await Company.create({
       name,
       email,
@@ -28,15 +35,29 @@ const getAllCompanies = asyncHandler(async (req, res) => {
 
 // Update company by ID
 const updateCompanyById = asyncHandler(async (req, res) => {
-  const updatedCompany = await Company.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true,
-  });
+  try {
+    const { email } = req.body;
+    
+    // Check if email already exists in another company
+    if (email) {
+      const existingCompany = await Company.findOne({ email, _id: { $ne: req.params.id } });
+      if (existingCompany) {
+        throw new ApiError(400, "Email already exists");
+      }
+    }
 
-  if (!updatedCompany) {
-    throw new ApiError(404, "Company not found");
+    const updatedCompany = await Company.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedCompany) {
+      throw new ApiError(404, "Company not found");
+    }
+    res.status(200).json(new ApiResponse(200, updatedCompany, "Company updated successfully"));
+  } catch (error) {
+    throw new ApiError(400, error.message);
   }
-  res.status(200).json(new ApiResponse(200, updatedCompany, "Company updated successfully"));
 });
 
 // Delete company by ID
@@ -48,4 +69,4 @@ const deleteCompanyById = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, {}, "Company deleted successfully"));
 });
 
-export { createCompany, getAllCompanies, updateCompanyById , deleteCompanyById };
+export { createCompany, getAllCompanies, updateCompanyById, deleteCompanyById };
