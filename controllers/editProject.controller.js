@@ -2,53 +2,11 @@ import { editProject } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
-import { teamMember } from "../models/teamMember.model.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
 import { User } from "../models/user.model.js";
 import UserDocument from "../models/userdocumentModel.js";
+import FinanceDocument from "../models/finance.model.js";
 
-// Create a project
-// const createProject = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectName,projectOwnerId,projectOwner, description, location, status, deadline, physicalEducationRange, daysLeft } = req.body;
-//     const { body, files } = req;
-
-//     let projectBannerLocalPath;
-//     if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
-//       projectBannerLocalPath = files.projectBanner[0].path;
-//     }
-
-//     let projectBanner;
-//     if (projectBannerLocalPath) {
-//       projectBanner = await uploadOnCloudinary(projectBannerLocalPath);
-//       if (!projectBanner) {
-//         throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
-//       }
-//     }
-
-//     // Prepare project creation data
-//     const projectData = {
-//       projectName,
-//       projectOwner,
-//       projectOwnerId,
-//       description,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       projectBanner: projectBanner ? projectBanner.url : undefined,
-//     };
-
-//     // Create the project
-//     const project = await editProject.create(projectData);
-
-//     res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
 const createProject = asyncHandler(async (req, res) => {
   try {
     const {
@@ -127,148 +85,6 @@ const createProject = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
-
-// const editProjects = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-//     const {
-//       projectName,
-//       projectOwner,
-//       projectOwnerId,
-//       description,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       members,
-//     } = req.body;
-
-//     // Validate members
-//     if (members && !Array.isArray(members)) {
-//       throw new ApiError(400, "Members must be an array of team member IDs");
-//     }
-
-//     // Optionally validate that each member ID exists in the database
-//     if (members && members.length > 0) {
-//       console.log("🚀 ~ editProjects ~ members:", members)
-//       const validMembers = await teamMember.find({ _id: { $in: members } });
-//       if (validMembers.length !== members.length) {
-//         throw new ApiError(400, "One or more member IDs are invalid");
-//       }
-//     }
-
-//     // Update the project
-//     const project = await editProject.findByIdAndUpdate(
-//       projectId,
-//       {
-//         projectName,
-//         projectOwner,
-//         projectOwnerId,
-//         description,
-//         location,
-//         status,
-//         deadline,
-//         physicalEducationRange,
-//         daysLeft,
-//         ...(members && { members }),
-//       },
-//       { new: true, runValidators: true }
-//     );
-
-//     if (!project) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     res.status(200).json(new ApiResponse(200, project, "Project updated successfully"));
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-
-// const editProjects = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-//     const {
-//       projectName,
-//       projectOwner,
-//       projectOwnerId,
-//       description,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       members,
-//     } = req.body;
-
-//     const { files } = req;
-
-//     // Validate members
-//     if (members && !Array.isArray(members)) {
-//       throw new ApiError(400, "Members must be an array of team member IDs");
-//     }
-
-//     // Optionally validate that each member ID exists in the database
-//     if (members && members.length > 0) {
-//       console.log("🚀 ~ editProjects ~ members:", members);
-//       const validMembers = await User.find({ _id: { $in: members } });
-//       if (validMembers.length !== members.length) {
-//         throw new ApiError(400, "One or more member IDs are invalid");
-//       }
-//     }
-
-//     // Handle file upload for project banner
-//     let projectBannerLocalPath;
-//     if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
-//       const projectBannerFile = files.projectBanner[0];
-
-//       // Assuming uploadToS3 expects a buffer, file name, and mimetype
-//       projectBannerLocalPath = await uploadToS3(projectBannerFile.buffer, projectBannerFile.originalname, projectBannerFile.mimetype);
-//   }
-//     console.log("🚀 ~ editProjects ~ projectBannerLocalPath:", projectBannerLocalPath);
-
-//     let projectBanner;
-//     if (projectBannerLocalPath) {
-//       // Use S3 or Cloudinary to upload the project banner
-//       projectBanner = await uploadToS3(files.projectBanner[0].buffer, files.projectBanner[0].originalname, files.projectBanner[0].mimetype);
-//       console.log("🚀 ~ editProjects ~ projectBanner:", projectBanner);
-
-//       if (!projectBanner) {
-//         throw new ApiError(400, "Failed to upload project banner image", [], { projectBanner: "Failed to upload project banner image" });
-//       }
-//     }
-
-//     // Update the project
-//     const updateData = {
-//       projectName,
-//       projectOwner,
-//       projectOwnerId,
-//       description,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       ...(members && { members }),
-//       ...(projectBanner && { projectBanner: projectBanner }), // Save Cloudinary/S3 URL
-//     };
-
-//     const project = await editProject.findByIdAndUpdate(
-//       projectId,
-//       updateData,
-//       { new: true, runValidators: true }
-//     );
-
-//     if (!project) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     res.status(200).json(new ApiResponse(200, project, "Project updated successfully"));
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
 
 const editProjects = asyncHandler(async (req, res) => {
   try {
@@ -482,7 +298,6 @@ const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    // Find the project by ID, populate members
     const project = await editProject
       .findOne({ _id: projectId })
       .populate({
@@ -503,6 +318,18 @@ const getProjectById = asyncHandler(async (req, res) => {
       projName: project.projectName,
     });
 
+    const financeDocuments = await FinanceDocument.find({
+      projName: project.projectName,
+    });
+
+    const financeDetails = financeDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+      financialExecution: doc.financialExecution,
+      physicalExecution: doc.physicalExecution,
+    }));
+
     // Extract only fileName and fileUrl
     const filteredDocuments = projectDocuments.map((doc) => ({
       fileName: doc.fileName,
@@ -516,7 +343,8 @@ const getProjectById = asyncHandler(async (req, res) => {
     // Construct response with attached documents
     const responseData = {
       ...project.toObject(),
-      documents: filteredDocuments, // Only fileName and fileUrl
+      documents: filteredDocuments,
+      financeDocuments: financeDetails,
       lastDelivered:
         "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
       older: [
