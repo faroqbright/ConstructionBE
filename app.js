@@ -24,6 +24,7 @@ import companiesRoutes from './routes/company.routes.js'
 import rolesRouter from './routes/roles.routes.js'
 import rolesUserRouter from './routes/rolesUser.routes.js'
 import clientsRouter from './routes/clients.routes.js'
+import financeRoutes from './routes/finance.routes.js'
 import { ApiError } from "./utils/ApiError.js"
 
 
@@ -37,6 +38,7 @@ app.use("/api/v1/teamMember", teamMemberRouter)
 app.use('/api/v1/documents', documentRoutes);
 app.use('/api/v1/userdocuments', userdocumentRoutes);
 app.use('/api/v1/companies', companiesRoutes);
+app.use('/api/v1/finance', financeRoutes);
 
 app.use((err, req, res, next) => {
     if (err instanceof ApiError) {
