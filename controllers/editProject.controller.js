@@ -507,6 +507,7 @@ const getProjectById = asyncHandler(async (req, res) => {
     const filteredDocuments = projectDocuments.map((doc) => ({
       fileName: doc.fileName,
       fileUrl: doc.fileUrl,
+      user: doc.user,
     }));
 
     // Sort logs by timestamp to get the most recent log entry
