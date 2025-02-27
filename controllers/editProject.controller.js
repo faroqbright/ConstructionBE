@@ -90,22 +90,34 @@ const editProjects = asyncHandler(async (req, res) => {
     } = req.body;
     const { files } = req;
 
-    if (
-      projectOwners &&
-      (!Array.isArray(projectOwners) || projectOwners.length === 0)
-    ) {
-      throw new ApiError(400, "Project must have at least one owner.");
-    }
-
     const existingProject = await editProject.findById(projectId);
     if (!existingProject) {
       throw new ApiError(404, "Project not found");
     }
 
+    let updateData = {};
+    let logs = [];
     let updatedProjectBanners = existingProject.projectBanner || [];
 
-    const logs = [];
+    // Handle project owners
+    if (projectOwners && Array.isArray(projectOwners) && projectOwners.length > 0) {
+      // Fetch owners' names from the User collection
+      const ownersData = await User.find({ _id: { $in: projectOwners } }).select("userName");
 
+      if (ownersData.length !== projectOwners.length) {
+        const foundOwnerIds = ownersData.map((owner) => owner._id.toString());
+        const missingOwners = projectOwners.filter((id) => !foundOwnerIds.includes(id));
+        throw new ApiError(400, "Some owners were not found in the database.");
+      }
+
+      // Map owners to expected format
+      updateData.projectOwners = ownersData.map((owner) => ({
+        ownerId: owner._id,
+        ownerName: owner.userName,
+      }));
+    }
+
+    // Handle status updates
     if (existingProject.status !== status && status) {
       logs.push({
         actionType: "Status Update",
@@ -115,6 +127,7 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
+    // Handle project name changes
     if (existingProject.projectName !== projectName && projectName) {
       logs.push({
         actionType: "Project Name Change",
@@ -124,6 +137,7 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
+    // Handle deadline changes
     if (existingProject.deadline !== deadline && deadline) {
       logs.push({
         actionType: "Deadline Change",
@@ -133,6 +147,7 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
+    // Handle banner removal
     if (removeBanners.length > 0) {
       updatedProjectBanners = updatedProjectBanners.filter(
         (url) => !removeBanners.includes(url)
@@ -145,6 +160,7 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
+    // Handle new banners upload
     if (files?.projectBanner?.length > 0) {
       if (updatedProjectBanners.length + files.projectBanner.length > 3) {
         throw new ApiError(400, "You can only have up to 3 banners.");
@@ -164,7 +180,7 @@ const editProjects = asyncHandler(async (req, res) => {
 
         updatedProjectBanners.push({
           url: uploadedImageUrl,
-          uploadDate: new Date(), // Maintain upload timestamp
+          uploadDate: new Date(),
         });
       }
 
@@ -180,9 +196,10 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(400, "You can only have a maximum of 3 banners.");
     }
 
-    const updateData = {
+    // Final update object
+    updateData = {
+      ...updateData,
       projectName,
-      projectOwners,
       description,
       location,
       status,
@@ -200,15 +217,15 @@ const editProjects = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(200, updatedProject, "Project updated successfully")
-      );
+    res.status(200).json(
+      new ApiResponse(200, updatedProject, "Project updated successfully")
+    );
   } catch (error) {
+    console.error("Error updating project:", error.message);
     throw new ApiError(400, error.message);
   }
 });
+
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
