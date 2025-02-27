@@ -11,8 +11,7 @@ const createProject = asyncHandler(async (req, res) => {
   try {
     const {
       projectName,
-      projectOwnerId,
-      projectOwner,
+      projectOwners, // Now expects an array of owners [{ ownerId, ownerName }]
       description,
       location,
       status,
@@ -20,62 +19,50 @@ const createProject = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
     } = req.body;
-    const { body, files } = req;
-    console.log("🚀 ~ createProject ~ files:", files);
+    const { files } = req;
 
-    // Handling project banner file upload
-    let projectBannerLocalPath;
-    // if (files && Array.isArray(files.projectBanner) && files.projectBanner.length > 0) {
-    //   projectBannerLocalPath = files.projectBanner[0].path;
-    //   console.log("🚀 ~ createProject ~ projectBannerLocalPath:", projectBannerLocalPath);
-    // }
-    if (
-      files &&
-      Array.isArray(files.projectBanner) &&
-      files.projectBanner.length > 0
-    ) {
-      const projectBannerFile = files.projectBanner[0];
-
-      // Assuming uploadToS3 expects a buffer, file name, and mimetype
-      projectBannerLocalPath = await uploadToS3(
-        projectBannerFile.buffer,
-        projectBannerFile.originalname,
-        projectBannerFile.mimetype
-      );
+    if (!Array.isArray(projectOwners) || projectOwners.length === 0) {
+      throw new ApiError(400, "Project must have at least one owner.");
     }
 
-    let projectBanner;
-    if (projectBannerLocalPath) {
-      // Use S3 to upload the project banner image
-      projectBanner = await uploadToS3(
-        files.projectBanner[0].buffer,
-        files.projectBanner[0].originalname,
-        files.projectBanner[0].mimetype
-      );
-      console.log("🚀 ~ createProject ~ projectBanner:", projectBanner);
+    let projectBanners = [];
 
-      if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image", [], {
-          projectBanner: "Failed to upload project banner image",
+    if (files?.projectBanner?.length > 0) {
+      if (files.projectBanner.length > 3) {
+        throw new ApiError(400, "You can only upload up to 3 banners.");
+      }
+
+      for (const file of files.projectBanner) {
+        const uploadedImageUrl = await uploadToS3(
+          file.buffer,
+          file.originalname,
+          file.mimetype
+        );
+        if (!uploadedImageUrl) continue;
+
+        if (projectBanners.includes(uploadedImageUrl)) {
+          throw new ApiError(400, "Duplicate banners are not allowed.");
+        }
+
+        projectBanners.push({
+          url: uploadedImageUrl,
+          uploadDate: new Date(), // Store upload timestamp
         });
       }
     }
 
-    // Prepare project creation data
     const projectData = {
       projectName,
-      projectOwner,
-      projectOwnerId,
+      projectOwners, // Store as an array
       description,
       location,
       status,
       deadline,
       physicalEducationRange,
       daysLeft,
-      projectBanner: projectBanner ? projectBanner : undefined, // Save Cloudinary or S3 URL in database
+      projectBanner: projectBanners,
     };
 
-    // Create the project
     const project = await editProject.create(projectData);
 
     res
@@ -91,8 +78,7 @@ const editProjects = asyncHandler(async (req, res) => {
     const { projectId } = req.params;
     const {
       projectName,
-      projectOwner,
-      projectOwnerId,
+      projectOwners, // Expecting an updated array of owners
       description,
       location,
       status,
@@ -100,115 +86,117 @@ const editProjects = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
       members,
+      removeBanners = [],
     } = req.body;
-
     const { files } = req;
 
-    // Validate members
-    if (members && !Array.isArray(members)) {
-      throw new ApiError(400, "Members must be an array of team member IDs");
-    }
-
-    // Optionally validate that each member ID exists in the database
-    if (members && members.length > 0) {
-      const validMembers = await User.find({ _id: { $in: members } });
-      if (validMembers.length !== members.length) {
-        throw new ApiError(400, "One or more member IDs are invalid");
-      }
-    }
-
-    // Handle file upload for project banner
-    let projectBannerLocalPath;
     if (
-      files &&
-      Array.isArray(files.projectBanner) &&
-      files.projectBanner.length > 0
+      projectOwners &&
+      (!Array.isArray(projectOwners) || projectOwners.length === 0)
     ) {
-      const projectBannerFile = files.projectBanner[0];
-      projectBannerLocalPath = await uploadToS3(
-        projectBannerFile.buffer,
-        projectBannerFile.originalname,
-        projectBannerFile.mimetype
-      );
+      throw new ApiError(400, "Project must have at least one owner.");
     }
 
-    let projectBanner;
-    if (projectBannerLocalPath) {
-      projectBanner = await uploadToS3(
-        files.projectBanner[0].buffer,
-        files.projectBanner[0].originalname,
-        files.projectBanner[0].mimetype
-      );
-      if (!projectBanner) {
-        throw new ApiError(400, "Failed to upload project banner image", [], {
-          projectBanner: "Failed to upload project banner image",
-        });
-      }
-    }
-
-    // Fetch the existing project before updating to track changes
     const existingProject = await editProject.findById(projectId);
     if (!existingProject) {
       throw new ApiError(404, "Project not found");
     }
 
-    const updateData = {
-      projectName,
-      projectOwner,
-      projectOwnerId,
-      description,
-      location,
-      status,
-      deadline,
-      physicalEducationRange,
-      daysLeft,
-      ...(members && { members }),
-      ...(projectBanner && { projectBanner }), // Save Cloudinary/S3 URL
-    };
+    let updatedProjectBanners = existingProject.projectBanner || [];
 
-    // Track changes for logs
     const logs = [];
-    const newUser = await User.find({ _id: req.user._id });
-    console.log("🚀 ~ editProjects ~ newUser:", newUser);
+
     if (existingProject.status !== status && status) {
-      const statusLogMessage = `Status updated from "${existingProject.status}" to "${status}" by  ${req.user.userName}`;
       logs.push({
         actionType: "Status Update",
-        message: statusLogMessage,
+        message: `Status updated from "${existingProject.status}" to "${status}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
     }
 
     if (existingProject.projectName !== projectName && projectName) {
-      const nameLogMessage = `Project name changed from "${existingProject.projectName}" to "${projectName}" by  ${req.user.userName}`;
       logs.push({
         actionType: "Project Name Change",
-        message: nameLogMessage,
+        message: `Project name changed from "${existingProject.projectName}" to "${projectName}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
     }
 
     if (existingProject.deadline !== deadline && deadline) {
-      const deadlineLogMessage = `Deadline changed from "${existingProject.deadline}" to "${deadline}" by  ${req.user.userName}`;
       logs.push({
         actionType: "Deadline Change",
-        message: deadlineLogMessage,
+        message: `Deadline changed from "${existingProject.deadline}" to "${deadline}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
     }
 
-    // Add logs to update data
-    if (logs.length > 0) {
-      updateData.logs = [...existingProject.logs, ...logs]; // Merge new logs with existing logs
+    if (removeBanners.length > 0) {
+      updatedProjectBanners = updatedProjectBanners.filter(
+        (url) => !removeBanners.includes(url)
+      );
+      logs.push({
+        actionType: "Project Banner Removal",
+        message: `Removed ${removeBanners.length} banner(s) by ${req.user.userName}`,
+        userId: req.user.id,
+        timestamp: new Date(),
+      });
     }
 
-    // Update the project with the new data and logs
+    if (files?.projectBanner?.length > 0) {
+      if (updatedProjectBanners.length + files.projectBanner.length > 3) {
+        throw new ApiError(400, "You can only have up to 3 banners.");
+      }
+
+      for (const file of files.projectBanner) {
+        const uploadedImageUrl = await uploadToS3(
+          file.buffer,
+          file.originalname,
+          file.mimetype
+        );
+        if (!uploadedImageUrl) continue;
+
+        if (updatedProjectBanners.includes(uploadedImageUrl)) {
+          throw new ApiError(400, "Duplicate banners are not allowed.");
+        }
+
+        updatedProjectBanners.push({
+          url: uploadedImageUrl,
+          uploadDate: new Date(), // Maintain upload timestamp
+        });
+      }
+
+      logs.push({
+        actionType: "Project Banner Addition",
+        message: `Added new banner(s) by ${req.user.userName}`,
+        userId: req.user.id,
+        timestamp: new Date(),
+      });
+    }
+
+    if (updatedProjectBanners.length > 3) {
+      throw new ApiError(400, "You can only have a maximum of 3 banners.");
+    }
+
+    const updateData = {
+      projectName,
+      projectOwners,
+      description,
+      location,
+      status,
+      deadline,
+      physicalEducationRange,
+      daysLeft,
+      projectBanner: updatedProjectBanners,
+      ...(members && { members }),
+      logs: [...existingProject.logs, ...logs],
+    };
+
     const updatedProject = await editProject.findByIdAndUpdate(
       projectId,
-      { ...updateData }, // Include updated data
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -328,16 +316,14 @@ const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const project = await editProject
-      .findOne({ _id: projectId })
-      .populate({
-        path: "members",
-        select: "userName avatar role",
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      });
+    const project = await editProject.findOne({ _id: projectId }).populate({
+      path: "members",
+      select: "userName avatar role",
+      populate: {
+        path: "role",
+        select: "roleName",
+      },
+    });
 
     if (!project) {
       throw new ApiError(404, "Project not found");

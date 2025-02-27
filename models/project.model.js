@@ -2,16 +2,19 @@ import mongoose from "mongoose";
 
 const editProjectSchema = new mongoose.Schema(
   {
-    projectOwner: {
-      type: String,
-      required: true,
-      trim: true,
-    },
+    projectOwners: [
+      {
+        ownerId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        ownerName: {
+          type: String,
+          required: true,
+        },
+      },
+    ],
     documents: [{ type: mongoose.Schema.Types.ObjectId, ref: "UserDocument" }],
-    projectOwnerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
     projectName: {
       type: String,
       required: true,
@@ -28,7 +31,13 @@ const editProjectSchema = new mongoose.Schema(
       trim: true,
     },
     projectBanner: {
-      type: String, // Assuming you store the image URL
+      type: [
+        {
+          url: String,
+          uploadDate: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
     },
     status: {
       type: String,

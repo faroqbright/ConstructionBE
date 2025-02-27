@@ -12,7 +12,7 @@ router.route('/')
     .post(verifyJWT, upload.fields([
         {
             name: "projectBanner",
-            maxCount: 1,
+            maxCount: 3,
         }
     ]), createProject)
     .get(verifyJWT, getAllProjects);
@@ -22,7 +22,7 @@ router.route('/:projectId')
     .put(verifyJWT, upload.fields([
         {
             name: "projectBanner",
-            maxCount: 1,
+            maxCount: 3,
         }
     ]), editProjects)
     .delete(verifyJWT, deleteProject);
