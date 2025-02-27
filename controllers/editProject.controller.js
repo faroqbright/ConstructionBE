@@ -212,7 +212,7 @@ const editProjects = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, page = 1, projectOwnerId } = req.query;
+    const { status, projectOwnerId } = req.query;
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -228,11 +228,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
     };
 
-    // Pagination settings
-    const pageSize = 10;
-    const skip = (page - 1) * pageSize;
-
-    // Fetch projects with filtering, pagination, and populate members
+    // Fetch all projects with filtering and populate members
     const projects = await editProject
       .find(filter)
       .populate({
@@ -242,9 +238,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
           path: "role",
           select: "roleName",
         },
-      })
-      .skip(skip)
-      .limit(pageSize);
+      });
 
     // Fetch finance documents for each project
     const projectsWithDocuments = await Promise.all(
@@ -292,21 +286,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
       })
     );
 
-    // Total project count for pagination metadata
-    const totalProjects = await editProject.countDocuments(filter);
-
-    res.status(200).json(
-      new ApiResponse(
-        200,
-        {
-          projects: projectsWithDocuments,
-          currentPage: parseInt(page, 10),
-          totalPages: Math.ceil(totalProjects / pageSize),
-          totalProjects,
-        },
-        "Projects retrieved successfully"
-      )
-    );
+    res
+      .status(200)
+      .json(new ApiResponse(200, { projects: projectsWithDocuments }, "Projects retrieved successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
