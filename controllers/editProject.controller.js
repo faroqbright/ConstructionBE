@@ -253,8 +253,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { "members": loggedInUserId } : {}), // Apply filter only if isMain is false
-    };
+      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+    };    
 
     const pageNumber = page ? parseInt(page, 10) : null;
     const pageSize = 10;
