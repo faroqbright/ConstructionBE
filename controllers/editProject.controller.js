@@ -30,10 +30,6 @@ const createProject = asyncHandler(async (req, res) => {
       );
     }
 
-    if (!Array.isArray(projectOwners) || projectOwners.length === 0) {
-      throw new ApiError(400, "Project must have at least one owner.");
-    }
-
     let projectBanners = [];
 
     if (files?.projectBanner?.length > 0) {
