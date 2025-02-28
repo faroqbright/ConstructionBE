@@ -50,31 +50,13 @@ const uploadUserDocument = async (req, res) => {
  */
 const getUserDocuments = async (req, res) => {
   try {
-    const { status, isMain, loggedInUserId, validStatuses } = req.body; // Assuming these values come from request
-
-    // Step 1: Find all projects where the user is an owner or a member
-    const assignedProjects = await editProject.find({
-      $or: [
-        { members: loggedInUserId }, 
-        { "projectOwners.ownerId": loggedInUserId }
-      ]
-    });
-
-    // Step 2: Extract project names from assigned projects
-    const projectNames = assignedProjects.map((project) => project.projectName);
-
-    // Step 3: Build the filter for user documents
-    const filter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}), // Apply status filter if valid
-      ...(!isMain ? { projectName: { $in: projectNames } } : {}) // Show documents only for assigned projects
-    };
-
-    // Step 4: Fetch user documents with the applied filter
-    const userDocuments = await UserDocument.find(filter);
+    const userDocuments = await UserDocument.find();
 
     res.status(200).json(userDocuments);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch user documents", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch documents", error: error.message });
   }
 };
 
