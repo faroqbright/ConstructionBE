@@ -21,7 +21,6 @@ const createProject = asyncHandler(async (req, res) => {
     } = req.body;
     const { files } = req;
 
-    // Check if the project name already exists
     const existingProject = await editProject.findOne({ projectName });
     if (existingProject) {
       throw new ApiError(
@@ -239,7 +238,7 @@ const editProjects = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, projectOwnerId } = req.query;
+    const { status, projectOwnerId, page } = req.query;
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -252,11 +251,16 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     // Build the filter object
     const filter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}), // Add status filter if valid
+      ...(status && validStatuses.includes(status) ? { status } : {}),
+      ...(projectOwnerId ? { "projectOwners.ownerId": projectOwnerId } : {}),
     };
 
-    // Fetch all projects with filtering and populate members
-    const projects = await editProject.find(filter).populate({
+    // Default to null if page is not provided
+    const pageNumber = page ? parseInt(page, 10) : null;
+    const pageSize = 10;
+    const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
+
+    let query = editProject.find(filter).populate({
       path: "members",
       select: "userName avatar role",
       populate: {
@@ -264,6 +268,16 @@ const getAllProjects = asyncHandler(async (req, res) => {
         select: "roleName",
       },
     });
+
+    // Apply pagination only if page is provided
+    if (pageNumber) {
+      query = query.skip(skip).limit(pageSize);
+    }
+
+    const projects = await query;
+
+    // Get total count only when pagination is used
+    const totalProjects = pageNumber ? await editProject.countDocuments(filter) : null;
 
     // Fetch finance documents for each project
     const projectsWithDocuments = await Promise.all(
@@ -276,7 +290,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
           projName: project.projectName,
         });
 
-        // Extract relevant fields from documents
         const filteredDocuments = projectDocuments.map((doc) => ({
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
@@ -292,7 +305,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
           physicalExecution: doc.physicalExecution,
         }));
 
-        // Sort logs by timestamp to get the most recent log entry
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
 
@@ -300,31 +312,30 @@ const getAllProjects = asyncHandler(async (req, res) => {
           ...project.toObject(),
           documents: filteredDocuments,
           financeDocuments: financeDetails,
-          lastDelivered:
-            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-          older: [
-            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-            "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-          ],
-          nextMilestone: "Deliver the final scope",
           latestLog,
         };
       })
     );
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          { projects: projectsWithDocuments },
-          "Projects retrieved successfully"
-        )
-      );
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          projects: projectsWithDocuments,
+          ...(pageNumber && {
+            currentPage: pageNumber,
+            totalPages: Math.ceil(totalProjects / pageSize),
+            totalProjects,
+          }),
+        },
+        "Projects retrieved successfully"
+      )
+    );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
 });
+
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
@@ -376,13 +387,6 @@ const getProjectById = asyncHandler(async (req, res) => {
       ...project.toObject(),
       documents: filteredDocuments,
       financeDocuments: financeDetails,
-      lastDelivered:
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-      older: [
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-        "https://myinnercircleaws.s3.amazonaws.com/1730889894003_fitness-handbook.pdf",
-      ],
-      nextMilestone: "Deliver the final scope",
       latestLog,
     };
 
