@@ -45,12 +45,24 @@ const getDocuments = async (req, res) => {
   try {
     const { status, isMain, loggedInUserId, validStatuses } = req.body; // Assuming these values come from request
 
+    // Step 1: Find all projects where the user is an owner or a member
+    const assignedProjects = await editProject.find({
+      $or: [
+        { members: loggedInUserId }, 
+        { "projectOwners.ownerId": loggedInUserId }
+      ]
+    });
+
+    // Step 2: Extract project names from assigned projects
+    const projectNames = assignedProjects.map((project) => project.projectName);
+
+    // Step 3: Build the filter for documents
     const filter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+      ...(status && validStatuses.includes(status) ? { status } : {}), // Apply status filter if valid
+      ...(!isMain ? { projectName: { $in: projectNames } } : {}) // Show documents only for assigned projects
     };
 
-    // Fetch documents with applied filter
+    // Step 4: Fetch documents with the applied filter
     const documents = await Document.find(filter);
 
     res.status(200).json(documents);

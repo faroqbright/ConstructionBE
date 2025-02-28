@@ -45,19 +45,31 @@ const uploadFinanceDocument = async (req, res) => {
 
 const getFinanceDocuments = async (req, res) => {
   try {
-    const { status, isMain, loggedInUserId, validStatuses } = req.body; // Assuming these values are coming from the request
+    const { status, isMain, loggedInUserId, validStatuses } = req.body; // Assuming these values come from request
 
+    // Step 1: Find all projects where the user is an owner or a member
+    const assignedProjects = await editProject.find({
+      $or: [
+        { members: loggedInUserId }, 
+        { "projectOwners.ownerId": loggedInUserId }
+      ]
+    });
+
+    // Step 2: Extract project names from assigned projects
+    const projectNames = assignedProjects.map((project) => project.projectName);
+
+    // Step 3: Build the filter for invoices
     const filter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+      ...(status && validStatuses.includes(status) ? { status } : {}), // Apply status filter if valid
+      ...(!isMain ? { projectName: { $in: projectNames } } : {}) // Show invoices only for assigned projects
     };
 
-    // Fetch documents with applied filter
-    const financeDocuments = await FinanceDocument.find(filter);
+    // Step 4: Fetch invoices with the applied filter
+    const invoices = await Invoice.find(filter);
 
-    res.status(200).json(financeDocuments);
+    res.status(200).json(invoices);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch documents", error: error.message });
+    res.status(500).json({ message: "Failed to fetch invoices", error: error.message });
   }
 };
 
