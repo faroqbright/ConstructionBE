@@ -268,6 +268,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         }));
 
         const financeDetails = financeDocuments.map((doc) => ({
+          id: doc._id,
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
           user: doc.user,
@@ -330,6 +331,7 @@ const getProjectById = asyncHandler(async (req, res) => {
     });
 
     const financeDetails = financeDocuments.map((doc) => ({
+      id: doc._id,
       fileName: doc.fileName,
       fileUrl: doc.fileUrl,
       user: doc.user,
