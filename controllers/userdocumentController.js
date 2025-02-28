@@ -49,16 +49,33 @@ const uploadUserDocument = async (req, res) => {
  * Fetch all uploaded user documents
  */
 const getUserDocuments = async (req, res) => {
-  try {
-    const userDocuments = await UserDocument.find();
 
-    res.status(200).json(userDocuments);
+  try {
+    const { isMain, _id: loggedInUserId } = req.user;
+
+    const assignedProjects = await editProject.find({
+      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+    });
+
+    const projectNames = assignedProjects.map((proj) => proj.projectName);
+    
+    if (projectNames.length === 0) {
+      console.log("No assigned projects found for this user.");
+      return res.status(200).json({ userDocuments: [], message: "No assigned projects found" });
+    }
+
+    const userDocuments = await UserDocument.find({ projName: { $in: projectNames } });
+
+
+    res.status(200).json({
+      userDocuments,
+      message: "User documents retrieved successfully",
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch documents", error: error.message });
+    console.error("Error fetching user documents:", error.message);
+    res.status(500).json({ message: "Failed to fetch user documents", error: error.message });
   }
-};
+}
 
 /**
  * Update user document status (Approve/Reject)

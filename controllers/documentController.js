@@ -1,5 +1,6 @@
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import Document from "../models/documentModel.js";
+import { editProject } from "../models/project.model.js";
 
 const uploadFile = async (req, res) => {
   try {
@@ -43,15 +44,30 @@ const uploadFile = async (req, res) => {
  */
 const getDocuments = async (req, res) => {
   try {
-    const documents = await Document.find();
+    const { isMain, _id: loggedInUserId } = req.user; 
 
-    res.status(200).json(documents);
+    const assignedProjects = await editProject.find({
+      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+    });
+
+    const projectNames = assignedProjects.map((proj) => proj.projectName);
+    
+    if (projectNames.length === 0) {
+      console.log("No assigned projects found for this user.");
+      return res.status(200).json({ documents: [], message: "No assigned projects found" });
+    }
+
+    const documents = await Document.find({ projName: { $in: projectNames } });
+
+    res.status(200).json({
+      documents,
+      message: "Documents retrieved successfully",
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch documents", error: error.message });
+    console.error("Error fetching documents:", error.message);
+    res.status(500).json({ message: "Failed to fetch documents", error: error.message });
   }
-};
+}
 
 /**
  * Update document status (Approve/Reject)
