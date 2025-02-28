@@ -11,7 +11,7 @@ const createProject = asyncHandler(async (req, res) => {
   try {
     const {
       projectName,
-      projectOwners, // Now expects an array of owners [{ ownerId, ownerName }]
+      projectOwners,
       description,
       location,
       status,
@@ -20,6 +20,15 @@ const createProject = asyncHandler(async (req, res) => {
       daysLeft,
     } = req.body;
     const { files } = req;
+
+    // Check if the project name already exists
+    const existingProject = await editProject.findOne({ projectName });
+    if (existingProject) {
+      throw new ApiError(
+        400,
+        "Project name already taken. Choose a different name."
+      );
+    }
 
     if (!Array.isArray(projectOwners) || projectOwners.length === 0) {
       throw new ApiError(400, "Project must have at least one owner.");
@@ -40,20 +49,16 @@ const createProject = asyncHandler(async (req, res) => {
         );
         if (!uploadedImageUrl) continue;
 
-        if (projectBanners.includes(uploadedImageUrl)) {
-          throw new ApiError(400, "Duplicate banners are not allowed.");
-        }
-
         projectBanners.push({
           url: uploadedImageUrl,
-          uploadDate: new Date(), // Store upload timestamp
+          uploadDate: new Date(),
         });
       }
     }
 
     const projectData = {
       projectName,
-      projectOwners, // Store as an array
+      projectOwners,
       description,
       location,
       status,
@@ -78,7 +83,7 @@ const editProjects = asyncHandler(async (req, res) => {
     const { projectId } = req.params;
     const {
       projectName,
-      projectOwners, // Expecting an updated array of owners
+      projectOwners,
       description,
       location,
       status,
@@ -86,7 +91,7 @@ const editProjects = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
       members,
-      removeBanners = [], // List of URLs to remove
+      removeBanners = [],
     } = req.body;
     const { files } = req;
 
@@ -95,13 +100,30 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
+    // Ensure project name is not duplicated
+    if (projectName && projectName !== existingProject.projectName) {
+      const nameTaken = await editProject.findOne({ projectName });
+      if (nameTaken) {
+        throw new ApiError(
+          400,
+          "Project name already taken. Choose a different name."
+        );
+      }
+    }
+
     let updateData = {};
     let logs = [];
     let updatedProjectBanners = existingProject.projectBanner || [];
 
     // Handle project owners
-    if (projectOwners && Array.isArray(projectOwners) && projectOwners.length > 0) {
-      const ownersData = await User.find({ _id: { $in: projectOwners } }).select("userName");
+    if (
+      projectOwners &&
+      Array.isArray(projectOwners) &&
+      projectOwners.length > 0
+    ) {
+      const ownersData = await User.find({
+        _id: { $in: projectOwners },
+      }).select("userName");
 
       if (ownersData.length !== projectOwners.length) {
         throw new ApiError(400, "Some owners were not found in the database.");
@@ -156,7 +178,7 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
-    // Handle new banners upload (while keeping existing ones)
+    // Handle new banners upload
     if (files?.projectBanner?.length > 0) {
       if (updatedProjectBanners.length + files.projectBanner.length > 3) {
         throw new ApiError(400, "You can only have up to 3 banners.");
@@ -188,7 +210,6 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(400, "You can only have a maximum of 3 banners.");
     }
 
-    // Final update object
     updateData = {
       ...updateData,
       projectName,
@@ -209,15 +230,16 @@ const editProjects = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    res.status(200).json(
-      new ApiResponse(200, updatedProject, "Project updated successfully")
-    );
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, updatedProject, "Project updated successfully")
+      );
   } catch (error) {
     console.error("Error updating project:", error.message);
     throw new ApiError(400, error.message);
   }
 });
-
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
@@ -238,16 +260,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
     };
 
     // Fetch all projects with filtering and populate members
-    const projects = await editProject
-      .find(filter)
-      .populate({
-        path: "members",
-        select: "userName avatar role",
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      });
+    const projects = await editProject.find(filter).populate({
+      path: "members",
+      select: "userName avatar role",
+      populate: {
+        path: "role",
+        select: "roleName",
+      },
+    });
 
     // Fetch finance documents for each project
     const projectsWithDocuments = await Promise.all(
@@ -298,7 +318,13 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     res
       .status(200)
-      .json(new ApiResponse(200, { projects: projectsWithDocuments }, "Projects retrieved successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { projects: projectsWithDocuments },
+          "Projects retrieved successfully"
+        )
+      );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
