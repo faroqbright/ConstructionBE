@@ -43,13 +43,19 @@ const uploadFile = async (req, res) => {
  */
 const getDocuments = async (req, res) => {
   try {
-    const documents = await Document.find();
+    const { status, isMain, loggedInUserId, validStatuses } = req.body; // Assuming these values come from request
+
+    const filter = {
+      ...(status && validStatuses.includes(status) ? { status } : {}),
+      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
+    };
+
+    // Fetch documents with applied filter
+    const documents = await Document.find(filter);
 
     res.status(200).json(documents);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Failed to fetch documents", error: error.message });
+    res.status(500).json({ message: "Failed to fetch documents", error: error.message });
   }
 };
 
