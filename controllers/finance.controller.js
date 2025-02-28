@@ -47,10 +47,6 @@ const getFinanceDocuments = async (req, res) => {
   try {
     const financeDocuments = await FinanceDocument.find();
     res.status(200).json(financeDocuments);
-    const filter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
-    };    
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch documents", error: error.message });
   }
