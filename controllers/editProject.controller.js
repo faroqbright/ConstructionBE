@@ -250,11 +250,10 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Cancelled",
       "Archived",
     ];
-
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { "projectOwners.ownerId": loggedInUserId } : {}), // Apply filter only if isMain is false
+      ...(!isMain ? { "members": loggedInUserId } : {}), // Apply filter only if isMain is false
     };
 
     const pageNumber = page ? parseInt(page, 10) : null;
