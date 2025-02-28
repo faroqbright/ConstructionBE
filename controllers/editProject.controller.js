@@ -150,7 +150,7 @@ const editProjects = asyncHandler(async (req, res) => {
     // Handle banner removal
     if (removeBanners.length > 0) {
       updatedProjectBanners = updatedProjectBanners.filter(
-        (url) => !removeBanners.includes(url)
+        (banner) => !removeBanners.includes(banner.url)
       );
       logs.push({
         actionType: "Project Banner Removal",
@@ -162,9 +162,12 @@ const editProjects = asyncHandler(async (req, res) => {
 
     // Handle new banners upload
     if (files?.projectBanner?.length > 0) {
-      if (updatedProjectBanners.length + files.projectBanner.length > 3) {
-        throw new ApiError(400, "You can only have up to 3 banners.");
+      if (files.projectBanner.length > 3) {
+        throw new ApiError(400, "You can only upload up to 3 banners.");
       }
+
+      // **Clear previous banners and replace with new ones**
+      updatedProjectBanners = [];
 
       for (const file of files.projectBanner) {
         const uploadedImageUrl = await uploadToS3(
@@ -174,10 +177,6 @@ const editProjects = asyncHandler(async (req, res) => {
         );
         if (!uploadedImageUrl) continue;
 
-        if (updatedProjectBanners.includes(uploadedImageUrl)) {
-          throw new ApiError(400, "Duplicate banners are not allowed.");
-        }
-
         updatedProjectBanners.push({
           url: uploadedImageUrl,
           uploadDate: new Date(),
@@ -185,15 +184,11 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       logs.push({
-        actionType: "Project Banner Addition",
-        message: `Added new banner(s) by ${req.user.userName}`,
+        actionType: "Project Banner Replacement",
+        message: `All previous banners removed, added new ${files.projectBanner.length} banner(s) by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
-    }
-
-    if (updatedProjectBanners.length > 3) {
-      throw new ApiError(400, "You can only have a maximum of 3 banners.");
     }
 
     // Final update object
@@ -225,7 +220,6 @@ const editProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
-
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
