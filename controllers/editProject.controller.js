@@ -86,7 +86,7 @@ const editProjects = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
       members,
-      removeBanners = [],
+      removeBanners = [], // List of URLs to remove
     } = req.body;
     const { files } = req;
 
@@ -101,16 +101,12 @@ const editProjects = asyncHandler(async (req, res) => {
 
     // Handle project owners
     if (projectOwners && Array.isArray(projectOwners) && projectOwners.length > 0) {
-      // Fetch owners' names from the User collection
       const ownersData = await User.find({ _id: { $in: projectOwners } }).select("userName");
 
       if (ownersData.length !== projectOwners.length) {
-        const foundOwnerIds = ownersData.map((owner) => owner._id.toString());
-        const missingOwners = projectOwners.filter((id) => !foundOwnerIds.includes(id));
         throw new ApiError(400, "Some owners were not found in the database.");
       }
 
-      // Map owners to expected format
       updateData.projectOwners = ownersData.map((owner) => ({
         ownerId: owner._id,
         ownerName: owner.userName,
@@ -160,14 +156,11 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
-    // Handle new banners upload
+    // Handle new banners upload (while keeping existing ones)
     if (files?.projectBanner?.length > 0) {
-      if (files.projectBanner.length > 3) {
-        throw new ApiError(400, "You can only upload up to 3 banners.");
+      if (updatedProjectBanners.length + files.projectBanner.length > 3) {
+        throw new ApiError(400, "You can only have up to 3 banners.");
       }
-
-      // **Clear previous banners and replace with new ones**
-      updatedProjectBanners = [];
 
       for (const file of files.projectBanner) {
         const uploadedImageUrl = await uploadToS3(
@@ -184,11 +177,15 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       logs.push({
-        actionType: "Project Banner Replacement",
-        message: `All previous banners removed, added new ${files.projectBanner.length} banner(s) by ${req.user.userName}`,
+        actionType: "Project Banner Addition",
+        message: `Added ${files.projectBanner.length} new banner(s) by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
+    }
+
+    if (updatedProjectBanners.length > 3) {
+      throw new ApiError(400, "You can only have a maximum of 3 banners.");
     }
 
     // Final update object
@@ -220,6 +217,7 @@ const editProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
+
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
