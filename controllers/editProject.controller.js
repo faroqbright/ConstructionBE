@@ -125,9 +125,9 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       updateData.projectOwners = ownersData.map((owner) => ({
-        ownerId: owner._id,
+        ownerId: owner._id || (owner.role ? owner.role._id : null),
         ownerName: owner.userName,
-      }));
+      }));      
     }
 
     // Handle status updates
@@ -238,7 +238,9 @@ const editProjects = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, projectOwnerId, page } = req.query;
+    const { status, page } = req.query;
+    const { isMain, _id: loggedInUserId } = req.user; // Assuming `req.user` is set via authentication middleware
+
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -252,10 +254,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(projectOwnerId ? { "projectOwners.ownerId": projectOwnerId } : {}),
+      ...(!isMain ? { "projectOwners.ownerId": loggedInUserId } : {}), // Apply filter only if isMain is false
     };
 
-    // Default to null if page is not provided
     const pageNumber = page ? parseInt(page, 10) : null;
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
@@ -269,17 +270,13 @@ const getAllProjects = asyncHandler(async (req, res) => {
       },
     });
 
-    // Apply pagination only if page is provided
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
     }
 
     const projects = await query;
-
-    // Get total count only when pagination is used
     const totalProjects = pageNumber ? await editProject.countDocuments(filter) : null;
 
-    // Fetch finance documents for each project
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
         const projectDocuments = await UserDocument.find({
