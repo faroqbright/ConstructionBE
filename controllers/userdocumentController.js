@@ -61,16 +61,13 @@ const getUserDocuments = async (req, res) => {
     
     if (projectNames.length === 0) {
       console.log("No assigned projects found for this user.");
-      return res.status(200).json({ userDocuments: [], message: "No assigned projects found" });
+      return res.status(200).json({ message: "No assigned projects found" });
     }
 
     const userDocuments = await UserDocument.find({ projName: { $in: projectNames } });
 
 
-    res.status(200).json({
-      userDocuments,
-      message: "User documents retrieved successfully",
-    });
+    res.status(200).json(userDocuments);
   } catch (error) {
     console.error("Error fetching user documents:", error.message);
     res.status(500).json({ message: "Failed to fetch user documents", error: error.message });
