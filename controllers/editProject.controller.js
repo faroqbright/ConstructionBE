@@ -23,10 +23,7 @@ const createProject = asyncHandler(async (req, res) => {
 
     const existingProject = await editProject.findOne({ projectName });
     if (existingProject) {
-      throw new ApiError(
-        400,
-        "Project name already taken. Choose a different name."
-      );
+      throw new ApiError(400, "Project name already taken. Choose a different name.");
     }
 
     let projectBanners = [];
@@ -37,6 +34,10 @@ const createProject = asyncHandler(async (req, res) => {
       }
 
       for (const file of files.projectBanner) {
+        if (file.size > 20 * 1024 * 1024) { // 20MB limit
+          throw new ApiError(400, `File "${file.originalname}" exceeds the 20MB size limit.`);
+        }
+
         const uploadedImageUrl = await uploadToS3(
           file.buffer,
           file.originalname,
@@ -65,9 +66,7 @@ const createProject = asyncHandler(async (req, res) => {
 
     const project = await editProject.create(projectData);
 
-    res
-      .status(201)
-      .json(new ApiResponse(201, project, "Project created successfully"));
+    res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
