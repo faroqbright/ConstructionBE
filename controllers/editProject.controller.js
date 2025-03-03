@@ -206,10 +206,12 @@ const editProjects = asyncHandler(async (req, res) => {
       projectBanner: updatedProjectBanners,
       ...(members && { members }),
       ...(projectOwners && {
-        projectOwners: projectOwners.map((ownerId) => ({
-          ownerId: new mongoose.Types.ObjectId(ownerId), // Ensure it's an ObjectId
-        })),
-      }),      
+        projectOwners: projectOwners
+          .filter(ownerId => ownerId) // Ensure no null values are stored
+          .map((ownerId) => ({
+            ownerId: new mongoose.Types.ObjectId(ownerId), // Always store as ObjectId
+          })),
+      }),         
       logs: [...existingProject.logs, ...logs],
     };
 
@@ -346,8 +348,9 @@ const getProjectById = asyncHandler(async (req, res) => {
         populate: { path: "role", select: "roleName" },
       },
       {
-        path: "projectOwners.ownerId", // Populate ownerId (User)
-        select: "userName", // Get userName from User model
+        path: "projectOwners.ownerId",
+        model: "User",
+        select: "userName",
       },
     ]);
 
