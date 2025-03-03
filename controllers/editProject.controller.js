@@ -193,6 +193,27 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(400, "You can only have a maximum of 3 banners.");
     }
 
+    let updatedMembers = existingProject.members || [];
+
+    if (members && Array.isArray(members)) {
+      const membersMap = new Map(
+        updatedMembers.map((member) => [member.id, member])
+      );
+
+      members.forEach((newMember) => {
+        if (newMember.id && membersMap.has(newMember.id)) {
+          membersMap.set(newMember.id, {
+            ...membersMap.get(newMember.id),
+            ...newMember,
+          });
+        } else {
+          membersMap.set(newMember.id, newMember);
+        }
+      });
+
+      updatedMembers = Array.from(membersMap.values());
+    }
+
     updateData = {
       ...updateData,
       projectName,
@@ -203,7 +224,7 @@ const editProjects = asyncHandler(async (req, res) => {
       physicalEducationRange,
       daysLeft,
       projectBanner: updatedProjectBanners,
-      ...(members && { members }),
+      members: updatedMembers, // Ensure members are properly updated
       ...(projectOwners && {
         projectOwners: projectOwners.map((ownerId) => ({
           ownerId,
