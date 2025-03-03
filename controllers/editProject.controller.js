@@ -23,7 +23,10 @@ const createProject = asyncHandler(async (req, res) => {
 
     const existingProject = await editProject.findOne({ projectName });
     if (existingProject) {
-      throw new ApiError(400, "Project name already taken. Choose a different name.");
+      throw new ApiError(
+        400,
+        "Project name already taken. Choose a different name."
+      );
     }
 
     let projectBanners = [];
@@ -34,8 +37,12 @@ const createProject = asyncHandler(async (req, res) => {
       }
 
       for (const file of files.projectBanner) {
-        if (file.size > 20 * 1024 * 1024) { // 20MB limit
-          throw new ApiError(400, `File "${file.originalname}" exceeds the 20MB size limit.`);
+        if (file.size > 20 * 1024 * 1024) {
+          // 20MB limit
+          throw new ApiError(
+            400,
+            `File "${file.originalname}" exceeds the 20MB size limit.`
+          );
         }
 
         const uploadedImageUrl = await uploadToS3(
@@ -66,7 +73,9 @@ const createProject = asyncHandler(async (req, res) => {
 
     const project = await editProject.create(projectData);
 
-    res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
+    res
+      .status(201)
+      .json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
@@ -126,7 +135,7 @@ const editProjects = asyncHandler(async (req, res) => {
     //   updateData.projectOwners = ownersData.map((owner) => ({
     //     ownerId: owner._id || (owner.role ? owner.role._id : null),
     //     ownerName: owner.userName,
-    //   }));      
+    //   }));
     // }
 
     // Handle status updates
@@ -216,18 +225,12 @@ const editProjects = asyncHandler(async (req, res) => {
       projectBanner: updatedProjectBanners,
       ...(members && { members }),
       ...(projectOwners && {
-        projectOwners: [
-          ...existingProject.projectOwners,
-          ...(await Promise.all(
-            projectOwners.map(async (ownerId) => {
-              const owner = await User.findById(ownerId).select("userName");
-              if (!owner) throw new ApiError(400, `Owner with ID ${ownerId} not found`);
-              return { ownerId: owner._id, ownerName: owner.userName };
-            })
-          )),
-        ],
+        projectOwners: projectOwners.map((ownerId) => ({
+          ownerId,
+          ownerName: "",
+        })),
       }),
-            logs: [...existingProject.logs, ...logs],
+      logs: [...existingProject.logs, ...logs],
     };
 
     const updatedProject = await editProject.findByIdAndUpdate(
@@ -264,8 +267,15 @@ const getAllProjects = asyncHandler(async (req, res) => {
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
-    };    
+      ...(!isMain
+        ? {
+            $or: [
+              { members: loggedInUserId },
+              { "projectOwners.ownerId": loggedInUserId },
+            ],
+          }
+        : {}),
+    };
 
     const pageNumber = page ? parseInt(page, 10) : null;
     const pageSize = 10;
@@ -285,7 +295,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
     }
 
     const projects = await query;
-    const totalProjects = pageNumber ? await editProject.countDocuments(filter) : null;
+    const totalProjects = pageNumber
+      ? await editProject.countDocuments(filter)
+      : null;
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
@@ -342,7 +354,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
-
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
