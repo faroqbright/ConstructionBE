@@ -11,7 +11,7 @@ const editProjectSchema = new mongoose.Schema(
         },
         ownerName: {
           type: String,
-          required: true,
+          required: false,
         },
       },
     ],
