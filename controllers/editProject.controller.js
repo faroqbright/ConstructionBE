@@ -264,7 +264,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Cancelled",
       "Archived",
     ];
-
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
@@ -282,17 +281,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(filter).populate([
-      {
-        path: "members",
-        select: "userName avatar role",
-        populate: { path: "role", select: "roleName" },
+    let query = editProject.find(filter).populate({
+      path: "members",
+      select: "userName avatar role",
+      populate: {
+        path: "role",
+        select: "roleName",
       },
-      {
-        path: "projectOwners.ownerId", // Populate ownerId (User)
-        select: "userName",
-      },
-    ]);
+    });
 
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
@@ -331,39 +327,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
 
-        // ✅ Fixing projectOwners
-        const updatedProjectOwners = await Promise.all(
-          project.projectOwners.map(async (owner) => {
-            let ownerId = owner.ownerId;
-
-            if (!ownerId) return { ...owner, ownerName: "Unknown User" };
-
-            // If ownerId is a string, convert to ObjectId
-            if (typeof ownerId === "string") {
-              ownerId = new mongoose.Types.ObjectId(ownerId);
-            }
-
-            // If ownerName is missing, fetch from User model manually
-            if (!owner.ownerId?.userName) {
-              const user = await User.findById(ownerId).select("userName");
-              return {
-                ownerId: ownerId,
-                ownerName: user?.userName || "Unknown User",
-                _id: owner._id,
-              };
-            }
-
-            return {
-              ownerId: ownerId,
-              ownerName: owner.ownerId.userName,
-              _id: owner._id,
-            };
-          })
-        );
-
         return {
           ...project.toObject(),
-          projectOwners: updatedProjectOwners,
           documents: filteredDocuments,
           financeDocuments: financeDetails,
           latestLog,
@@ -394,58 +359,60 @@ const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const project = await editProject.findOne({ _id: projectId }).populate([
-      {
-        path: "members",
-        select: "userName avatar role",
-        populate: { path: "role", select: "roleName" },
+    const project = await editProject.findOne({ _id: projectId }).populate({
+      path: "members",
+      select: "userName avatar role",
+      populate: {
+        path: "role",
+        select: "roleName",
       },
-      {
-        path: "projectOwners.ownerId", // Populate ownerId (User)
-        select: "userName",
-      },
-    ]);
+    });
 
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
-    // Ensure ownerId is always an ObjectId before fetching user data
-    const updatedProjectOwners = await Promise.all(
-      project.projectOwners.map(async (owner) => {
-        let ownerId = owner.ownerId;
+    // Fetch documents where projName matches the project's name
+    const projectDocuments = await UserDocument.find({
+      projName: project.projectName,
+    });
 
-        if (!ownerId) return { ...owner, ownerName: "Unknown User" };
+    const financeDocuments = await FinanceDocument.find({
+      projName: project.projectName,
+    });
 
-        // If ownerId is still a string, convert to ObjectId
-        if (typeof ownerId === "string") {
-          ownerId = new mongoose.Types.ObjectId(ownerId);
-        }
+    const financeDetails = financeDocuments.map((doc) => ({
+      id: doc._id,
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+      financialExecution: doc.financialExecution,
+      physicalExecution: doc.physicalExecution,
+    }));
 
-        // If ownerName is missing, fetch from User model manually
-        if (!owner.ownerId?.userName) {
-          const user = await User.findById(ownerId).select("userName");
-          return {
-            ownerId: ownerId,
-            ownerName: user?.userName || "Unknown User",
-            _id: owner._id,
-          };
-        }
+    // Extract only fileName and fileUrl
+    const filteredDocuments = projectDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+    }));
 
-        return {
-          ownerId: ownerId,
-          ownerName: owner.ownerId.userName,
-          _id: owner._id,
-        };
-      })
-    );
+    // Sort logs by timestamp to get the most recent log entry
+    const latestLog = project.logs.sort((a, b) => b.timestamp - a.timestamp)[0];
 
+    // Construct response with attached documents
     const responseData = {
       ...project.toObject(),
-      projectOwners: updatedProjectOwners, // Use updated projectOwners
+      documents: filteredDocuments,
+      financeDocuments: financeDetails,
+      latestLog,
     };
 
-    res.status(200).json(new ApiResponse(200, responseData, "Project retrieved successfully"));
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, responseData, "Project retrieved successfully")
+      );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
