@@ -375,18 +375,20 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Ensure all projectOwners have ownerName populated correctly
+    // Ensure ownerId is always an ObjectId before fetching user data
     const updatedProjectOwners = await Promise.all(
       project.projectOwners.map(async (owner) => {
         let ownerId = owner.ownerId;
 
-        // Convert to ObjectId if it's a string
+        if (!ownerId) return { ...owner, ownerName: "Unknown User" };
+
+        // If ownerId is still a string, convert to ObjectId
         if (typeof ownerId === "string") {
           ownerId = new mongoose.Types.ObjectId(ownerId);
         }
 
-        // If ownerName is missing, fetch from User model
-        if (!owner.ownerName) {
+        // If ownerName is missing, fetch from User model manually
+        if (!owner.ownerId?.userName) {
           const user = await User.findById(ownerId).select("userName");
           return {
             ownerId: ownerId,
@@ -397,7 +399,7 @@ const getProjectById = asyncHandler(async (req, res) => {
 
         return {
           ownerId: ownerId,
-          ownerName: owner.ownerId?.userName || owner.ownerName || "Unknown User",
+          ownerName: owner.ownerId.userName,
           _id: owner._id,
         };
       })
