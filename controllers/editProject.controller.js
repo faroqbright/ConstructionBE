@@ -363,69 +363,31 @@ const getProjectById = asyncHandler(async (req, res) => {
       {
         path: "members",
         select: "userName avatar role",
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
+        populate: { path: "role", select: "roleName" },
       },
       {
-        path: "projectOwners.ownerId", // Populate ownerId
-        select: "userName", // Fetch userName from the User model
+        path: "projectOwners.ownerId", // Populate ownerId (User)
+        select: "userName", // Get userName from User model
       },
-    ]);    
+    ]);
 
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
-    // Fetch documents where projName matches the project's name
-    const projectDocuments = await UserDocument.find({
-      projName: project.projectName,
-    });
-
-    const financeDocuments = await FinanceDocument.find({
-      projName: project.projectName,
-    });
-
-    const financeDetails = financeDocuments.map((doc) => ({
-      id: doc._id,
-      fileName: doc.fileName,
-      fileUrl: doc.fileUrl,
-      user: doc.user,
-      financialExecution: doc.financialExecution,
-      physicalExecution: doc.physicalExecution,
-    }));
-
-    // Extract only fileName and fileUrl
-    const filteredDocuments = projectDocuments.map((doc) => ({
-      fileName: doc.fileName,
-      fileUrl: doc.fileUrl,
-      user: doc.user,
-    }));
-
-    // Sort logs by timestamp to get the most recent log entry
-    const latestLog = project.logs.sort((a, b) => b.timestamp - a.timestamp)[0];
-
+    // Map projectOwners to always include ownerName dynamically
     const updatedProjectOwners = project.projectOwners.map((owner) => ({
-      ownerId: owner.ownerId?._id || owner.ownerId, // Ensure ownerId is included
-      ownerName: owner.ownerId?.userName || "", // Set ownerName from populated data
+      ownerId: owner.ownerId?._id || owner.ownerId,
+      ownerName: owner.ownerId?.userName || owner.ownerName || "",
       _id: owner._id,
     }));
-    
-    // Construct response with attached documents
+
     const responseData = {
       ...project.toObject(),
-      projectOwners: updatedProjectOwners,
-      documents: filteredDocuments,
-      financeDocuments: financeDetails,
-      latestLog,
+      projectOwners: updatedProjectOwners, // Use updated projectOwners
     };
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(200, responseData, "Project retrieved successfully")
-      );
+    res.status(200).json(new ApiResponse(200, responseData, "Project retrieved successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
