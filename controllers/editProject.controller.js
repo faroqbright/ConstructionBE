@@ -110,24 +110,24 @@ const editProjects = asyncHandler(async (req, res) => {
     let updatedProjectBanners = existingProject.projectBanner || [];
 
     // Handle project owners
-    if (
-      projectOwners &&
-      Array.isArray(projectOwners) &&
-      projectOwners.length > 0
-    ) {
-      const ownersData = await User.find({
-        _id: { $in: projectOwners },
-      }).select("userName");
+    // if (
+    //   projectOwners &&
+    //   Array.isArray(projectOwners) &&
+    //   projectOwners.length > 0
+    // ) {
+    //   const ownersData = await User.find({
+    //     _id: { $in: projectOwners },
+    //   }).select("userName");
 
-      if (ownersData.length !== projectOwners.length) {
-        throw new ApiError(400, "Some owners were not found in the database.");
-      }
+    //   if (ownersData.length !== projectOwners.length) {
+    //     throw new ApiError(400, "Some owners were not found in the database.");
+    //   }
 
-      updateData.projectOwners = ownersData.map((owner) => ({
-        ownerId: owner._id || (owner.role ? owner.role._id : null),
-        ownerName: owner.userName,
-      }));      
-    }
+    //   updateData.projectOwners = ownersData.map((owner) => ({
+    //     ownerId: owner._id || (owner.role ? owner.role._id : null),
+    //     ownerName: owner.userName,
+    //   }));      
+    // }
 
     // Handle status updates
     if (existingProject.status !== status && status) {
@@ -215,6 +215,7 @@ const editProjects = asyncHandler(async (req, res) => {
       daysLeft,
       projectBanner: updatedProjectBanners,
       ...(members && { members }),
+      ...(projectOwners && { projectOwners }),
       logs: [...existingProject.logs, ...logs],
     };
 
