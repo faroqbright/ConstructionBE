@@ -367,7 +367,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       },
       {
         path: "projectOwners.ownerId", // Populate ownerId (User)
-        select: "userName", // Get userName from User model
+        select: "userName",
       },
     ]);
 
@@ -375,12 +375,33 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Map projectOwners to always include ownerName dynamically
-    const updatedProjectOwners = project.projectOwners.map((owner) => ({
-      ownerId: owner.ownerId?._id || owner.ownerId,
-      ownerName: owner.ownerId?.userName || owner.ownerName || "",
-      _id: owner._id,
-    }));
+    // Ensure all projectOwners have ownerName populated correctly
+    const updatedProjectOwners = await Promise.all(
+      project.projectOwners.map(async (owner) => {
+        let ownerId = owner.ownerId;
+
+        // Convert to ObjectId if it's a string
+        if (typeof ownerId === "string") {
+          ownerId = new mongoose.Types.ObjectId(ownerId);
+        }
+
+        // If ownerName is missing, fetch from User model
+        if (!owner.ownerName) {
+          const user = await User.findById(ownerId).select("userName");
+          return {
+            ownerId: ownerId,
+            ownerName: user?.userName || "Unknown User",
+            _id: owner._id,
+          };
+        }
+
+        return {
+          ownerId: ownerId,
+          ownerName: owner.ownerId?.userName || owner.ownerName || "Unknown User",
+          _id: owner._id,
+        };
+      })
+    );
 
     const responseData = {
       ...project.toObject(),
