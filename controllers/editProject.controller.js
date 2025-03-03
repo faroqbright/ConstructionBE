@@ -6,6 +6,7 @@ import { uploadToS3 } from "../utils/cloudinary.js";
 import { User } from "../models/user.model.js";
 import UserDocument from "../models/userdocumentModel.js";
 import FinanceDocument from "../models/finance.model.js";
+import mongoose from "mongoose";
 
 const createProject = asyncHandler(async (req, res) => {
   try {
