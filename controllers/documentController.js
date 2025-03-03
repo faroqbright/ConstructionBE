@@ -39,36 +39,36 @@ const uploadFile = async (req, res) => {
   }
 };
 
-/**
- * Fetch all uploaded documents
- */
 const getDocuments = async (req, res) => {
   try {
-    const { isMain, _id: loggedInUserId } = req.user; 
+    const { isMain, _id: loggedInUserId } = req.user;
 
     const assignedProjects = await editProject.find({
       ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
     });
 
-    const projectNames = assignedProjects.map((proj) => proj.projectName);
-    
-    if (projectNames.length === 0) {
-      console.log("No assigned projects found for this user.");
+    if (assignedProjects.length === 0) {
       return res.status(200).json({ message: "No assigned projects found" });
     }
 
-    const documents = await Document.find({ projName: { $in: projectNames } });
+    const projectMap = assignedProjects.reduce((acc, proj) => {
+      acc[proj.projectName] = proj.projectBanner;
+      return acc;
+    }, {});
 
-    res.status(200).json(documents);
+    const documents = await Document.find({ projName: { $in: Object.keys(projectMap) } });
+
+    const documentsWithBanner = documents.map((doc) => ({
+      ...doc.toObject(),
+      projectBanner: projectMap[doc.projName] || [],
+    }));
+
+    res.status(200).json(documentsWithBanner);
   } catch (error) {
-    console.error("Error fetching documents:", error.message);
     res.status(500).json({ message: "Failed to fetch documents", error: error.message });
   }
-}
+};
 
-/**
- * Update document status (Approve/Reject)
- */
 const updateStatus = async (req, res) => {
     try {
         const { id } = req.params;

@@ -68,6 +68,27 @@ const createRole = asyncHandler(async (req, res) => {
             "read": false,
             "update": false,
             "delete": false
+        },
+        {
+            "module": "FinanceManagement",
+            "create": false,
+            "read": false,
+            "update": false,
+            "delete": false
+        },
+        {
+            "module": "DocumentManagement",
+            "create": false,
+            "read": false,
+            "update": false,
+            "delete": false
+        },
+        {
+            "module": "CompanyManagement",
+            "create": false,
+            "read": false,
+            "update": false,
+            "delete": false
         }
     ],
       status: status || "Active", // Default to Active if not provided
