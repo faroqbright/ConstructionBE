@@ -206,10 +206,9 @@ const editProjects = asyncHandler(async (req, res) => {
       ...(members && { members }),
       ...(projectOwners && {
         projectOwners: projectOwners.map((ownerId) => ({
-          ownerId,
-          ownerName: "",
+          ownerId: new mongoose.Types.ObjectId(ownerId), // Ensure it's an ObjectId
         })),
-      }),
+      }),      
       logs: [...existingProject.logs, ...logs],
     };
 
