@@ -264,6 +264,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Cancelled",
       "Archived",
     ];
+
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
@@ -281,26 +282,34 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(filter).populate({
-      path: "members",
-      select: "userName avatar role",
-      populate: {
-        path: "role",
-        select: "roleName",
-      },
-    });
+    let query = editProject
+      .find(filter)
+      .populate({
+        path: "members",
+        select: "userName avatar role",
+        populate: {
+          path: "role",
+          select: "roleName",
+        },
+      })
+      .populate("projectOwners.ownerId", "name"); // Populate ownerId with name
 
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
     }
 
     const projects = await query;
-    const totalProjects = pageNumber
-      ? await editProject.countDocuments(filter)
-      : null;
+    const totalProjects = pageNumber ? await editProject.countDocuments(filter) : null;
 
+    // Process each project
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
+        // Assign ownerName from populated ownerId
+        project.projectOwners = project.projectOwners.map((owner) => ({
+          ...owner.toObject(),
+          ownerName: owner.ownerId?.name || "", // Assign name if available
+        }));
+
         const projectDocuments = await UserDocument.find({
           projName: project.projectName,
         });
@@ -359,20 +368,29 @@ const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const project = await editProject.findOne({ _id: projectId }).populate({
-      path: "members",
-      select: "userName avatar role",
-      populate: {
-        path: "role",
-        select: "roleName",
-      },
-    });
+    const project = await editProject
+      .findOne({ _id: projectId })
+      .populate({
+        path: "members",
+        select: "userName avatar role",
+        populate: {
+          path: "role",
+          select: "roleName",
+        },
+      })
+      .populate("projectOwners.ownerId", "name"); // Populate ownerId with name
 
     if (!project) {
       throw new ApiError(404, "Project not found");
     }
 
-    // Fetch documents where projName matches the project's name
+    // Assign ownerName from populated ownerId
+    project.projectOwners = project.projectOwners.map((owner) => ({
+      ...owner.toObject(),
+      ownerName: owner.ownerId?.name || "", // Assign name if available
+    }));
+
+    // Fetch project-related documents
     const projectDocuments = await UserDocument.find({
       projName: project.projectName,
     });
@@ -381,6 +399,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       projName: project.projectName,
     });
 
+    // Format finance documents
     const financeDetails = financeDocuments.map((doc) => ({
       id: doc._id,
       fileName: doc.fileName,
@@ -390,7 +409,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       physicalExecution: doc.physicalExecution,
     }));
 
-    // Extract only fileName and fileUrl
+    // Extract only fileName and fileUrl from documents
     const filteredDocuments = projectDocuments.map((doc) => ({
       fileName: doc.fileName,
       fileUrl: doc.fileUrl,
@@ -398,7 +417,8 @@ const getProjectById = asyncHandler(async (req, res) => {
     }));
 
     // Sort logs by timestamp to get the most recent log entry
-    const latestLog = project.logs.sort((a, b) => b.timestamp - a.timestamp)[0];
+    const latestLog =
+      project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
 
     // Construct response with attached documents
     const responseData = {
