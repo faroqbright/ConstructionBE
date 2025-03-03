@@ -246,6 +246,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Cancelled",
       "Archived",
     ];
+    
     // Build the filter object
     const filter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
@@ -263,14 +264,21 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(filter).populate({
-      path: "members",
-      select: "userName avatar role",
-      populate: {
-        path: "role",
-        select: "roleName",
+    let query = editProject.find(filter).populate([
+      {
+        path: "members",
+        select: "userName avatar role",
+        populate: {
+          path: "role",
+          select: "roleName",
+        },
       },
-    });
+      {
+        path: "projectOwners.ownerId",
+        model: "User",
+        select: "userName",
+      },
+    ]);
 
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
@@ -283,6 +291,15 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
+        // Filter out projectOwners that don't have a valid ownerId
+        const updatedProjectOwners = project.projectOwners
+          .filter((owner) => owner.ownerId) // Keep only those with a valid ownerId
+          .map((owner) => ({
+            ownerId: owner.ownerId._id || owner.ownerId,
+            ownerName: owner.ownerId.userName || owner.ownerName || "",
+            _id: owner._id,
+          }));
+
         const projectDocuments = await UserDocument.find({
           projName: project.projectName,
         });
@@ -311,6 +328,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
         return {
           ...project.toObject(),
+          projectOwners: updatedProjectOwners, // Use the filtered projectOwners
           documents: filteredDocuments,
           financeDocuments: financeDetails,
           latestLog,
@@ -358,16 +376,18 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Map projectOwners to always include ownerName dynamically
-    const updatedProjectOwners = project.projectOwners.map((owner) => ({
-      ownerId: owner.ownerId?._id || owner.ownerId,
-      ownerName: owner.ownerId?.userName || owner.ownerName || "",
-      _id: owner._id,
-    }));
+    // Filter out projectOwners that don't have an ownerId
+    const updatedProjectOwners = project.projectOwners
+      .filter((owner) => owner.ownerId) // Keep only those with a valid ownerId
+      .map((owner) => ({
+        ownerId: owner.ownerId._id || owner.ownerId,
+        ownerName: owner.ownerId.userName || owner.ownerName || "",
+        _id: owner._id,
+      }));
 
     const responseData = {
       ...project.toObject(),
-      projectOwners: updatedProjectOwners, // Use updated projectOwners
+      projectOwners: updatedProjectOwners, // Use filtered projectOwners
     };
 
     res
