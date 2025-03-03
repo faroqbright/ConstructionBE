@@ -276,7 +276,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
       {
         path: "projectOwners.ownerId",
         model: "User",
-        select: "userName",
+        select: "userName role",
+        populate: { path: "role", select: "roleName" },
       },
     ]);
 
@@ -362,13 +363,15 @@ const getProjectById = asyncHandler(async (req, res) => {
     const project = await editProject.findOne({ _id: projectId }).populate([
       {
         path: "members",
-        select: "userName avatar role",
-        populate: { path: "role", select: "roleName" },
+        model: "User",
+        select: "userName avatar role userType",
+        populate: { path: "role", model: "Role", select: "roleName" }, // Ensure role is populated
       },
       {
         path: "projectOwners.ownerId",
         model: "User",
-        select: "userName",
+        select: "userName role", // No userType here
+        populate: { path: "role", select: "roleName" },
       },
     ]);
 
@@ -376,18 +379,26 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Filter out projectOwners that don't have an ownerId
+    const updatedMembers = project.members.map((member) => ({
+      userId: member._id,
+      userName: member.userName,
+      avatar: member.avatar,
+      userType: member.userType || "Not Assigned", 
+    }));
+
     const updatedProjectOwners = project.projectOwners
-      .filter((owner) => owner.ownerId) // Keep only those with a valid ownerId
+      .filter((owner) => owner.ownerId)
       .map((owner) => ({
         ownerId: owner.ownerId._id || owner.ownerId,
-        ownerName: owner.ownerId.userName || owner.ownerName || "",
+        ownerName: owner.ownerId.userName || owner.ownerName || owner.userName || "",
+        role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
         _id: owner._id,
       }));
 
     const responseData = {
       ...project.toObject(),
-      projectOwners: updatedProjectOwners, // Use filtered projectOwners
+      members: updatedMembers, // Includes userType
+      projectOwners: updatedProjectOwners, // No userType
     };
 
     res

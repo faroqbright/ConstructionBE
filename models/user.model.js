@@ -45,9 +45,6 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
     },
-    avatar: {
-      type: String, // Assuming you store the image URL
-    },
     otp: {
       type: String,
     },
