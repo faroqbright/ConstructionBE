@@ -367,12 +367,12 @@ const getProjectById = asyncHandler(async (req, res) => {
         path: "members",
         model: "User",
         select: "userName avatar role userType",
-        populate: { path: "role", model: "Role", select: "roleName" }, // Ensure role is populated
+        populate: { path: "role", model: "Role", select: "roleName" },
       },
       {
         path: "projectOwners.ownerId",
         model: "User",
-        select: "userName role", // No userType here
+        select: "userName role",
         populate: { path: "role", select: "roleName" },
       },
     ]);
@@ -385,7 +385,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       userId: member._id,
       userName: member.userName,
       avatar: member.avatar,
-      userType: member.userType || "Not Assigned", 
+      userType: member.userType || "Not Assigned",
     }));
 
     const updatedProjectOwners = project.projectOwners
@@ -397,17 +397,44 @@ const getProjectById = asyncHandler(async (req, res) => {
         _id: owner._id,
       }));
 
+    const projectDocuments = await UserDocument.find({
+      projName: project.projectName,
+    });
+
+    const financeDocuments = await FinanceDocument.find({
+      projName: project.projectName,
+    });
+
+    const filteredDocuments = projectDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+    }));
+
+    const financeDetails = financeDocuments.map((doc) => ({
+      id: doc._id,
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+      financialExecution: doc.financialExecution,
+      physicalExecution: doc.physicalExecution,
+    }));
+
+    const latestLog =
+      project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
     const responseData = {
       ...project.toObject(),
-      members: updatedMembers, // Includes userType
-      projectOwners: updatedProjectOwners, // No userType
+      members: updatedMembers,
+      projectOwners: updatedProjectOwners,
+      documents: filteredDocuments,
+      financeDocuments: financeDetails,
+      latestLog,
     };
 
     res
       .status(200)
-      .json(
-        new ApiResponse(200, responseData, "Project retrieved successfully")
-      );
+      .json(new ApiResponse(200, responseData, "Project retrieved successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
