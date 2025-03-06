@@ -3,7 +3,6 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
-import { User } from "../models/user.model.js";
 import UserDocument from "../models/userdocumentModel.js";
 import FinanceDocument from "../models/finance.model.js";
 import mongoose from "mongoose";
@@ -207,9 +206,9 @@ const editProjects = asyncHandler(async (req, res) => {
       ...(members && { members }),
       ...(projectOwners && {
         projectOwners: projectOwners
-          .filter(ownerId => ownerId) // Ensure no null values are stored
+          .filter(ownerId => ownerId)
           .map((ownerId) => ({
-            ownerId: new mongoose.Types.ObjectId(ownerId), // Always store as ObjectId
+            ownerId: new mongoose.Types.ObjectId(ownerId),
           })),
       }),         
       logs: [...existingProject.logs, ...logs],
@@ -235,7 +234,7 @@ const editProjects = asyncHandler(async (req, res) => {
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
     const { status, page } = req.query;
-    const { isMain, _id: loggedInUserId } = req.user; // Assuming `req.user` is set via authentication middleware
+    const { isMain, _id: loggedInUserId } = req.user;
 
     const validStatuses = [
       "Ongoing",
@@ -280,6 +279,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
         populate: { path: "role", select: "roleName" },
       },
     ]);
+
+    // Sort projects by createdAt in descending order
+    query = query.sort({ createdAt: -1 });
 
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);

@@ -42,12 +42,9 @@ const createteamMember = asyncHandler(async (req, res) => {
 });
   
 
-// Get all teamMembers for the logged-in user
 const getAllteamMembers = asyncHandler(async (req, res) => {
-
-    const teamMembers = await teamMember.find();
-
-    res.status(200).json(new ApiResponse(200, teamMembers, "All teamMembers fetched successfully"));
+  const teamMembers = await teamMember.find().sort({ createdAt: -1 });
+  res.status(200).json(new ApiResponse(200, teamMembers, "All teamMembers fetched successfully"));
 });
 
 // Get single teamMember by ID for the logged-in user

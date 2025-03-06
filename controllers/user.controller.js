@@ -127,7 +127,7 @@ const login = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     user._id
   );
-  user.fcmDeviceToken = fcmDeviceToken; // Update device token
+  user.fcmDeviceToken = fcmDeviceToken;
   await user.save();
   const loggedInUser = await User.findById(user._id).select(
     "-password -refreshToken"
@@ -246,9 +246,6 @@ const updateProfile = asyncHandler(async (req, res) => {
     throw new ApiError(404, "User not found");
   }
 
-  // if (email) {
-  //   user.email = email;
-  // }
   if (userName) {
     user.userName = userName;
   }

@@ -29,7 +29,7 @@ const createCompany = asyncHandler(async (req, res) => {
 
 // Get all companies
 const getAllCompanies = asyncHandler(async (req, res) => {
-  const companies = await Company.find();
+  const companies = await Company.find().sort({ createdAt: -1 });
   res.status(200).json(new ApiResponse(200, companies, "All companies fetched successfully"));
 });
 

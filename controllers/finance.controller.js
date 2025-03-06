@@ -46,25 +46,27 @@ const uploadFinanceDocument = async (req, res) => {
 const getFinanceDocuments = async (req, res) => {
   try {
     const { isMain, _id: loggedInUserId } = req.user;
+
     const assignedProjects = await editProject.find({
       ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
     });
 
     const projectNames = assignedProjects.map((proj) => proj.projectName);
-    
+
     if (projectNames.length === 0) {
       console.log("No assigned projects found for this user.");
       return res.status(200).json({ message: "No assigned projects found" });
     }
 
-    const financeDocuments = await FinanceDocument.find({ projName: { $in: projectNames } });
+    const financeDocuments = await FinanceDocument.find({ projName: { $in: projectNames } })
+      .sort({ uploadedAt: -1 });  // Sort by uploadedAt in descending order (latest first)
 
     res.status(200).json(financeDocuments);
   } catch (error) {
     console.error("Error fetching finance documents:", error.message);
     res.status(500).json({ message: "Failed to fetch finance documents", error: error.message });
   }
-}
+};
 
 const updateFinanceDocument = async (req, res) => {
   try {

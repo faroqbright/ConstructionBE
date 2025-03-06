@@ -2,15 +2,12 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { Role } from "../models/role.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { User } from "../models/user.model.js";
 import { io } from "../index.js";
 
-// Create a new role
 const createRole = asyncHandler(async (req, res) => {
   try {
     const { roleName, permissions, status } = req.body;
 
-    // Check if roleName already exists
     const existingRole = await Role.findOne({ roleName });
     if (existingRole) {
       throw new ApiError(400, "Role already exists");
@@ -102,12 +99,11 @@ const createRole = asyncHandler(async (req, res) => {
   }
 });
 
-// Get all roles
 const getAllRoles = asyncHandler(async (req, res) => {
-  const roles = await Role.find();
-
+  const roles = await Role.find().sort({ createdAt: -1 });
   res.status(200).json(new ApiResponse(200, roles, "All roles fetched successfully"));
 });
+
 const getAllRolesWithLabel = asyncHandler(async (req, res) => {
     const roles = await Role.find();
   

@@ -44,8 +44,10 @@ const getDocuments = async (req, res) => {
     const { isMain, _id: loggedInUserId } = req.user;
 
     const assignedProjects = await editProject.find({
-      ...(!isMain ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] } : {}),
-    });
+      ...(!isMain
+        ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] }
+        : {}),
+    }).sort({ createdAt: -1 });  // Sort by the creation date in descending order
 
     if (assignedProjects.length === 0) {
       return res.status(200).json({ message: "No assigned projects found" });
@@ -56,7 +58,8 @@ const getDocuments = async (req, res) => {
       return acc;
     }, {});
 
-    const documents = await Document.find({ projName: { $in: Object.keys(projectMap) } });
+    const documents = await Document.find({ projName: { $in: Object.keys(projectMap) } })
+      .sort({ uploadedAt: -1 });  // Sort by uploadedAt in descending order
 
     const documentsWithBanner = documents.map((doc) => ({
       ...doc.toObject(),
