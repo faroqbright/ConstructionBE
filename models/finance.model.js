@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const financeDocumentSchema = new mongoose.Schema({
-    projName: { type: String, required: false },
+    projName: { type: String, required: true },
     fileName: { type: String, required: true },
     fileUrl: { type: String, required: true },
     user: { type: String, required: true },

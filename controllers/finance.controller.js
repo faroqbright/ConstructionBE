@@ -8,28 +8,36 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const { projName, user, financialExecution, physicalExecution } = req.body;
+    const { projName, user, financialExecution, physicalExecution, fileName } = req.body;
+
+    if (!fileName) {
+      return res.status(400).json({ message: "Filename is required" });
+    }
 
     if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
     }
 
-    // Check if the project exists in editProject schema
+    // Check if the project exists
     const projectExists = await editProject.findOne({ projectName: projName });
     if (!projectExists) {
       return res.status(404).json({ message: "Project not found" });
     }
 
+    // Extract the uploaded file's extension
+    const fileExtension = req.file.originalname.split('.').pop();
+    const finalFileName = fileName.includes('.') ? fileName : `${fileName}.${fileExtension}`;
+
     // Upload file to AWS S3
-    const fileUrl = await uploadToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
+    const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
     if (!fileUrl) {
       return res.status(500).json({ message: "File upload failed" });
     }
 
-    // Create document entry in MongoDB
+    // Save document in MongoDB
     const financeDocument = new FinanceDocument({
       projName,
-      fileName: req.file.originalname,
+      fileName: finalFileName,
       fileUrl,
       user,
       financialExecution,
