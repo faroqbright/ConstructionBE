@@ -288,41 +288,13 @@ const getAllProjects = asyncHandler(async (req, res) => {
     }
 
     const projects = await query;
-    const totalProjects = pageNumber ? await editProject.countDocuments(filter) : null;
+    const totalProjects = pageNumber
+      ? await editProject.countDocuments(filter)
+      : null;
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        // Filter out projectOwners that don't have a valid ownerId
-        const updatedProjectOwners = project.projectOwners
-          .filter((owner) => owner.ownerId) // Keep only those with a valid ownerId
-          .map((owner) => ({
-            ownerId: owner.ownerId._id || owner.ownerId,
-            ownerName: owner.ownerId.userName || owner.ownerName || "",
-            _id: owner._id,
-          }));
-
-        const projectDocuments = await UserDocument.find({ projName: project.projectName });
-        const financeDocuments = await FinanceDocument.find({ projName: project.projectName });
-
-        const filteredDocuments = projectDocuments.map((doc) => ({
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-        }));
-
-        const financeDetails = financeDocuments.map((doc) => ({
-          id: doc._id,
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-          financialExecution: doc.financialExecution,
-          physicalExecution: doc.physicalExecution,
-        }));
-
-        const latestLog =
-          project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
-
-        // ---- Milestones Logic ----
+        // Step 1: Project created, so "Project Details" is always true
         const milestones = [
           { name: "Project Details", completed: true },
           { name: "Filling", completed: false },
@@ -343,12 +315,19 @@ const getAllProjects = asyncHandler(async (req, res) => {
           milestones[1].completed = true;
         }
 
-        // Step 3: Check if finance documents are uploaded
+        const projectDocuments = await UserDocument.find({
+          projName: project.projectName,
+        });
+
+        const financeDocuments = await FinanceDocument.find({
+          projName: project.projectName,
+        });
+
         if (financeDocuments.length > 0) {
           milestones[2].completed = true;
         }
 
-        // Step 4: Review gets activated when the first three are completed
+        // Step 4: Review gets activated when "Filling" and "Payment" are both completed
         if (milestones[1].completed && milestones[2].completed) {
           milestones[3].completed = true;
         }
@@ -358,13 +337,40 @@ const getAllProjects = asyncHandler(async (req, res) => {
           milestones[4].completed = true;
         }
 
+        // Filter out projectOwners that don't have a valid ownerId
+        const updatedProjectOwners = project.projectOwners
+          .filter((owner) => owner.ownerId)
+          .map((owner) => ({
+            ownerId: owner.ownerId._id || owner.ownerId,
+            ownerName: owner.ownerId.userName || owner.ownerName || "",
+            _id: owner._id,
+          }));
+
+        const filteredDocuments = projectDocuments.map((doc) => ({
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          user: doc.user,
+        }));
+
+        const financeDetails = financeDocuments.map((doc) => ({
+          id: doc._id,
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          user: doc.user,
+          financialExecution: doc.financialExecution,
+          physicalExecution: doc.physicalExecution,
+        }));
+
+        const latestLog =
+          project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
         return {
           ...project.toObject(),
-          projectOwners: updatedProjectOwners, // Use the filtered projectOwners
+          projectOwners: updatedProjectOwners,
           documents: filteredDocuments,
           financeDocuments: financeDetails,
           latestLog,
-          milestones, // Add milestones to each project
+          milestones, // Include milestones for each project
         };
       })
     );
@@ -440,7 +446,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       milestones[2].completed = true;
     }
 
-    // Step 4: Review gets activated when the first three are completed
+    // Step 4: Review gets activated when "Filling" and "Payment" are both completed
     if (milestones[1].completed && milestones[2].completed) {
       milestones[3].completed = true;
     }
@@ -450,9 +456,49 @@ const getProjectById = asyncHandler(async (req, res) => {
       milestones[4].completed = true;
     }
 
-    // Formatting response
+    const updatedMembers = project.members.map((member) => ({
+      userId: member._id,
+      userName: member.userName,
+      avatar: member.avatar,
+      userType: member.userType || "Not Assigned",
+    }));
+
+    const updatedProjectOwners = project.projectOwners
+      .filter((owner) => owner.ownerId)
+      .map((owner) => ({
+        ownerId: owner.ownerId._id || owner.ownerId,
+        ownerName: owner.ownerId.userName || owner.ownerName || owner.userName || "",
+        role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
+        _id: owner._id,
+      }));
+
+    const filteredDocuments = projectDocuments.map((doc) => ({
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+    }));
+
+    const financeDetails = financeDocuments.map((doc) => ({
+      id: doc._id,
+      fileName: doc.fileName,
+      fileUrl: doc.fileUrl,
+      user: doc.user,
+      financialExecution: doc.financialExecution,
+      physicalExecution: doc.physicalExecution,
+      uploadedAt: doc.uploadedAt,
+    }));
+
+    const latestLog =
+      project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
+    // Construct response
     const responseData = {
       ...project.toObject(),
+      members: updatedMembers,
+      projectOwners: updatedProjectOwners,
+      documents: filteredDocuments,
+      financeDocuments: financeDetails,
+      latestLog,
       milestones, // Add milestones to response
     };
 
