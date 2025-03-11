@@ -418,6 +418,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       user: doc.user,
       financialExecution: doc.financialExecution,
       physicalExecution: doc.physicalExecution,
+      uploadedAt: doc.uploadedAt
     }));
 
     const latestLog =
