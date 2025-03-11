@@ -24,17 +24,13 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    // Extract the uploaded file's extension
-    const fileExtension = req.file.originalname.split('.').pop();
-    const finalFileName = fileName.includes('.') ? fileName : `${fileName}.${fileExtension}`;
+    const finalFileName = fileName.includes('.') ? fileName : `${fileName}`;
 
-    // Upload file to AWS S3
     const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
     if (!fileUrl) {
       return res.status(500).json({ message: "File upload failed" });
     }
 
-    // Save document in MongoDB
     const financeDocument = new FinanceDocument({
       projName,
       fileName: finalFileName,

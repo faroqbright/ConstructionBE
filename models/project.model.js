@@ -15,6 +15,21 @@ const editProjectSchema = new mongoose.Schema(
         },
       },
     ],
+    milestones: {
+      type: [
+        {
+          name: String,
+          completed: { type: Boolean, default: false }
+        }
+      ],
+      default: [
+        { name: "Project Details", completed: false },
+        { name: "Filling", completed: false },
+        { name: "Payment", completed: false },
+        { name: "Review", completed: false },
+        { name: "Completed", completed: false }
+      ]
+    },    
     documents: [{ type: mongoose.Schema.Types.ObjectId, ref: "UserDocument" }],
     projectName: {
       type: String,
@@ -87,7 +102,7 @@ const editProjectSchema = new mongoose.Schema(
   },
   {
     timestamps: true, // Adds createdAt and updatedAt timestamps
-  }
+  },
 );
 
 export const editProject = mongoose.model("editProject", editProjectSchema);
