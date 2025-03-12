@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const financeDocumentSchema = new mongoose.Schema({
     projName: { type: String, required: true },
     fileName: { type: String, required: true },
+    reference: { type: String, required: true },
     fileUrl: { type: String, required: true },
     user: { type: String, required: true },
     financialExecution: { type: Number, required: true, min: 0, max: 100 },

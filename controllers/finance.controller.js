@@ -8,7 +8,7 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const { projName, user, financialExecution, physicalExecution, fileName } = req.body;
+    const { projName, user, financialExecution, physicalExecution, fileName, reference } = req.body;
 
     if (!fileName) {
       return res.status(400).json({ message: "Filename is required" });
@@ -18,7 +18,6 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
     }
 
-    // Check if the project exists
     const projectExists = await editProject.findOne({ projectName: projName });
     if (!projectExists) {
       return res.status(404).json({ message: "Project not found" });
@@ -38,6 +37,7 @@ const uploadFinanceDocument = async (req, res) => {
       user,
       financialExecution,
       physicalExecution,
+      reference,
     });
 
     await financeDocument.save();
@@ -83,7 +83,6 @@ const updateFinanceDocument = async (req, res) => {
     }
 
     if (req.body.projName) {
-      // Check if the project exists in editProject schema
       const projectExists = await editProject.findOne({ projectName: req.body.projName });
       if (!projectExists) {
         return res.status(404).json({ message: "Project not found" });
@@ -97,11 +96,20 @@ const updateFinanceDocument = async (req, res) => {
       }
       updates.financialExecution = req.body.financialExecution;
     }
+
     if (req.body.physicalExecution !== undefined) {
       if (req.body.physicalExecution < 0 || req.body.physicalExecution > 100) {
         return res.status(400).json({ message: "Physical Execution must be between 0 and 100" });
       }
       updates.physicalExecution = req.body.physicalExecution;
+    }
+
+    if (req.body.fileName) {
+      updates.fileName = req.body.fileName;
+    }
+
+    if (req.body.reference) {
+      updates.reference = req.body.reference; // Made reference editable
     }
 
     if (req.file) {
