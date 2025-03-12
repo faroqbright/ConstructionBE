@@ -37,7 +37,7 @@ const createProject = asyncHandler(async (req, res) => {
       }
 
       for (const file of files.projectBanner) {
-        if (file.size > 20 * 1024 * 1024) {
+        if (file.size > 50 * 1024 * 1024) {
           // 20MB limit
           throw new ApiError(
             400,
