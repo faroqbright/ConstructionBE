@@ -214,6 +214,14 @@ const editProjects = asyncHandler(async (req, res) => {
       logs: [...existingProject.logs, ...logs],
     };
 
+    if (req.body.financeDocuments && req.body.financeDocuments.length > 0) {
+      for (const docId of req.body.financeDocuments) {
+        await FinanceDocument.findByIdAndUpdate(docId, {
+          $set: { uploadedAt: new Date() },
+        });
+      }
+    }
+
     const updatedProject = await editProject.findByIdAndUpdate(
       projectId,
       { $set: updateData },
