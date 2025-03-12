@@ -163,8 +163,8 @@ const editProjects = asyncHandler(async (req, res) => {
 
     // Handle new banners upload
     if (files?.projectBanner?.length > 0) {
-      if (updatedProjectBanners.length + files.projectBanner.length > 3) {
-        throw new ApiError(400, "You can only have up to 3 banners.");
+      if (updatedProjectBanners.length + files.projectBanner.length > 10) {
+        throw new ApiError(400, "You can only have up to 10 banners.");
       }
 
       for (const file of files.projectBanner) {
@@ -189,8 +189,8 @@ const editProjects = asyncHandler(async (req, res) => {
       });
     }
 
-    if (updatedProjectBanners.length > 3) {
-      throw new ApiError(400, "You can only have a maximum of 3 banners.");
+    if (updatedProjectBanners.length > 10) {
+      throw new ApiError(400, "You can only have a maximum of 10 banners.");
     }
 
     updateData = {
