@@ -6,8 +6,8 @@ const financeDocumentSchema = new mongoose.Schema({
     reference: { type: String, required: true },
     fileUrl: { type: String, required: true },
     user: { type: String, required: true },
-    financialExecution: { type: Number, required: true, min: 0, max: 100 },
-    physicalExecution: { type: Number, required: true, min: 0, max: 100 },
+    financialExecution: { type: Number, required: false, min: 0, max: 100 },
+    physicalExecution: { type: Number, required: false, min: 0, max: 100 },
     uploadedAt: { type: Date, default: Date.now }
 });
 
