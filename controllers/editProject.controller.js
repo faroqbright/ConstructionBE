@@ -352,15 +352,18 @@ const getAllProjects = asyncHandler(async (req, res) => {
           user: doc.user,
         }));
 
-        const financeDetails = financeDocuments.map((doc) => ({
+        const financeDetails = financeDocuments
+        .map((doc) => ({
           id: doc._id,
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
           user: doc.user,
           financialExecution: doc.financialExecution,
           physicalExecution: doc.physicalExecution,
+          uploadedAt: doc.uploadedAt,
           reference: doc.reference,
-        }));
+        }))
+        .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));      
 
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
@@ -479,7 +482,8 @@ const getProjectById = asyncHandler(async (req, res) => {
       user: doc.user,
     }));
 
-    const financeDetails = financeDocuments.map((doc) => ({
+    const financeDetails = financeDocuments
+    .map((doc) => ({
       id: doc._id,
       fileName: doc.fileName,
       fileUrl: doc.fileUrl,
@@ -488,7 +492,8 @@ const getProjectById = asyncHandler(async (req, res) => {
       physicalExecution: doc.physicalExecution,
       uploadedAt: doc.uploadedAt,
       reference: doc.reference,
-    }));
+    }))
+    .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));  
 
     const latestLog =
       project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
