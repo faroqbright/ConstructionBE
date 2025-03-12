@@ -23,7 +23,7 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const finalFileName = fileName.includes('.') ? fileName : `${fileName}`;
+    const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
 
     const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
     if (!fileUrl) {
@@ -38,6 +38,7 @@ const uploadFinanceDocument = async (req, res) => {
       financialExecution,
       physicalExecution,
       reference,
+      uploadedAt: new Date(), // ✅ Ensure timestamp is stored
     });
 
     await financeDocument.save();
@@ -75,7 +76,7 @@ const getFinanceDocuments = async (req, res) => {
 const updateFinanceDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    let updates = {};
+    let updates = { uploadedAt: new Date() }; // ✅ Always update timestamp
 
     const existingDocument = await FinanceDocument.findById(id);
     if (!existingDocument) {
@@ -109,18 +110,22 @@ const updateFinanceDocument = async (req, res) => {
     }
 
     if (req.body.reference) {
-      updates.reference = req.body.reference; // Made reference editable
+      updates.reference = req.body.reference; // ✅ Made reference editable
     }
 
     if (req.file) {
-      const oldFileKey = existingDocument.fileUrl.split(".com/")[1];
-      await deleteFromS3(oldFileKey);
       const newFileUrl = await uploadToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
       updates.fileName = req.file.originalname;
       updates.fileUrl = newFileUrl;
+
+      // ✅ Delete only if upload succeeds
+      if (newFileUrl && existingDocument.fileUrl) {
+        const oldFileKey = existingDocument.fileUrl.split(".com/")[1];
+        await deleteFromS3(oldFileKey);
+      }
     }
 
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 1) { // Only `uploadedAt` present means no real updates
       return res.status(400).json({ message: "No changes detected" });
     }
 
