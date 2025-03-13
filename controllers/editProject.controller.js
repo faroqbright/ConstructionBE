@@ -51,7 +51,9 @@ const createProject = asyncHandler(async (req, res) => {
             uniqueFileName,
             file.mimetype
           );
-          return uploadedImageUrl ? { url: uploadedImageUrl, uploadDate: new Date() } : null;
+          return uploadedImageUrl
+            ? { url: uploadedImageUrl, uploadDate: new Date() }
+            : null;
         } catch (uploadError) {
           console.error(`Upload failed for ${file.originalname}:`, uploadError);
           return null; // Do not fail everything if one file fails
@@ -87,7 +89,9 @@ const createProject = asyncHandler(async (req, res) => {
     };
 
     const project = await editProject.create(projectData);
-    res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
+    res
+      .status(201)
+      .json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
     console.error("Error in createProject:", error);
     res.status(500).json({ message: error.message || "Internal Server Error" });
@@ -97,7 +101,7 @@ const createProject = asyncHandler(async (req, res) => {
 const editProjects = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
-    const {
+    let {
       projectName,
       projectOwners,
       description,
@@ -116,36 +120,32 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Ensure project name is not duplicated
-    if (projectName && projectName !== existingProject.projectName) {
-      const nameTaken = await editProject.findOne({ projectName });
-      if (nameTaken) {
-        throw new ApiError(
-          400,
-          "Project name already taken. Choose a different name."
-        );
-      }
-    }
-
     let updateData = {};
     let logs = [];
     let updatedProjectBanners = existingProject.projectBanner || [];
+
+    // Ensure project name is unique
+    if (projectName && projectName !== existingProject.projectName) {
+      let nameTaken = await editProject.findOne({ projectName });
+      if (nameTaken) {
+        const uniqueSuffix = uuidv4().split("-")[0]; // Generate a short unique string
+        projectName = `${projectName}-${uniqueSuffix}`;
+        console.warn(`Project name already taken, renaming to: ${projectName}`);
+      }
+
+      logs.push({
+        actionType: "Project Name Change",
+        message: `Project name changed from "${existingProject.projectName}" to "${projectName}" by ${req.user.userName}`,
+        userId: req.user.id,
+        timestamp: new Date(),
+      });
+    }
 
     // Handle status updates
     if (existingProject.status !== status && status) {
       logs.push({
         actionType: "Status Update",
         message: `Status updated from "${existingProject.status}" to "${status}" by ${req.user.userName}`,
-        userId: req.user.id,
-        timestamp: new Date(),
-      });
-    }
-
-    // Handle project name changes
-    if (existingProject.projectName !== projectName && projectName) {
-      logs.push({
-        actionType: "Project Name Change",
-        message: `Project name changed from "${existingProject.projectName}" to "${projectName}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
@@ -181,9 +181,10 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       for (const file of files.projectBanner) {
+        const uniqueFileName = `${uuidv4()}-${file.originalname}`;
         const uploadedImageUrl = await uploadToS3(
           file.buffer,
-          file.originalname,
+          uniqueFileName,
           file.mimetype
         );
         if (!uploadedImageUrl) continue;
@@ -219,11 +220,11 @@ const editProjects = asyncHandler(async (req, res) => {
       ...(members && { members }),
       ...(projectOwners && {
         projectOwners: projectOwners
-          .filter(ownerId => ownerId)
+          .filter((ownerId) => ownerId)
           .map((ownerId) => ({
             ownerId: new mongoose.Types.ObjectId(ownerId),
           })),
-      }),         
+      }),
       logs: [...existingProject.logs, ...logs],
     };
 
@@ -248,7 +249,7 @@ const editProjects = asyncHandler(async (req, res) => {
       );
   } catch (error) {
     console.error("Error updating project:", error.message);
-    throw new ApiError(400, error.message);
+    res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 });
 
@@ -336,6 +337,10 @@ const getAllProjects = asyncHandler(async (req, res) => {
           milestones[1].completed = true;
         }
 
+        const projectReports = await Document.find({
+          projName: project.projectName,
+        });
+
         const projectDocuments = await UserDocument.find({
           projName: project.projectName,
         });
@@ -373,18 +378,26 @@ const getAllProjects = asyncHandler(async (req, res) => {
           user: doc.user,
         }));
 
+        const filteredReports = projectReports.map((report) => ({
+          fileName: report.fileName,
+          fileUrl: report.fileUrl,
+          user: report.user,
+          status: report.status,
+          uploadedAt: report.uploadedAt,
+        }));
+
         const financeDetails = financeDocuments
-        .map((doc) => ({
-          id: doc._id,
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-          financialExecution: doc.financialExecution,
-          physicalExecution: doc.physicalExecution,
-          uploadedAt: doc.uploadedAt,
-          reference: doc.reference,
-        }))
-        .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));      
+          .map((doc) => ({
+            id: doc._id,
+            fileName: doc.fileName,
+            fileUrl: doc.fileUrl,
+            user: doc.user,
+            financialExecution: doc.financialExecution,
+            physicalExecution: doc.physicalExecution,
+            uploadedAt: doc.uploadedAt,
+            reference: doc.reference,
+          }))
+          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
 
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
@@ -394,6 +407,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
           projectOwners: updatedProjectOwners,
           documents: filteredDocuments,
           financeDocuments: financeDetails,
+          projectReports: filteredReports,
           latestLog,
           milestones, // Include milestones for each project
         };
@@ -464,8 +478,16 @@ const getProjectById = asyncHandler(async (req, res) => {
     }
 
     // Step 3: Check if finance documents are uploaded
-    const projectDocuments = await UserDocument.find({ projName: project.projectName });
-    const financeDocuments = await FinanceDocument.find({ projName: project.projectName });
+    const projectDocuments = await UserDocument.find({
+      projName: project.projectName,
+    });
+    const projectReports = await Document.find({
+      projName: project.projectName,
+    });
+
+    const financeDocuments = await FinanceDocument.find({
+      projName: project.projectName,
+    });
 
     if (financeDocuments.length > 0) {
       milestones[2].completed = true;
@@ -493,9 +515,18 @@ const getProjectById = asyncHandler(async (req, res) => {
       .filter((owner) => owner.ownerId)
       .map((owner) => ({
         ownerId: owner.ownerId._id || owner.ownerId,
-        ownerName: owner.ownerId.userName || owner.ownerName || owner.userName || "",
+        ownerName:
+          owner.ownerId.userName || owner.ownerName || owner.userName || "",
         role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
         _id: owner.ownerId._id || owner.ownerId,
+      }));
+
+      const filteredReports = projectReports.map((report) => ({
+        fileName: report.fileName,
+        fileUrl: report.fileUrl,
+        user: report.user,
+        status: report.status,
+        uploadedAt: report.uploadedAt,
       }));
 
     const filteredDocuments = projectDocuments.map((doc) => ({
@@ -505,17 +536,17 @@ const getProjectById = asyncHandler(async (req, res) => {
     }));
 
     const financeDetails = financeDocuments
-    .map((doc) => ({
-      id: doc._id,
-      fileName: doc.fileName,
-      fileUrl: doc.fileUrl,
-      user: doc.user,
-      financialExecution: doc.financialExecution,
-      physicalExecution: doc.physicalExecution,
-      uploadedAt: doc.uploadedAt,
-      reference: doc.reference,
-    }))
-    .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));  
+      .map((doc) => ({
+        id: doc._id,
+        fileName: doc.fileName,
+        fileUrl: doc.fileUrl,
+        user: doc.user,
+        financialExecution: doc.financialExecution,
+        physicalExecution: doc.physicalExecution,
+        uploadedAt: doc.uploadedAt,
+        reference: doc.reference,
+      }))
+      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
 
     const latestLog =
       project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
@@ -527,11 +558,16 @@ const getProjectById = asyncHandler(async (req, res) => {
       projectOwners: updatedProjectOwners,
       documents: filteredDocuments,
       financeDocuments: financeDetails,
+      projectReports: filteredReports,
       latestLog,
       milestones, // Add milestones to response
     };
 
-    res.status(200).json(new ApiResponse(200, responseData, "Project retrieved successfully"));
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, responseData, "Project retrieved successfully")
+      );
   } catch (error) {
     throw new ApiError(400, error.message);
   }
