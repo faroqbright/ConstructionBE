@@ -21,43 +21,43 @@ const createProject = asyncHandler(async (req, res) => {
     } = req.body;
     const { files } = req;
 
+    console.log("Received Project Data:", req.body);
+    console.log("Received Files:", files?.projectBanner?.length);
+
     const existingProject = await editProject.findOne({ projectName });
     if (existingProject) {
-      throw new ApiError(
-        400,
-        "Project name already taken. Choose a different name."
-      );
+      throw new ApiError(400, "Project name already taken.");
     }
 
     let projectBanners = [];
 
     if (files?.projectBanner?.length > 0) {
       if (files.projectBanner.length > 10) {
-        throw new ApiError(400, "You can only upload up to 10 banners.");
+        throw new ApiError(400, "You can upload up to 10 banners.");
       }
 
       const uploadPromises = files.projectBanner.map(async (file) => {
         if (file.size > 100 * 1024 * 1024) {
-          throw new ApiError(
-            400,
-            `File "${file.originalname}" exceeds the 100MB size limit.`
-          );
+          console.error(`File too large: ${file.originalname}`);
+          return null;
         }
 
-        const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-        const uploadedImageUrl = await uploadToS3(
-          file.buffer,
-          uniqueFileName,
-          file.mimetype
-        );
-        
-        return uploadedImageUrl
-          ? { url: uploadedImageUrl, uploadDate: new Date() }
-          : null;
+        try {
+          console.log(`Uploading file: ${file.originalname}`);
+          const uniqueFileName = `${uuidv4()}-${file.originalname}`;
+          const uploadedImageUrl = await uploadToS3(file.buffer, uniqueFileName, file.mimetype);
+          return uploadedImageUrl ? { url: uploadedImageUrl, uploadDate: new Date() } : null;
+        } catch (uploadError) {
+          console.error(`Upload failed for ${file.originalname}:`, uploadError);
+          return null; // Do not fail everything if one file fails
+        }
       });
 
-      projectBanners = (await Promise.all(uploadPromises)).filter((banner) => banner !== null);
+      const uploadedFiles = await Promise.all(uploadPromises);
+      projectBanners = uploadedFiles.filter((banner) => banner !== null);
     }
+
+    console.log("Uploaded Banners:", projectBanners);
 
     const projectData = {
       projectName,
@@ -72,13 +72,10 @@ const createProject = asyncHandler(async (req, res) => {
     };
 
     const project = await editProject.create(projectData);
-
-    res
-      .status(201)
-      .json(new ApiResponse(201, project, "Project created successfully"));
+    res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
-    console.error("Project creation error:", error);
-    res.status(400).json(new ApiError(400, error.message));
+    console.error("Error in createProject:", error);
+    res.status(500).json(new ApiError(500, "Internal Server Error"));
   }
 });
 
