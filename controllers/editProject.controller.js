@@ -32,31 +32,31 @@ const createProject = asyncHandler(async (req, res) => {
     let projectBanners = [];
 
     if (files?.projectBanner?.length > 0) {
-      if (files.projectBanner.length > 3) {
-        throw new ApiError(400, "You can only upload up to 3 banners.");
+      if (files.projectBanner.length > 10) {
+        throw new ApiError(400, "You can only upload up to 10 banners.");
       }
 
-      for (const file of files.projectBanner) {
-        if (file.size > 50 * 1024 * 1024) {
-          // 20MB limit
+      const uploadPromises = files.projectBanner.map(async (file) => {
+        if (file.size > 100 * 1024 * 1024) {
           throw new ApiError(
             400,
-            `File "${file.originalname}" exceeds the 20MB size limit.`
+            `File "${file.originalname}" exceeds the 100MB size limit.`
           );
         }
 
+        const uniqueFileName = `${uuidv4()}-${file.originalname}`;
         const uploadedImageUrl = await uploadToS3(
           file.buffer,
-          file.originalname,
+          uniqueFileName,
           file.mimetype
         );
-        if (!uploadedImageUrl) continue;
+        
+        return uploadedImageUrl
+          ? { url: uploadedImageUrl, uploadDate: new Date() }
+          : null;
+      });
 
-        projectBanners.push({
-          url: uploadedImageUrl,
-          uploadDate: new Date(),
-        });
-      }
+      projectBanners = (await Promise.all(uploadPromises)).filter((banner) => banner !== null);
     }
 
     const projectData = {
@@ -77,7 +77,8 @@ const createProject = asyncHandler(async (req, res) => {
       .status(201)
       .json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
-    throw new ApiError(400, error.message);
+    console.error("Project creation error:", error);
+    res.status(400).json(new ApiError(400, error.message));
   }
 });
 
