@@ -4,6 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
 import UserDocument from "../models/userdocumentModel.js";
+import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
