@@ -37,7 +37,7 @@ const createProject = asyncHandler(async (req, res) => {
         throw new ApiError(400, "You can upload up to 10 banners.");
       }
 
-      const uploadPromises = files.projectBanner.map(async (file) => {
+      const uploadFile = async (file) => {
         if (file.size > 100 * 1024 * 1024) {
           console.error(`File too large: ${file.originalname}`);
           return null;
@@ -51,19 +51,25 @@ const createProject = asyncHandler(async (req, res) => {
             uniqueFileName,
             file.mimetype
           );
-          return uploadedImageUrl
-            ? { url: uploadedImageUrl, uploadDate: new Date() }
-            : null;
+          return uploadedImageUrl ? { url: uploadedImageUrl, uploadDate: new Date() } : null;
         } catch (uploadError) {
           console.error(`Upload failed for ${file.originalname}:`, uploadError);
           return null; // Do not fail everything if one file fails
         }
-      });
+      };
 
-      const uploadedFiles = await Promise.allSettled(uploadPromises);
-      projectBanners = uploadedFiles
-        .filter((result) => result.status === "fulfilled" && result.value)
-        .map((result) => result.value);
+      // Upload in batches of 3 (prevents memory overload)
+      const batchSize = 3;
+      for (let i = 0; i < files.projectBanner.length; i += batchSize) {
+        const batch = files.projectBanner.slice(i, i + batchSize);
+        console.log(`Uploading batch: ${i / batchSize + 1}`);
+        const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
+        projectBanners.push(
+          ...uploadedBatch
+            .filter((result) => result.status === "fulfilled" && result.value)
+            .map((result) => result.value)
+        );
+      }
     }
 
     console.log("Uploaded Banners:", projectBanners);
