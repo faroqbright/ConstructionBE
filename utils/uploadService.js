@@ -20,20 +20,23 @@ const s3 = new S3Client({
  * @returns {Promise<string>} - File URL after upload
  */
 const uploadToS3 = async (fileBuffer, fileName, mimeType) => {
-  const params = {
-    Bucket: process.env.AWS_S3_BUCKET_NAME,
-    Key: `uploads/${fileName}`,
-    Body: fileBuffer,
-    ContentType: mimeType,
-  };
+    const params = {
+        Bucket: process.env.AWS_S3_BUCKET_NAME,
+        Key: `uploads/${fileName}`,
+        Body: fileBuffer,
+        ContentType: mimeType,
+    };
 
-  try {
-    await s3.send(new PutObjectCommand(params));
-    return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/uploads/${fileName}`;
-  } catch (error) {
-    console.error("Error uploading to S3:", error);
-    return null;
-  }
+    try {
+        console.log(`Uploading ${fileName} to S3...`);
+        const response = await s3.send(new PutObjectCommand(params));
+        console.log(`Upload successful: ${fileName}`, response);
+        
+        return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/uploads/${fileName}`;
+    } catch (error) {
+        console.error("AWS S3 Upload Error:", error);
+        throw new Error(`File upload failed: ${error.message}`);
+    }
 };
 
 const deleteFromS3 = async (fileKey) => {

@@ -6,6 +6,7 @@ import { uploadToS3 } from "../utils/cloudinary.js";
 import UserDocument from "../models/userdocumentModel.js";
 import FinanceDocument from "../models/finance.model.js";
 import mongoose from "mongoose";
+import { v4 as uuidv4 } from "uuid";
 
 const createProject = asyncHandler(async (req, res) => {
   try {
@@ -45,16 +46,24 @@ const createProject = asyncHandler(async (req, res) => {
         try {
           console.log(`Uploading file: ${file.originalname}`);
           const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-          const uploadedImageUrl = await uploadToS3(file.buffer, uniqueFileName, file.mimetype);
-          return uploadedImageUrl ? { url: uploadedImageUrl, uploadDate: new Date() } : null;
+          const uploadedImageUrl = await uploadToS3(
+            file.buffer,
+            uniqueFileName,
+            file.mimetype
+          );
+          return uploadedImageUrl
+            ? { url: uploadedImageUrl, uploadDate: new Date() }
+            : null;
         } catch (uploadError) {
           console.error(`Upload failed for ${file.originalname}:`, uploadError);
           return null; // Do not fail everything if one file fails
         }
       });
 
-      const uploadedFiles = await Promise.all(uploadPromises);
-      projectBanners = uploadedFiles.filter((banner) => banner !== null);
+      const uploadedFiles = await Promise.allSettled(uploadPromises);
+      projectBanners = uploadedFiles
+        .filter((result) => result.status === "fulfilled" && result.value)
+        .map((result) => result.value);
     }
 
     console.log("Uploaded Banners:", projectBanners);
@@ -75,7 +84,7 @@ const createProject = asyncHandler(async (req, res) => {
     res.status(201).json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
     console.error("Error in createProject:", error);
-    res.status(500).json(new ApiError(500, "Internal Server Error"));
+    res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 });
 
