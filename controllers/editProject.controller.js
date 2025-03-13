@@ -470,6 +470,7 @@ const getProjectById = asyncHandler(async (req, res) => {
 
     const updatedMembers = project.members.map((member) => ({
       userId: member._id,
+      _id: member._id,
       userName: member.userName,
       avatar: member.avatar,
       userType: member.userType || "Not Assigned",
@@ -481,7 +482,7 @@ const getProjectById = asyncHandler(async (req, res) => {
         ownerId: owner.ownerId._id || owner.ownerId,
         ownerName: owner.ownerId.userName || owner.ownerName || owner.userName || "",
         role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
-        _id: owner._id,
+        _id: owner.ownerId._id || owner.ownerId,
       }));
 
     const filteredDocuments = projectDocuments.map((doc) => ({
