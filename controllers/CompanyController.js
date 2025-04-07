@@ -67,8 +67,9 @@ const deleteCompanyById = asyncHandler(async (req, res) => {
   if (!company) {
     throw new ApiError(404, "Company not found");
   }
+  const deleteResult = await User.deleteMany({ companyName: company.name });
+  console.log(`Deleted ${deleteResult.deletedCount} users related to company: ${company.name}`);
 
-  await User.deleteMany({ companyName: company.name });
   await Company.findByIdAndDelete(req.params.id);
 
   res.status(200).json(new ApiResponse(200, {}, "Company and associated clients deleted successfully"));
