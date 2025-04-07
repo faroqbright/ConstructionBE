@@ -106,9 +106,16 @@ const getClientById = asyncHandler(async (req, res) => {
 });
 
 const getAllClients = asyncHandler(async (req, res) => {
-  const Users = await User.find({ isMain: false, isClient: true });
+  const users = await User.find({ isMain: false, isClient: true });
 
-  res.status(200).json(new ApiResponse(200, Users, "All Users fetched successfully"));
+  const companyNames = users.map(user => user.companyName);
+  
+  const existingCompanies = await Company.find({ name: { $in: companyNames } });
+  const validCompanyNames = new Set(existingCompanies.map(company => company.name));
+
+  const validUsers = users.filter(user => validCompanyNames.has(user.companyName));
+
+  res.status(200).json(new ApiResponse(200, validUsers, "All Users fetched successfully"));
 });
 
 const deleteClientById = asyncHandler(async (req, res) => {
