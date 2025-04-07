@@ -67,12 +67,17 @@ const deleteCompanyById = asyncHandler(async (req, res) => {
   if (!company) {
     throw new ApiError(404, "Company not found");
   }
-  const deleteResult = await User.deleteMany({ companyName: company.name });
-  console.log(`Deleted ${deleteResult.deletedCount} users related to company: ${company.name}`);
 
+  // Remove companyName from clients associated with this company
+  await User.updateMany(
+    { companyName: company.name },
+    { $unset: { companyName: "" } } // Remove the companyName field
+  );
+
+  // Delete the company
   await Company.findByIdAndDelete(req.params.id);
 
-  res.status(200).json(new ApiResponse(200, {}, "Company and associated clients deleted successfully"));
+  res.status(200).json(new ApiResponse(200, {}, "Company and associated data updated successfully"));
 });
 
 export { createCompany, getAllCompanies, updateCompanyById, deleteCompanyById };
