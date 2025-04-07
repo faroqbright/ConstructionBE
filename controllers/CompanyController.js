@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { Company } from "../models/CompanyModel.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import { User } from "../models/user.model.js";
 
 // Create a new company
 const createCompany = asyncHandler(async (req, res) => {
@@ -62,11 +63,15 @@ const updateCompanyById = asyncHandler(async (req, res) => {
 
 // Delete company by ID
 const deleteCompanyById = asyncHandler(async (req, res) => {
-  const company = await Company.findByIdAndDelete(req.params.id);
+  const company = await Company.findById(req.params.id);
   if (!company) {
     throw new ApiError(404, "Company not found");
   }
-  res.status(200).json(new ApiResponse(200, {}, "Company deleted successfully"));
+
+  await User.deleteMany({ companyName: company.name });
+  await Company.findByIdAndDelete(req.params.id);
+
+  res.status(200).json(new ApiResponse(200, {}, "Company and associated clients deleted successfully"));
 });
 
 export { createCompany, getAllCompanies, updateCompanyById, deleteCompanyById };
