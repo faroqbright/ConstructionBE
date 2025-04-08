@@ -16,14 +16,7 @@ router.route('/verify-otp').post(verifyOTP);
 router.route('/resend-otp').post(resendOTP);
 router.route('/reset-password').post(resetPassword);
 router.route("/logout").post(verifyJWT, logoutUser)
-router.route("/update-profile").patch(verifyJWT, upload.fields([
-  {
-    name: "avatar",
-    maxCount: 1,
-  }
-]),
-  updateProfile
-)
+router.route("/update-profile").patch(verifyJWT, updateProfile)
 
 router.route("/refresh-token").post(refreshAccessToken)
 router.use(errorHandler);

@@ -235,60 +235,64 @@ const getUserProfile = asyncHandler(async (req, res) => {
 
   res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
 });
+
 const updateProfile = asyncHandler(async (req, res) => {
-  const userId = req.user.id.toString();
+  try {
+    console.log("Update Profile route hit");
+    const userId = req.user.id.toString();
+    const { userName, phoneNumber, address, newPassword, email } = req.body;
 
-  const { email, userName, phoneNumber, address } = req.body;
-
-
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new ApiError(404, "User not found");
-  }
-
-  if (userName) {
-    user.userName = userName;
-  }
-  if (address) {
-    user.address = address;
-  }
-  if (phoneNumber) {
-    user.phoneNumber = phoneNumber;
-  }
-
-  const { body, files } = req;
-  console.log("🚀 ~ updateProfile ~ files:", files)
-
-  let avatarLocalPath;
-  if (files && Array.isArray(files.avatar) && files.avatar.length > 0) {
-    avatarLocalPath = files.avatar[0].path;
-  }
-  console.log("🚀 ~ updateProfile ~ avatarLocalPath:", avatarLocalPath)
-
-  let avatar;
-  if (files && files.avatar && Array.isArray(files.avatar) && files.avatar.length > 0) {
-    // Use the buffer directly if you are uploading to S3
-    const avatarFile = files.avatar[0];
-
-    // Assuming uploadToS3 expects a buffer, file name, and mimetype
-    avatar = await uploadToS3(avatarFile.buffer, avatarFile.originalname, avatarFile.mimetype);
-    console.log("🚀 ~ updateProfile ~ avatar:", avatar);
-
-    if (!avatar) {
-      throw new ApiError(400, "Failed to upload profile image", [], { avatar: "Failed to upload profile image" });
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, "User not found");
     }
-  }
 
-  const updateData = { ...body };
-  if (avatar) {
-    user.avatar = avatar;
-  }
-  await user.save();
+    // Update text fields
+    if (userName) user.userName = userName;
+    if (address) user.address = address;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    
+    // Email update with validation
+    if (email) {
+      const normalizedEmail = email.toLowerCase();
+      if (normalizedEmail !== user.email.toLowerCase()) {
+        // Check if email is already used by another user
+        const existingUser = await User.findOne({ email: normalizedEmail });
+        if (existingUser && existingUser._id.toString() !== userId) {
+          throw new ApiError(400, "Email already in use by another account");
+        }
+        user.email = normalizedEmail;
+      }
+    }
 
-  res
-    .status(200)
-    .json(new ApiResponse(200, user, "Account details updated successfully"));
+    if (newPassword) {
+      if (newPassword.length < 6) {
+        throw new ApiError(400, "Password must be at least 6 characters long.");
+      }
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    const { files } = req;
+    if (files?.avatar?.length > 0) {
+      const avatarFile = files.avatar[0];
+      console.log("Avatar file received:", avatarFile);
+      const avatarUrl = await uploadToS3(avatarFile.buffer, avatarFile.originalname, avatarFile.mimetype);
+      if (!avatarUrl) {
+        throw new ApiError(400, "Failed to upload profile image");
+      }
+      user.avatar = avatarUrl;
+    }
+
+    await user.save();
+    res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
+  } catch (error) {
+    console.error("Error in updateProfile:", error);
+    res.status(error.statusCode || 500).json(
+      new ApiResponse(error.statusCode || 500, null, error.message || "An error occurred while updating the profile")
+    );
+  }
 });
+
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const { refreshToken } = req.cookies;
   console.log(refreshToken);
