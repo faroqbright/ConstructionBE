@@ -239,9 +239,14 @@ const getUserProfile = asyncHandler(async (req, res) => {
 const updateProfile = asyncHandler(async (req, res) => {
   try {
     console.log("Update Profile route hit");
-    const userId = req.user.id.toString();
+    
+    // Get the userId from the URL params
+    const userId = req.params.userId;
+
+    // Destructure the fields from the request body
     const { userName, phoneNumber, address, newPassword, email } = req.body;
 
+    // Find the user by userId
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, "User not found");
@@ -265,6 +270,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       }
     }
 
+    // Password update logic
     if (newPassword) {
       if (newPassword.length < 6) {
         throw new ApiError(400, "Password must be at least 6 characters long.");
@@ -272,6 +278,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       user.password = await bcrypt.hash(newPassword, 10);
     }
 
+    // Handling avatar upload
     const { files } = req;
     if (files?.avatar?.length > 0) {
       const avatarFile = files.avatar[0];
@@ -283,7 +290,10 @@ const updateProfile = asyncHandler(async (req, res) => {
       user.avatar = avatarUrl;
     }
 
+    // Save the updated user
     await user.save();
+
+    // Return the updated user details with avatar (even if unchanged)
     res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
   } catch (error) {
     console.error("Error in updateProfile:", error);
