@@ -238,30 +238,29 @@ const getUserProfile = asyncHandler(async (req, res) => {
 
 const updateProfile = asyncHandler(async (req, res) => {
   try {
-    console.log("Update Profile route hit");
-    
-    // Get the userId from the URL params
-    const userId = req.params.userId;
+    console.log("Request Body:", req.body); // Log the request body
 
-    // Destructure the fields from the request body
+    const userId = req.params.userId;
     const { userName, phoneNumber, address, newPassword, email } = req.body;
 
-    // Find the user by userId
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, "User not found");
     }
 
-    // Update text fields
-    if (userName) user.userName = userName;
+    // Update fields only if they're provided in the request body
+    if (userName) {
+      console.log("Updating userName:", userName); // Log the new username
+      user.userName = userName;
+    }
+
     if (address) user.address = address;
     if (phoneNumber) user.phoneNumber = phoneNumber;
-    
+
     // Email update with validation
     if (email) {
       const normalizedEmail = email.toLowerCase();
       if (normalizedEmail !== user.email.toLowerCase()) {
-        // Check if email is already used by another user
         const existingUser = await User.findOne({ email: normalizedEmail });
         if (existingUser && existingUser._id.toString() !== userId) {
           throw new ApiError(400, "Email already in use by another account");
@@ -278,7 +277,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       user.password = await bcrypt.hash(newPassword, 10);
     }
 
-    // Handling avatar upload
+    // Handling avatar upload (if present)
     const { files } = req;
     if (files?.avatar?.length > 0) {
       const avatarFile = files.avatar[0];

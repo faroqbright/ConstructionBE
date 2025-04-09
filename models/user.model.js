@@ -10,8 +10,8 @@ const userSchema = new mongoose.Schema(
     },
     userName: {
       type: String,
-      lowercase: true,
-      trim: true,
+      lowercase: true, // Ensures the username is stored in lowercase
+      trim: true, // Removes any leading/trailing spaces
     },
     avatar: {
       type: String,
@@ -29,18 +29,16 @@ const userSchema = new mongoose.Schema(
     },
     address: {
       type: String,
-
-      lowecase: true,
-      trim: true,
+      lowercase: true, // Fix typo, change 'lowecase' to 'lowercase'
+      trim: true, // Ensures address is also trimmed
     },
-
     phoneNumber: {
       type: String,
     },
     email: {
       type: String,
-      lowercase: true,
-      trim: true,
+      lowercase: true, // Ensures the email is stored in lowercase
+      trim: true, // Removes any leading/trailing spaces
     },
     password: {
       type: String,
@@ -62,11 +60,11 @@ const userSchema = new mongoose.Schema(
     },
     userType: {
       type: String,
-      enum: ["Finance", "Production"],
+      enum: ["Finance", "Production"], // Enum to limit userType to specific values
     },
     companyName: {
       type: String,
-      trim: true,
+      trim: true, // Ensures companyName doesn't have leading/trailing spaces
     },
   },
   {
@@ -74,16 +72,19 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Pre-save hook to hash password before saving it
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
+// Method to check if the password is correct
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
 
+// Method to generate an access token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
@@ -98,6 +99,7 @@ userSchema.methods.generateAccessToken = function () {
   );
 };
 
+// Method to generate a refresh token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {

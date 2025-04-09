@@ -16,7 +16,7 @@ router.route('/verify-otp').post(verifyOTP);
 router.route('/resend-otp').post(resendOTP);
 router.route('/reset-password').post(resetPassword);
 router.route("/logout").post(verifyJWT, logoutUser)
-router.route("/update-profile/:userId").patch(verifyJWT, updateProfile);
+router.route("/update-profile/:userId").put(verifyJWT, updateProfile);
 
 router.route("/refresh-token").post(refreshAccessToken)
 router.use(errorHandler);
