@@ -5,6 +5,7 @@ import {
   getSingleMilestone,
   updateMilestone,
   deleteMilestone,
+  getUserMilestones
 } from "../controllers/additionalMilestoneController.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -19,5 +20,6 @@ router.route("/milestone/single/:id").get(verifyJWT, getSingleMilestone);
 router.route("/milestone/update/:id").put(verifyJWT, updateMilestone);
 
 router.route("/milestone/delete/:id").delete(verifyJWT, deleteMilestone);
+router.get("/user/:id", getUserMilestones);
 
 export default router;

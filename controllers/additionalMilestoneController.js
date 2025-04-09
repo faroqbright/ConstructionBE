@@ -128,3 +128,22 @@ export const deleteMilestone = async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+export const getUserMilestones = async (req, res) => {
+  const { id: userId } = req.params;
+
+  try {
+    const milestones = await AdditionalMilestone.find({ userId }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: milestones,
+    });
+  } catch (error) {
+    console.error("Error in getUserMilestones:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
