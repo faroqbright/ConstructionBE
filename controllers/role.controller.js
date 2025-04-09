@@ -25,6 +25,13 @@ const createRole = asyncHandler(async (req, res) => {
             "delete": false
         },
         {
+          "module": "MilestoneManagement",
+          "create": false,
+          "read": false,
+          "update": false,
+          "delete": false
+      },
+        {
             "module": "ReportsManagement",
             "create": false,
             "read": false,

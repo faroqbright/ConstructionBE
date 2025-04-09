@@ -1,4 +1,5 @@
 import { editProject } from "../models/project.model.js";
+import {AdditionalMilestone} from '../models/additionalMilestone.js'
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -300,7 +301,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         model: "User",
         select: "userName role",
         populate: { path: "role", select: "roleName" },
-      },
+      }
     ]);
 
     // Sort projects by createdAt in descending order
@@ -317,7 +318,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        // Step 1: Project created, so "Project Details" is always true
+        // Milestones logic remains the same
         const milestones = [
           { name: "Project Details", completed: true },
           { name: "Filling", completed: false },
@@ -326,13 +327,12 @@ const getAllProjects = asyncHandler(async (req, res) => {
           { name: "Completed", completed: false },
         ];
 
-        // Step 2: Check if all required fields are filled (excluding finance documents)
         const isFillingComplete =
           project.description &&
           project.location &&
           project.projectName &&
-          project.projectBanner.length > 0 &&
-          project.members.length > 0;
+          project.projectBanner?.length > 0 &&
+          project.members?.length > 0;
 
         if (isFillingComplete) {
           milestones[1].completed = true;
@@ -350,45 +350,42 @@ const getAllProjects = asyncHandler(async (req, res) => {
           projName: project.projectName,
         });
 
-        if (financeDocuments.length > 0) {
+        if (financeDocuments?.length > 0) {
           milestones[2].completed = true;
         }
 
-        // Step 4: Review gets activated when "Filling" and "Payment" are both completed
         if (milestones[1].completed && milestones[2].completed) {
           milestones[3].completed = true;
         }
 
-        // Step 5: Mark "Completed" when project status is "Completed"
         if (project.status === "Completed") {
           milestones[4].completed = true;
         }
 
-        // Filter out projectOwners that don't have a valid ownerId
         const updatedProjectOwners = project.projectOwners
-          .filter((owner) => owner.ownerId)
+          ?.filter((owner) => owner.ownerId)
           .map((owner) => ({
-            ownerId: owner.ownerId._id || owner.ownerId,
-            ownerName: owner.ownerId.userName || owner.ownerName || "",
+            ownerId: owner.ownerId?._id || owner.ownerId,
+            ownerName: owner.ownerId?.userName || owner.ownerName || "",
             _id: owner._id,
-          }));
+          })) || [];  // Default to an empty array if projectOwners is undefined or null
 
-        const filteredDocuments = projectDocuments.map((doc) => ({
+        const filteredDocuments = projectDocuments?.map((doc) => ({
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
           user: doc.user,
-        }));
+        })) || [];  // Default to an empty array if projectDocuments is undefined
 
-        const filteredReports = projectReports.map((report) => ({
+        const filteredReports = projectReports?.map((report) => ({
           fileName: report.fileName,
           fileUrl: report.fileUrl,
           user: report.user,
           status: report.status,
           uploadedAt: report.uploadedAt,
-        }));
+        })) || [];  // Default to an empty array if projectReports is undefined
 
         const financeDetails = financeDocuments
-          .map((doc) => ({
+          ?.map((doc) => ({
             id: doc._id,
             fileName: doc.fileName,
             fileUrl: doc.fileUrl,
@@ -398,10 +395,19 @@ const getAllProjects = asyncHandler(async (req, res) => {
             uploadedAt: doc.uploadedAt,
             reference: doc.reference,
           }))
-          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)) || [];  // Default to an empty array if financeDocuments is undefined
 
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
+        // Fetch additional milestones manually using the project._id
+        const additionalMilestones = await AdditionalMilestone.find({
+          projectId: project._id,
+        }).populate({
+          path: "userId",
+          model: "User",
+          select: "userName",
+        });
 
         return {
           ...project.toObject(),
@@ -410,7 +416,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
           financeDocuments: financeDetails,
           projectReports: filteredReports,
           latestLog,
-          milestones, // Include milestones for each project
+          milestones,
+          additionalMilestones, // Add the populated milestones here
         };
       })
     );
@@ -457,7 +464,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
-    // Step 1: Project created, so "Project Details" is always true
+
     const milestones = [
       { name: "Project Details", completed: true },
       { name: "Filling", completed: false },
@@ -466,7 +473,6 @@ const getProjectById = asyncHandler(async (req, res) => {
       { name: "Completed", completed: false },
     ];
 
-    // Step 2: Check if all required fields are filled (excluding finance documents)
     const isFillingComplete =
       project.description &&
       project.location &&
@@ -478,14 +484,12 @@ const getProjectById = asyncHandler(async (req, res) => {
       milestones[1].completed = true;
     }
 
-    // Step 3: Check if finance documents are uploaded
     const projectDocuments = await UserDocument.find({
       projName: project.projectName,
     });
     const projectReports = await Document.find({
       projName: project.projectName,
     });
-
     const financeDocuments = await FinanceDocument.find({
       projName: project.projectName,
     });
@@ -494,12 +498,10 @@ const getProjectById = asyncHandler(async (req, res) => {
       milestones[2].completed = true;
     }
 
-    // Step 4: Review gets activated when "Filling" and "Payment" are both completed
     if (milestones[1].completed && milestones[2].completed) {
       milestones[3].completed = true;
     }
 
-    // Step 5: Mark "Completed" when project status is "Completed"
     if (project.status === "Completed") {
       milestones[4].completed = true;
     }
@@ -522,13 +524,13 @@ const getProjectById = asyncHandler(async (req, res) => {
         _id: owner.ownerId._id || owner.ownerId,
       }));
 
-      const filteredReports = projectReports.map((report) => ({
-        fileName: report.fileName,
-        fileUrl: report.fileUrl,
-        user: report.user,
-        status: report.status,
-        uploadedAt: report.uploadedAt,
-      }));
+    const filteredReports = projectReports.map((report) => ({
+      fileName: report.fileName,
+      fileUrl: report.fileUrl,
+      user: report.user,
+      status: report.status,
+      uploadedAt: report.uploadedAt,
+    }));
 
     const filteredDocuments = projectDocuments.map((doc) => ({
       fileName: doc.fileName,
@@ -552,7 +554,16 @@ const getProjectById = asyncHandler(async (req, res) => {
     const latestLog =
       project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
 
-    // Construct response
+    // Fetch additional milestones for the project
+    const additionalMilestones = await AdditionalMilestone.find({
+      projectId: project._id,
+    }).populate({
+      path: "userId",
+      model: "User",
+      select: "userName",
+    });
+
+  
     const responseData = {
       ...project.toObject(),
       members: updatedMembers,
@@ -561,7 +572,8 @@ const getProjectById = asyncHandler(async (req, res) => {
       financeDocuments: financeDetails,
       projectReports: filteredReports,
       latestLog,
-      milestones, // Add milestones to response
+      milestones,
+      additionalMilestones,
     };
 
     res
@@ -573,6 +585,7 @@ const getProjectById = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
+
 
 const deleteProject = asyncHandler(async (req, res) => {
   try {
