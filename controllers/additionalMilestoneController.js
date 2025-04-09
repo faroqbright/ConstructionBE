@@ -1,6 +1,6 @@
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 
-// CREATE or UPDATE if exists
+
 export const createOrUpdateMilestone = async (req, res) => {
   const { id: projectId } = req.params;
   const { title, description, status, completedAt, userId } = req.body;
@@ -46,7 +46,7 @@ export const createOrUpdateMilestone = async (req, res) => {
   }
 };
 
-// READ ALL milestones for a project
+
 export const getAllMilestones = async (req, res) => {
   const { id: projectId } = req.params;
 
@@ -65,7 +65,7 @@ export const getAllMilestones = async (req, res) => {
   }
 };
 
-// READ single milestone by ID
+
 export const getSingleMilestone = async (req, res) => {
   const { id } = req.params;
 
@@ -82,7 +82,7 @@ export const getSingleMilestone = async (req, res) => {
   }
 };
 
-// UPDATE milestone by ID
+
 export const updateMilestone = async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
@@ -109,7 +109,7 @@ export const updateMilestone = async (req, res) => {
   }
 };
 
-// DELETE milestone by ID
+
 export const deleteMilestone = async (req, res) => {
   const { id } = req.params;
 
