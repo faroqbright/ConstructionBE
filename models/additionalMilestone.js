@@ -24,6 +24,11 @@ const additionalMilestoneSchema = new mongoose.Schema(
       ref: "Project",
       required: true,
     },
+    projectName: {
+      type: String,
+      ref: "Project",
+      required: true, // or false depending on your use case
+    },    
     userId:
       {
         type: mongoose.Schema.Types.ObjectId,
