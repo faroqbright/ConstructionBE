@@ -14,11 +14,6 @@ const businessAreaSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    projectName: {
-      type: String,
-      required: true,
-      trim: true,
-    },
   },
   {
     timestamps: true,
