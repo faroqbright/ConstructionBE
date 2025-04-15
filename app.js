@@ -27,6 +27,7 @@ import clientsRouter from './routes/clients.routes.js'
 import financeRoutes from './routes/finance.routes.js'
 import additionalMilestoneRouter from './routes/additionalMilestone.routes.js'
 import businessAreaRouter from './routes/businessArea.routes.js'
+import reviewsRouter from './routes/review.routes.js'
 import { ApiError } from "./utils/ApiError.js"
 
 
@@ -43,6 +44,7 @@ app.use('/api/v1/companies', companiesRoutes);
 app.use('/api/v1/finance', financeRoutes);
 app.use("/api/v1/additional", additionalMilestoneRouter);
 app.use("/api/v1/businessArea", businessAreaRouter),
+app.use("/api/v1/reviews", reviewsRouter)
 
 app.use((err, req, res, next) => {
     if (err instanceof ApiError) {
