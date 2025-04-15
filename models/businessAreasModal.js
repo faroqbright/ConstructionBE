@@ -8,12 +8,6 @@ const businessAreaSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
-    email: {
-      type: String,
-      required: true,
-      trim: true,
-      lowercase: true,
-    },
   },
   {
     timestamps: true,

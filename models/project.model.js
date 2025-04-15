@@ -76,7 +76,7 @@ const editProjectSchema = new mongoose.Schema(
         "Cancelled",
         "Archived",
       ], // Professional project statuses
-      default: "Pending",
+      default: "Ongoing",
     },
     deadline: {
       type: String,
