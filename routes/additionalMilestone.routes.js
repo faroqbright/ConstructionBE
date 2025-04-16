@@ -11,7 +11,7 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-router.route("/milestone/:id").post(verifyJWT, createOrUpdateMilestone);
+router.route("/milestone").post(verifyJWT, createOrUpdateMilestone);
 
 router.route("/milestone/:id").get(verifyJWT, getAllMilestones);
 
