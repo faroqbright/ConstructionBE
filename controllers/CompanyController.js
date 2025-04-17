@@ -14,6 +14,10 @@ const createCompany = asyncHandler(async (req, res) => {
     if (existingCompany) {
       throw new ApiError(400, "Email already exists");
     }
+    const existingCompanyName = await Company.findOne({ name });
+    if (existingCompanyName) {
+      throw new ApiError(400, "Company Name already exists");
+    }
 
     const newCompany = await Company.create({
       name,
