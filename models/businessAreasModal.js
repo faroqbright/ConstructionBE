@@ -8,6 +8,10 @@ const businessAreaSchema = new mongoose.Schema(
       trim: true,
       unique: true,
     },
+    role: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Role", 
+    },
   },
   {
     timestamps: true,
