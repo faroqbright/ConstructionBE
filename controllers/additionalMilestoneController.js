@@ -1,54 +1,9 @@
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 
 
-// export const createOrUpdateMilestone = async (req, res) => {
-//   const { id: projectId } = req.params;
-//   const { title, description, status, completedAt, userId } = req.body;
-
-//   try {
-//     const existingMilestone = await AdditionalMilestone.findOne({ title, projectId });
-
-//     if (existingMilestone) {
-//       if (description) existingMilestone.description = description;
-//       if (status) existingMilestone.status = status;
-//       if (completedAt) existingMilestone.completedAt = completedAt;
-//       if (userId) existingMilestone.userId = userId;
-
-//       await existingMilestone.save();
-
-//       return res.status(200).json({
-//         success: true,
-//         message: "Milestone updated successfully",
-//         data: existingMilestone,
-//       });
-//     }
-
-//     const newMilestone = await AdditionalMilestone.create({
-//       title,
-//       description,
-//       status,
-//       completedAt,
-//       userId,
-//       projectId,
-//     });
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Milestone created successfully",
-//       data: newMilestone,
-//     });
-//   } catch (error) {
-//     console.error("Error in createOrUpdateMilestone:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Internal server error",
-//     });
-//   }
-// };
-
 export const createOrUpdateMilestone = async (req, res) => {
   const { id: projectId } = req.params;
-  const { title, description, status, completedAt, userId, projectName } = req.body;
+  const { title, description, status, completedAt, userId } = req.body;
 
   try {
     const existingMilestone = await AdditionalMilestone.findOne({ title, projectId });
@@ -58,7 +13,6 @@ export const createOrUpdateMilestone = async (req, res) => {
       if (status) existingMilestone.status = status;
       if (completedAt) existingMilestone.completedAt = completedAt;
       if (userId) existingMilestone.userId = userId;
-      if (projectName) existingMilestone.projectName = projectName;
 
       await existingMilestone.save();
 
@@ -76,7 +30,6 @@ export const createOrUpdateMilestone = async (req, res) => {
       completedAt,
       userId,
       projectId,
-      projectName, // include projectName when creating
     });
 
     res.status(201).json({
