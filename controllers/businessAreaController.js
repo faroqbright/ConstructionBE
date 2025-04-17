@@ -2,7 +2,7 @@ import { BusinessArea } from "../models/businessAreasModal.js";
 
 // Create or Update Business Area
 export const createOrUpdateBusinessArea = async (req, res) => {
-  const { businessArea } = req.body;
+  const { businessArea, role } = req.body;
 
   try {
     if (!businessArea) {
@@ -23,6 +23,7 @@ export const createOrUpdateBusinessArea = async (req, res) => {
 
     const newBusinessArea = await BusinessArea.create({
       businessArea,
+      role
     });
 
     res.status(201).json({
@@ -39,7 +40,7 @@ export const createOrUpdateBusinessArea = async (req, res) => {
 // Get All Business Areas
 export const getAllBusinessAreas = async (req, res) => {
   try {
-    const businessAreas = await BusinessArea.find({}, 'businessArea createdAt').sort({ createdAt: -1 });
+    const businessAreas = await BusinessArea.find({}, 'businessArea role createdAt').populate('role');
     res.status(200).json({ success: true, data: businessAreas });
   } catch (error) {
     console.error("Error in getAllBusinessAreas:", error);
