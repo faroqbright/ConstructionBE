@@ -42,7 +42,7 @@ const createProject = asyncHandler(async (req, res) => {
       }
 
       const uploadFile = async (file) => {
-        if (file.size > 100 * 1024 * 1024) {
+        if (file.size > 5 * 1024 * 1024) {
           console.error(`File too large: ${file.originalname}`);
           return null;
         }
