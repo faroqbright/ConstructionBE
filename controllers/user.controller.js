@@ -7,15 +7,13 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
 
-
-
 const resendOTP = asyncHandler(async (req, res) => {
   const { email } = req.body;
   const user = await User.findOne({ email });
   if (!user) throw new ApiError(400, "User not found");
 
   const otp = generateOTP();
-  const otpExpires = Date.now() + 300000;
+  const otpExpires = Date.now() + 300000; // 5 min
 
   user.otp = otp;
   user.otpExpires = otpExpires;
@@ -32,17 +30,13 @@ const resendOTP = asyncHandler(async (req, res) => {
         <strong>Developer Team</strong>`,
   };
 
-  const message = "Please check your email to verify!";
-
   try {
     await SendEmailUtil(body);
-    res.status(200).json({ message });
+    res.status(200).json({ message: "Please check your email to verify!" });
   } catch (error) {
     console.error("Error sending email:", error.message);
     throw new ApiError(500, "Error sending email");
   }
-
-  res.status(200).json(new ApiResponse(200, { email }, "OTP resent to email"));
 });
 
 const verifyOTP = asyncHandler(async (req, res) => {
@@ -57,7 +51,6 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
   res.status(200).json(new ApiResponse(200, { email }, "OTP verified"));
 });
-
 
 const registerUser = asyncHandler(async (req, res) => {
   const { email, password, fcmDeviceToken, userName } = req.body;
@@ -92,18 +85,24 @@ const registerUser = asyncHandler(async (req, res) => {
 
   res
     .status(201)
-    .cookie("accessToken", accessToken, { ...options, maxAge: 4 * 24 * 60 * 60 * 1000 })
+    .cookie("accessToken", accessToken, {
+      ...options,
+      maxAge: 4 * 24 * 60 * 60 * 1000,
+    })
     .cookie("refreshToken", refreshToken, {
       ...options,
       maxAge: 10 * 24 * 60 * 60 * 1000,
     })
     .json(
-      new ApiResponse(201, { email, userName, accessToken, refreshToken }, "User registered successfully")
+      new ApiResponse(
+        201,
+        { email, userName, accessToken, refreshToken },
+        "User registered successfully"
+      )
     );
 });
 
 const login = asyncHandler(async (req, res) => {
-
   const { email, password, fcmDeviceToken } = req.body;
 
   if (!email) {
@@ -129,9 +128,9 @@ const login = asyncHandler(async (req, res) => {
   );
   user.fcmDeviceToken = fcmDeviceToken;
   await user.save();
-  const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken"
-  ).populate("role");
+  const loggedInUser = await User.findById(user._id)
+    .select("-password -refreshToken")
+    .populate("role");
 
   const options = {
     httpOnly: true,
@@ -226,14 +225,16 @@ const logoutUser = asyncHandler(async (req, res) => {
 const getUserProfile = asyncHandler(async (req, res) => {
   const userId = req.user._id.toString();
 
-
-  const user = await User.findById(userId).select("-password -refreshToken").populate("role");
+  const user = await User.findById(userId)
+    .select("-password -refreshToken")
+    .populate("role");
   if (!user) {
     throw new ApiError(404, "User not found", [], { user: "User not found" });
   }
 
-
-  res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
+  res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully"));
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
@@ -282,7 +283,11 @@ const updateProfile = asyncHandler(async (req, res) => {
     if (files?.avatar?.length > 0) {
       const avatarFile = files.avatar[0];
       console.log("Avatar file received:", avatarFile);
-      const avatarUrl = await uploadToS3(avatarFile.buffer, avatarFile.originalname, avatarFile.mimetype);
+      const avatarUrl = await uploadToS3(
+        avatarFile.buffer,
+        avatarFile.originalname,
+        avatarFile.mimetype
+      );
       if (!avatarUrl) {
         throw new ApiError(400, "Failed to upload profile image");
       }
@@ -293,12 +298,20 @@ const updateProfile = asyncHandler(async (req, res) => {
     await user.save();
 
     // Return the updated user details with avatar (even if unchanged)
-    res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
+    res
+      .status(200)
+      .json(new ApiResponse(200, user, "Account details updated successfully"));
   } catch (error) {
     console.error("Error in updateProfile:", error);
-    res.status(error.statusCode || 500).json(
-      new ApiResponse(error.statusCode || 500, null, error.message || "An error occurred while updating the profile")
-    );
+    res
+      .status(error.statusCode || 500)
+      .json(
+        new ApiResponse(
+          error.statusCode || 500,
+          null,
+          error.message || "An error occurred while updating the profile"
+        )
+      );
   }
 });
 
@@ -333,7 +346,13 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         sameSite: "Strict",
         maxAge: 15 * 60 * 1000, // 15 minutes
       })
-      .json(new ApiResponse(200, { data: user }, "Access token refreshed successfully"));
+      .json(
+        new ApiResponse(
+          200,
+          { data: user },
+          "Access token refreshed successfully"
+        )
+      );
   } catch (error) {
     console.error("Error verifying token:", error.message);
     throw new ApiError(403, "Invalid refresh token", error.message);
@@ -349,5 +368,5 @@ export {
   logoutUser,
   getUserProfile,
   updateProfile,
-  refreshAccessToken
+  refreshAccessToken,
 };
