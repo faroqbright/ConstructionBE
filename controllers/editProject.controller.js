@@ -1,5 +1,5 @@
 import { editProject } from "../models/project.model.js";
-import {AdditionalMilestone} from '../models/additionalMilestone.js'
+import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -266,7 +266,7 @@ const editProjects = asyncHandler(async (req, res) => {
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
     const { status, page } = req.query;
-    const { isMain, _id: loggedInUserId } = req.user;
+    const { isMain, _id: loggedInUserId, businessArea } = req.user;
 
     const validStatuses = [
       "Ongoing",
@@ -278,24 +278,37 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Archived",
     ];
 
-    // Build the filter object
-    const filter = {
+    const baseFilter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-      ...(!isMain
-        ? {
+    };
+
+    let finalFilter = baseFilter;
+    if (!isMain) {
+      const businessAreaProjects = await editProject.find(
+        { businessAreas: businessArea },
+        { _id: 1 }
+      );
+      const businessAreaProjectIds = businessAreaProjects.map((p) => p._id);
+
+      finalFilter = {
+        ...baseFilter,
+        $and: [
+          {
             $or: [
+              { _id: { $in: businessAreaProjectIds } },
               { members: loggedInUserId },
               { "projectOwners.ownerId": loggedInUserId },
             ],
-          }
-        : {}),
-    };
+          },
+        ],
+      };
+    }
 
     const pageNumber = page ? parseInt(page, 10) : null;
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(filter).populate([
+    let query = editProject.find(finalFilter).populate([
       {
         path: "members",
         select: "userName avatar role",
@@ -309,10 +322,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
         model: "User",
         select: "userName role",
         populate: { path: "role", select: "roleName" },
-      }
+      },
     ]);
 
-    // Sort projects by createdAt in descending order
     query = query.sort({ createdAt: -1 });
 
     if (pageNumber) {
@@ -321,12 +333,25 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     const projects = await query;
     const totalProjects = pageNumber
-      ? await editProject.countDocuments(filter)
+      ? await editProject.countDocuments(finalFilter)
       : null;
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        // Milestones logic remains the same
+        const isMember = project.members.some((member) =>
+          member._id.equals(loggedInUserId)
+        );
+        const isOwner = project.projectOwners.some(
+          (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+        );
+
+        const fromBusinessArea =
+          !isMember &&
+          !isOwner &&
+          (typeof project.businessAreas === "string"
+            ? project.businessAreas === businessArea
+            : project.businessAreas?.includes(businessArea));
+
         const milestones = [
           { name: "Project Details", completed: true },
           { name: "Filling", completed: false },
@@ -342,73 +367,63 @@ const getAllProjects = asyncHandler(async (req, res) => {
           project.projectBanner?.length > 0 &&
           project.members?.length > 0;
 
-        if (isFillingComplete) {
-          milestones[1].completed = true;
-        }
+        if (isFillingComplete) milestones[1].completed = true;
 
-        const projectReports = await Document.find({
-          projName: project.projectName,
-        });
+        const [projectReports, projectDocuments, financeDocuments] =
+          await Promise.all([
+            Document.find({ projName: project.projectName }),
+            UserDocument.find({ projName: project.projectName }),
+            FinanceDocument.find({ projName: project.projectName }),
+          ]);
 
-        const projectDocuments = await UserDocument.find({
-          projName: project.projectName,
-        });
-
-        const financeDocuments = await FinanceDocument.find({
-          projName: project.projectName,
-        });
-
-        if (financeDocuments?.length > 0) {
-          milestones[2].completed = true;
-        }
-
-        if (milestones[1].completed && milestones[2].completed) {
+        if (financeDocuments?.length > 0) milestones[2].completed = true;
+        if (milestones[1].completed && milestones[2].completed)
           milestones[3].completed = true;
-        }
+        if (project.status === "Completed") milestones[4].completed = true;
 
-        if (project.status === "Completed") {
-          milestones[4].completed = true;
-        }
+        const updatedProjectOwners =
+          project.projectOwners
+            ?.filter((owner) => owner.ownerId)
+            .map((owner) => ({
+              ownerId: owner.ownerId?._id || owner.ownerId,
+              ownerName: owner.ownerId?.userName || owner.ownerName || "",
+              _id: owner._id,
+            })) || [];
 
-        const updatedProjectOwners = project.projectOwners
-          ?.filter((owner) => owner.ownerId)
-          .map((owner) => ({
-            ownerId: owner.ownerId?._id || owner.ownerId,
-            ownerName: owner.ownerId?.userName || owner.ownerName || "",
-            _id: owner._id,
-          })) || [];  // Default to an empty array if projectOwners is undefined or null
-
-        const filteredDocuments = projectDocuments?.map((doc) => ({
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-        })) || [];  // Default to an empty array if projectDocuments is undefined
-
-        const filteredReports = projectReports?.map((report) => ({
-          fileName: report.fileName,
-          fileUrl: report.fileUrl,
-          user: report.user,
-          status: report.status,
-          uploadedAt: report.uploadedAt,
-        })) || [];  // Default to an empty array if projectReports is undefined
-
-        const financeDetails = financeDocuments
-          ?.map((doc) => ({
-            id: doc._id,
+        const filteredDocuments =
+          projectDocuments?.map((doc) => ({
             fileName: doc.fileName,
             fileUrl: doc.fileUrl,
             user: doc.user,
-            financialExecution: doc.financialExecution,
-            physicalExecution: doc.physicalExecution,
-            uploadedAt: doc.uploadedAt,
-            reference: doc.reference,
-          }))
-          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)) || [];  // Default to an empty array if financeDocuments is undefined
+          })) || [];
+
+        const filteredReports =
+          projectReports?.map((report) => ({
+            fileName: report.fileName,
+            fileUrl: report.fileUrl,
+            user: report.user,
+            status: report.status,
+            uploadedAt: report.uploadedAt,
+          })) || [];
+
+        const financeDetails =
+          financeDocuments
+            ?.map((doc) => ({
+              id: doc._id,
+              fileName: doc.fileName,
+              fileUrl: doc.fileUrl,
+              user: doc.user,
+              financialExecution: doc.financialExecution,
+              physicalExecution: doc.physicalExecution,
+              uploadedAt: doc.uploadedAt,
+              reference: doc.reference,
+            }))
+            .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)) ||
+          [];
 
         const latestLog =
           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
 
-        // Fetch additional milestones manually using the project._id
         const additionalMilestones = await AdditionalMilestone.find({
           projectId: project._id,
         }).populate({
@@ -425,7 +440,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
           projectReports: filteredReports,
           latestLog,
           milestones,
-          additionalMilestones, // Add the populated milestones here
+          additionalMilestones,
+          fromBusinessArea,
         };
       })
     );
@@ -452,6 +468,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
 const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
+    const { isMain, _id: loggedInUserId, businessArea } = req.user;
 
     const project = await editProject.findOne({ _id: projectId }).populate([
       {
@@ -472,6 +489,34 @@ const getProjectById = asyncHandler(async (req, res) => {
       throw new ApiError(404, "Project not found");
     }
 
+    if (!isMain) {
+      const isMember = project.members.some((member) =>
+        member._id.equals(loggedInUserId)
+      );
+      const isOwner = project.projectOwners.some(
+        (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+      );
+
+      const businessAreaMatch =
+        typeof project.businessAreas === "string"
+          ? project.businessAreas === businessArea
+          : project.businessAreas?.includes(businessArea);
+
+      if (!isMember && !isOwner && !businessAreaMatch) {
+        throw new ApiError(
+          403,
+          "You don't have permission to access this project"
+        );
+      }
+    }
+
+    const isMember = project.members.some((member) =>
+      member._id.equals(loggedInUserId)
+    );
+    const isOwner = project.projectOwners.some(
+      (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+    );
+    const fromBusinessArea = !isMember && !isOwner;
 
     const milestones = [
       { name: "Project Details", completed: true },
@@ -488,31 +533,19 @@ const getProjectById = asyncHandler(async (req, res) => {
       project.projectBanner.length > 0 &&
       project.members.length > 0;
 
-    if (isFillingComplete) {
-      milestones[1].completed = true;
-    }
+    if (isFillingComplete) milestones[1].completed = true;
 
-    const projectDocuments = await UserDocument.find({
-      projName: project.projectName,
-    });
-    const projectReports = await Document.find({
-      projName: project.projectName,
-    });
-    const financeDocuments = await FinanceDocument.find({
-      projName: project.projectName,
-    });
+    const [projectDocuments, projectReports, financeDocuments] =
+      await Promise.all([
+        UserDocument.find({ projName: project.projectName }),
+        Document.find({ projName: project.projectName }),
+        FinanceDocument.find({ projName: project.projectName }),
+      ]);
 
-    if (financeDocuments.length > 0) {
-      milestones[2].completed = true;
-    }
-
-    if (milestones[1].completed && milestones[2].completed) {
+    if (financeDocuments.length > 0) milestones[2].completed = true;
+    if (milestones[1].completed && milestones[2].completed)
       milestones[3].completed = true;
-    }
-
-    if (project.status === "Completed") {
-      milestones[4].completed = true;
-    }
+    if (project.status === "Completed") milestones[4].completed = true;
 
     const updatedMembers = project.members.map((member) => ({
       userId: member._id,
@@ -532,56 +565,45 @@ const getProjectById = asyncHandler(async (req, res) => {
         _id: owner.ownerId._id || owner.ownerId,
       }));
 
-    const filteredReports = projectReports.map((report) => ({
-      fileName: report.fileName,
-      fileUrl: report.fileUrl,
-      user: report.user,
-      status: report.status,
-      uploadedAt: report.uploadedAt,
-    }));
-
-    const filteredDocuments = projectDocuments.map((doc) => ({
-      fileName: doc.fileName,
-      fileUrl: doc.fileUrl,
-      user: doc.user,
-    }));
-
-    const financeDetails = financeDocuments
-      .map((doc) => ({
-        id: doc._id,
-        fileName: doc.fileName,
-        fileUrl: doc.fileUrl,
-        user: doc.user,
-        financialExecution: doc.financialExecution,
-        physicalExecution: doc.physicalExecution,
-        uploadedAt: doc.uploadedAt,
-        reference: doc.reference,
-      }))
-      .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
-
-    const latestLog =
-      project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
-
-    // Fetch additional milestones for the project
-    const additionalMilestones = await AdditionalMilestone.find({
-      projectId: project._id,
-    }).populate({
-      path: "userId",
-      model: "User",
-      select: "userName",
-    });
-
-  
     const responseData = {
       ...project.toObject(),
       members: updatedMembers,
       projectOwners: updatedProjectOwners,
-      documents: filteredDocuments,
-      financeDocuments: financeDetails,
-      projectReports: filteredReports,
-      latestLog,
+      documents: projectDocuments.map((doc) => ({
+        fileName: doc.fileName,
+        fileUrl: doc.fileUrl,
+        user: doc.user,
+      })),
+      financeDocuments: financeDocuments
+        .map((doc) => ({
+          id: doc._id,
+          fileName: doc.fileName,
+          fileUrl: doc.fileUrl,
+          user: doc.user,
+          financialExecution: doc.financialExecution,
+          physicalExecution: doc.physicalExecution,
+          uploadedAt: doc.uploadedAt,
+          reference: doc.reference,
+        }))
+        .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
+      projectReports: projectReports.map((report) => ({
+        fileName: report.fileName,
+        fileUrl: report.fileUrl,
+        user: report.user,
+        status: report.status,
+        uploadedAt: report.uploadedAt,
+      })),
+      latestLog:
+        project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null,
       milestones,
-      additionalMilestones,
+      additionalMilestones: await AdditionalMilestone.find({
+        projectId: project._id,
+      }).populate({
+        path: "userId",
+        model: "User",
+        select: "userName",
+      }),
+      fromBusinessArea,
     };
 
     res
@@ -590,10 +612,12 @@ const getProjectById = asyncHandler(async (req, res) => {
         new ApiResponse(200, responseData, "Project retrieved successfully")
       );
   } catch (error) {
-    throw new ApiError(400, error.message);
+    throw new ApiError(
+      error.statusCode || 400,
+      error.message || "Failed to retrieve project"
+    );
   }
 });
-
 
 const deleteProject = asyncHandler(async (req, res) => {
   try {

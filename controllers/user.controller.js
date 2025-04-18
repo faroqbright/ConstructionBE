@@ -6,6 +6,7 @@ import { generateOTP } from "../utils/generateOtp.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
+import { BusinessArea } from "../models/businessAreasModal.js";
 
 const resendOTP = asyncHandler(async (req, res) => {
   const { email } = req.body;
@@ -103,51 +104,67 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const login = asyncHandler(async (req, res) => {
-  const { email, password, fcmDeviceToken } = req.body;
+  try {
+    const { email, password, fcmDeviceToken } = req.body;
 
-  if (!email) {
-    throw new ApiError(400, "email is required");
+    if (!email) throw new ApiError(400, "email is required");
+
+    const user = await User.findOne({ email }).populate("role");
+    if (!user) throw new ApiError(404, "User does not exist");
+
+    const isPasswordValid = await user.isPasswordCorrect(password);
+    if (!isPasswordValid) throw new ApiError(401, "Invalid user credentials");
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+
+    user.fcmDeviceToken = fcmDeviceToken;
+    await user.save();
+
+    // Ensure businessArea is populated or assigned here
+    const assignedBusinessAreas = await BusinessArea.find({
+      role: user.role._id,
+    }).select("businessArea");
+
+    if (assignedBusinessAreas && assignedBusinessAreas.length > 0) {
+      // Assign the first business area to user if it's not set
+      if (!user.businessArea) {
+        const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
+        if (firstBusinessArea) {
+          user.businessArea = firstBusinessArea;
+          await user.save();
+        }
+      }
+    }
+
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+
+    const loggedInUser = await User.findById(user._id)
+      .select("-password -refreshToken")
+      .populate("role");
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          {
+            user: loggedInUser,
+            assignedBusinessAreas,
+            accessToken,
+            refreshToken,
+          },
+          "User logged in successfully"
+        )
+      );
+  } catch (error) {
+    console.error("Login Error:", error);
+    throw new ApiError(500, error.message || "Internal server error");
   }
-
-  const user = await User.findOne({
-    $or: [{ email }],
-  });
-
-  if (!user) {
-    throw new ApiError(404, "User does not exist");
-  }
-
-  const isPasswordValid = await user.isPasswordCorrect(password);
-
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid user credentials");
-  }
-
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    user._id
-  );
-  user.fcmDeviceToken = fcmDeviceToken;
-  await user.save();
-  const loggedInUser = await User.findById(user._id)
-    .select("-password -refreshToken")
-    .populate("role");
-
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
-
-  return res
-    .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json(
-      new ApiResponse(
-        200,
-        { user: loggedInUser, accessToken, refreshToken },
-        "User logged in successfully"
-      )
-    );
 });
 
 const forgetPassword = asyncHandler(async (req, res) => {

@@ -66,6 +66,9 @@ const userSchema = new mongoose.Schema(
       type: String,
       trim: true, // Ensures companyName doesn't have leading/trailing spaces
     },
+    businessArea: {
+      type: String,
+    }    
   },
   {
     timestamps: true,
