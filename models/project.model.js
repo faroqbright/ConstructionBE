@@ -114,3 +114,4 @@ const editProjectSchema = new mongoose.Schema(
 );
 
 export const editProject = mongoose.model("editProject", editProjectSchema);
+
