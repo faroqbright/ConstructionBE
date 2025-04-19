@@ -432,7 +432,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
           select: "userName",
         });
 
-        return {
+        const projectObj = {
           ...project.toObject(),
           projectOwners: updatedProjectOwners,
           documents: filteredDocuments,
@@ -441,8 +441,13 @@ const getAllProjects = asyncHandler(async (req, res) => {
           latestLog,
           milestones,
           additionalMilestones,
-          fromBusinessArea,
         };
+        
+        if (!isMain) {
+          projectObj.fromBusinessArea = fromBusinessArea;
+        }
+        
+        return projectObj;        
       })
     );
 
@@ -565,46 +570,46 @@ const getProjectById = asyncHandler(async (req, res) => {
         _id: owner.ownerId._id || owner.ownerId,
       }));
 
-    const responseData = {
-      ...project.toObject(),
-      members: updatedMembers,
-      projectOwners: updatedProjectOwners,
-      documents: projectDocuments.map((doc) => ({
-        fileName: doc.fileName,
-        fileUrl: doc.fileUrl,
-        user: doc.user,
-      })),
-      financeDocuments: financeDocuments
-        .map((doc) => ({
-          id: doc._id,
+      const responseData = {
+        ...project.toObject(),
+        members: updatedMembers,
+        projectOwners: updatedProjectOwners,
+        documents: projectDocuments.map((doc) => ({
           fileName: doc.fileName,
           fileUrl: doc.fileUrl,
           user: doc.user,
-          financialExecution: doc.financialExecution,
-          physicalExecution: doc.physicalExecution,
-          uploadedAt: doc.uploadedAt,
-          reference: doc.reference,
-        }))
-        .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
-      projectReports: projectReports.map((report) => ({
-        fileName: report.fileName,
-        fileUrl: report.fileUrl,
-        user: report.user,
-        status: report.status,
-        uploadedAt: report.uploadedAt,
-      })),
-      latestLog:
-        project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null,
-      milestones,
-      additionalMilestones: await AdditionalMilestone.find({
-        projectId: project._id,
-      }).populate({
-        path: "userId",
-        model: "User",
-        select: "userName",
-      }),
-      fromBusinessArea,
-    };
+        })),
+        financeDocuments: financeDocuments
+          .map((doc) => ({
+            id: doc._id,
+            fileName: doc.fileName,
+            fileUrl: doc.fileUrl,
+            user: doc.user,
+            financialExecution: doc.financialExecution,
+            physicalExecution: doc.physicalExecution,
+            uploadedAt: doc.uploadedAt,
+            reference: doc.reference,
+          }))
+          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
+        projectReports: projectReports.map((report) => ({
+          fileName: report.fileName,
+          fileUrl: report.fileUrl,
+          user: report.user,
+          status: report.status,
+          uploadedAt: report.uploadedAt,
+        })),
+        latestLog:
+          project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null,
+        milestones,
+        additionalMilestones: await AdditionalMilestone.find({
+          projectId: project._id,
+        }).populate({
+          path: "userId",
+          model: "User",
+          select: "userName",
+        }),
+        ...(isMain ? {} : { fromBusinessArea }),
+      };      
 
     res
       .status(200)
