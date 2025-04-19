@@ -120,16 +120,19 @@ const login = asyncHandler(async (req, res) => {
     user.fcmDeviceToken = fcmDeviceToken;
     await user.save();
 
-    // Ensure businessArea is populated or assigned here
-    const assignedBusinessAreas = await BusinessArea.find({
-      role: user.role._id,
-    }).select("businessArea");
+    // Initialize assignedBusinessAreas as empty
+    let assignedBusinessAreas = [];
 
-    if (assignedBusinessAreas && assignedBusinessAreas.length > 0) {
-      // Assign the first business area to user if it's not set
-      if (!user.businessArea) {
+    // Only fetch and assign if user has a role with an _id
+    if (user.role && user.role._id) {
+      assignedBusinessAreas = await BusinessArea.find({
+        role: user.role._id,
+      }).select("businessArea");
+
+      if (Array.isArray(assignedBusinessAreas) && assignedBusinessAreas.length > 0) {
         const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
-        if (firstBusinessArea) {
+
+        if (!user.businessArea && firstBusinessArea) {
           user.businessArea = firstBusinessArea;
           await user.save();
         }
