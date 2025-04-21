@@ -21,12 +21,13 @@ const resendOTP = asyncHandler(async (req, res) => {
   await user.save();
 
   const body = {
-    from: process.env.EMAIL_USER,
+    // from: process.env.EMAIL_USER,
+    from: `"Construction Management" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: "Authentication",
     html: `<h2>Hello ${email}</h2>
         <p>Your OTP is <strong>${otp}</strong></p>
-        <p>If you did not initiate this request, please contact us immediately at eg@.com</p>
+        <p>If you did not initiate this request, please contact us immediately at info@soapro.ao</p>
         <p>Thank you</p>
         <strong>Developer Team</strong>`,
   };
@@ -188,7 +189,7 @@ const forgetPassword = asyncHandler(async (req, res) => {
     subject: "Authentication",
     html: `<h2>Hello ${email}</h2>
         <p>Your OTP is <strong>${otp}</strong></p>
-        <p>If you did not initiate this request, please contact us immediately at app@soapro.ao</p>
+        <p>If you did not initiate this request, please contact us immediately at info@soapro.ao</p>
         <p>Thank you</p>
         <strong>Developer Team</strong>`,
   };
