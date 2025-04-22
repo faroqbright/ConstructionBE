@@ -11,7 +11,6 @@ router.route('/get-notifications').get(getNotifications);
 
 
 
-
 router.use(errorHandler);
 
 

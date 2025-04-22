@@ -55,8 +55,16 @@ const userSchema = new mongoose.Schema(
     accessToken: {
       type: String,
     },
+        // Added for Firebase Cloud Messaging
+    notificationToken: {
+      type: String,
+      default: null,
+      index: true, // Added index for better query performance
+    },
+    // Keeping your existing fcmDeviceToken for backward compatibility
     fcmDeviceToken: {
       type: String,
+      default: null,
     },
     userType: {
       type: String,
@@ -72,7 +80,7 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Pre-save hook to hash password before saving it
@@ -116,5 +124,15 @@ userSchema.methods.generateRefreshToken = function () {
     }
   );
 };
+
+// Method to update notification token
+userSchema.methods.updateNotificationToken = async function (token) {
+  this.notificationToken = token;
+  // Also update fcmDeviceToken for backward compatibility
+  this.fcmDeviceToken = token;
+  await this.save();
+  return this;
+};
+
 
 export const User = mongoose.model("User", userSchema);
