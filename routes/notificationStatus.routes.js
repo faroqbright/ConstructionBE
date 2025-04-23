@@ -5,6 +5,6 @@ const router = express.Router();
 
 // Create multiple notification statuses (exactly 4)
 router.post('/', createNotificationStatuses);
-router.put('/', updateNotificationStatusById);
+router.put('/:notificationId', updateNotificationStatusById);
 
 export default router;
