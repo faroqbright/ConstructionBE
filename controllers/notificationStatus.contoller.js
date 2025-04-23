@@ -30,6 +30,31 @@ export const createNotificationStatuses = async (req, res) => {
   }
 };
 
+export const getNotificationById = async (req, res) => {
+    try {
+      const { notificationId } = req.params;
+  
+      // Find the document that contains the notification
+      const document = await NotificationStatus.findOne({ 'notifications._id': notificationId });
+  
+      if (!document) {
+        return res.status(404).json({ message: 'Notification not found.' });
+      }
+  
+      // Find the specific notification from the array
+      const notification = document.notifications.id(notificationId);
+  
+      res.status(200).json({
+        message: 'Notification fetched successfully',
+        data: notification,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'An error occurred while fetching notification.' });
+    }
+  };
+  
+
 export const updateNotificationStatusById = async (req, res) => {
     try {
       const { notificationId } = req.params; // This is the _id of the embedded notification
@@ -55,3 +80,27 @@ export const updateNotificationStatusById = async (req, res) => {
       res.status(500).json({ message: 'An error occurred while updating notification status.' });
     }
   };
+
+  export const getAllNotificationStatuses = async (req, res) => {
+    try {
+      // Fetch all documents from the collection
+      const allDocuments = await NotificationStatus.find();
+  
+      // Flatten all embedded notifications into a single array
+      const allNotifications = allDocuments.flatMap(doc => 
+        doc.notifications.map(notification => ({
+          ...notification.toObject(),  // convert Mongoose doc to plain object
+          parentId: doc._id,           // include parent document ID for reference
+        }))
+      );
+  
+      res.status(200).json({
+        message: 'All notifications fetched successfully',
+        data: allNotifications,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'An error occurred while fetching all notifications.' });
+    }
+  };
+  
