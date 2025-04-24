@@ -22,6 +22,11 @@ const notificationsSchema = new mongoose.Schema(
       ref: "Client", // adjust if your client model has a different name  
       default: [],
     },
+    userIds: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "User",  
+      default: [],
+    },
   },
   {
     createdAt: {
