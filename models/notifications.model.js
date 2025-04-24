@@ -19,7 +19,7 @@ const notificationsSchema = new mongoose.Schema(
     },
     clientIds: {
       type: [mongoose.Schema.Types.ObjectId],
-      ref: "Client", // adjust if your client model has a different name  
+      ref: "Company", // adjust if your client model has a different name  
       default: [],
     },
     userIds: {
