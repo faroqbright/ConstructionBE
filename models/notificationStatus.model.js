@@ -32,7 +32,7 @@ const notificationStatusSchema = new mongoose.Schema(
 );
 
 const NotificationStatus = mongoose.model(
-  "NotificationStatus",
+  "NotificationsStatus",
   notificationStatusSchema
 );
 
