@@ -6,14 +6,10 @@ const editProjectSchema = new mongoose.Schema(
       {
         ownerId: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
+          ref: "User", // <- this MUST match the model name you're populating
         },
-        ownerName: {
-          type: String,
-          required: false,
-        },
-      },
+        ownerName: String,
+      }
     ],
     milestones: {
       type: [
@@ -38,21 +34,21 @@ const editProjectSchema = new mongoose.Schema(
     },
     description: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     location: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     businessAreas: {
       type: String,
-      required: true,
+      // required: true,
     },
     comapanyName: {
       type: String,
-      required: true,
+      // required: true,
     },
     projectBanner: {
       type: [
@@ -65,7 +61,7 @@ const editProjectSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
       enum: [
         "Ongoing",
@@ -80,18 +76,18 @@ const editProjectSchema = new mongoose.Schema(
     },
     deadline: {
       type: String,
-      required: true,
+      // required: true,
       trim: true,
     },
     physicalEducationRange: {
       type: Number,
-      required: true,
+      // required: true,
       min: 1, // Minimum value
       max: 100, // Maximum value
     },
     daysLeft: {
       type: String,
-      required: true,
+      // required: true,
     },
     members: [
       {

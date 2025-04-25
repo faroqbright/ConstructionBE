@@ -311,7 +311,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
     let query = editProject.find(finalFilter).populate([
       {
         path: "members",
-        select: "userName avatar role",
+        select: "userName avatar role email", // ✅ added email
         populate: {
           path: "role",
           select: "roleName",
@@ -320,10 +320,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
       {
         path: "projectOwners.ownerId",
         model: "User",
-        select: "userName role",
-        populate: { path: "role", select: "roleName" },
+        select: "userName role email", // ✅ added email
+        populate: {
+          path: "role",
+          select: "roleName",
+        },
       },
     ]);
+    
 
     query = query.sort({ createdAt: -1 });
 
@@ -388,6 +392,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
               ownerId: owner.ownerId?._id || owner.ownerId,
               ownerName: owner.ownerId?.userName || owner.ownerName || "",
               _id: owner._id,
+              email: owner.email || owner.ownerId.email,
             })) || [];
 
         const filteredDocuments =
@@ -568,6 +573,7 @@ const getProjectById = asyncHandler(async (req, res) => {
           owner.ownerId.userName || owner.ownerName || owner.userName || "",
         role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
         _id: owner.ownerId._id || owner.ownerId,
+        email: owner.ownerId.email || owner.email
       }));
 
       const responseData = {
