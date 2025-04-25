@@ -9,6 +9,7 @@ import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
+import  {SendEmailUtil} from "../utils/emailsender.js"
 
 const createProject = asyncHandler(async (req, res) => {
   try {
@@ -123,7 +124,7 @@ const editProjects = asyncHandler(async (req, res) => {
     } = req.body;
     const { files } = req;
 
-    const existingProject = await editProject.findById(projectId);
+    const existingProject = await editProject.findById(projectId).populate('projectOwners.ownerId', 'email userName');
     if (!existingProject) {
       throw new ApiError(404, "Project not found");
     }
@@ -131,45 +132,53 @@ const editProjects = asyncHandler(async (req, res) => {
     let updateData = {};
     let logs = [];
     let updatedProjectBanners = existingProject.projectBanner || [];
+    let changesSummary = [];
 
-    // Ensure project name is unique
+    // Check for project name change
     if (projectName && projectName !== existingProject.projectName) {
       let nameTaken = await editProject.findOne({ projectName });
       if (nameTaken) {
-        const uniqueSuffix = uuidv4().split("-")[0]; // Generate a short unique string
+        const uniqueSuffix = uuidv4().split("-")[0];
         projectName = `${projectName}-${uniqueSuffix}`;
-        console.warn(`Project name already taken, renaming to: ${projectName}`);
       }
-
       logs.push({
         actionType: "Project Name Change",
         message: `Project name changed from "${existingProject.projectName}" to "${projectName}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
+      changesSummary.push(`Project name changed to "${projectName}"`);
     }
 
-    // Handle status updates
-    if (existingProject.status !== status && status) {
+    if (status && status !== existingProject.status) {
       logs.push({
         actionType: "Status Update",
-        message: `Status updated from "${existingProject.status}" to "${status}" by ${req.user.userName}`,
+        message: `Status changed from "${existingProject.status}" to "${status}" by ${req.user.userName}`,
         userId: req.user.id,
         timestamp: new Date(),
       });
+      changesSummary.push(`Status updated to "${status}"`);
     }
 
-    // Handle deadline changes
-    if (existingProject.deadline !== deadline && deadline) {
-      logs.push({
-        actionType: "Deadline Change",
-        message: `Deadline changed from "${existingProject.deadline}" to "${deadline}" by ${req.user.userName}`,
-        userId: req.user.id,
-        timestamp: new Date(),
-      });
+    // Handle deadline correctly
+    if (deadline) {
+      const deadlineDate = new Date(deadline);
+      if (isNaN(deadlineDate)) {
+        throw new ApiError(400, "Invalid deadline format");
+      }
+      const existingDeadline = new Date(existingProject.deadline);
+
+      if (deadlineDate.getTime() !== existingDeadline.getTime()) {
+        logs.push({
+          actionType: "Deadline Change",
+          message: `Deadline updated to "${deadline}" by ${req.user.userName}`,
+          userId: req.user.id,
+          timestamp: new Date(),
+        });
+        changesSummary.push(`Deadline updated to "${deadline}"`);
+      }
     }
 
-    // Handle banner removal
     if (removeBanners.length > 0) {
       updatedProjectBanners = updatedProjectBanners.filter(
         (banner) => !removeBanners.includes(banner.url)
@@ -180,9 +189,9 @@ const editProjects = asyncHandler(async (req, res) => {
         userId: req.user.id,
         timestamp: new Date(),
       });
+      changesSummary.push(`${removeBanners.length} banner(s) removed`);
     }
 
-    // Handle new banners upload
     if (files?.projectBanner?.length > 0) {
       if (updatedProjectBanners.length + files.projectBanner.length > 10) {
         throw new ApiError(400, "You can only have up to 10 banners.");
@@ -209,10 +218,16 @@ const editProjects = asyncHandler(async (req, res) => {
         userId: req.user.id,
         timestamp: new Date(),
       });
+      changesSummary.push(`${files.projectBanner.length} new banner(s) added`);
     }
 
-    if (updatedProjectBanners.length > 10) {
-      throw new ApiError(400, "You can only have a maximum of 10 banners.");
+    // Ensure projectOwners and other data are valid
+    if (projectOwners) {
+      projectOwners = projectOwners
+        .filter((ownerId) => ownerId && mongoose.Types.ObjectId.isValid(ownerId)) // Ensure it's a valid ObjectId
+        .map((ownerId) => ({
+          ownerId: new mongoose.Types.ObjectId(ownerId),
+        }));
     }
 
     updateData = {
@@ -228,13 +243,7 @@ const editProjects = asyncHandler(async (req, res) => {
       daysLeft,
       projectBanner: updatedProjectBanners,
       ...(members && { members }),
-      ...(projectOwners && {
-        projectOwners: projectOwners
-          .filter((ownerId) => ownerId)
-          .map((ownerId) => ({
-            ownerId: new mongoose.Types.ObjectId(ownerId),
-          })),
-      }),
+      ...(projectOwners && { projectOwners }),
       logs: [...existingProject.logs, ...logs],
     };
 
@@ -252,16 +261,40 @@ const editProjects = asyncHandler(async (req, res) => {
       { new: true, runValidators: true }
     );
 
+    // 🔔 Send email if there are changes
+    if (changesSummary.length > 0) {
+      const emailRecipients = existingProject.projectOwners
+        .map((owner) => owner.ownerId?.email)
+        .filter((email) => email);
+
+      const emailBody = {
+        from: process.env.EMAIL_USER,
+        to: emailRecipients.join(","),
+        subject: `🔔 Project "${existingProject.projectName}" has been updated`,
+        html: `
+          <h3>Project Updated</h3>
+          <p>The following changes were made to the project <strong>${existingProject.projectName}</strong>:</p>
+          <ul>
+            ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
+          </ul>
+          <p>Updated by: ${req.user.userName}</p>
+          <p><em>This is an automated notification.</em></p>
+        `,
+      };
+
+      await SendEmailUtil(emailBody);
+    }
+
     res
       .status(200)
-      .json(
-        new ApiResponse(200, updatedProject, "Project updated successfully")
-      );
+      .json(new ApiResponse(200, updatedProject, "Project updated successfully"));
   } catch (error) {
     console.error("Error updating project:", error.message);
     res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 });
+
+
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {

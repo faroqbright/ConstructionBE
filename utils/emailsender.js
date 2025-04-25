@@ -10,8 +10,8 @@ const SendEmailUtil = async (body) => {
       port: Number(process.env.EMAIL_PORT),
       secure: false,
       auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: "app@soapro.ao",
+        pass: "ppA*_#2o25",
       },
       // tls: { rejectUnauthorized: true },
       tls: {
