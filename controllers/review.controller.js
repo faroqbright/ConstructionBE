@@ -1,4 +1,4 @@
-import { editProject } from "../models/project.model.js";
+import { editProject as Project} from "../models/project.model.js";
 import { Review } from "../models/reviewsModel.js";
 
 export const createReview = async (req, res) => {
