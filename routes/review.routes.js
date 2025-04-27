@@ -3,9 +3,9 @@ import { createReview, getAllReviews } from "../controllers/review.controller.js
 const router = express.Router();
 
 // POST /api/reviews - create a new review
-router.post("/", createReview);
+router.post("/create_review", createReview);
 
 // GET /api/reviews - fetch all reviews
-router.get("/", getAllReviews);
+router.get("/get_review", getAllReviews);
 
 export default router;
