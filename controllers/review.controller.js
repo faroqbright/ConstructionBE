@@ -22,6 +22,44 @@ export const createReview = async (req, res) => {
   }
 };
 
+export const getReviewByProjectId = async (req, res) => {
+  const { projectId } = req.params;
+
+  try {
+    if (!projectId) {
+      return res.status(400).json({ success: false, message: "Project ID is required" });
+    }
+
+    console.log(`Fetching reviews for projectId: ${projectId}`);
+
+    const reviews = await Review.find({ projectId }, 'message rating createdAt userId')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    if (reviews.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No reviews found for this project",
+        data: []
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: reviews
+    });
+
+  } catch (error) {
+    console.error("ERROR in getReviewByProjectId:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === 'development' ? { message: error.message, stack: error.stack } : undefined
+    });
+  }
+};
+
+
 export const getAllReviews = async (req, res) => {
   try {
     console.log('1. Starting to fetch all reviews...');
