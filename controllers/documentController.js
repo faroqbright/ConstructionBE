@@ -1,6 +1,52 @@
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import Document from "../models/documentModel.js";
 import { editProject } from "../models/project.model.js";
+// import  {SendEmailUtil} from "../utils/emailsender.js"
+import {SendEmailUtil} from "../utils/emailsender.js"
+
+
+
+// const uploadFile = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+
+//     // Upload file to AWS S3
+//     const fileUrl = await uploadToS3(
+//       req.file.buffer,
+//       req.file.originalname,
+//       req.file.mimetype
+//     );
+
+//     if (!fileUrl) {
+//       return res.status(500).json({ message: "File upload failed" });
+//     }
+
+//     // Create document entry in MongoDB
+//     const document = new Document({
+//       projName: req.body.projName || null, // Optional for regular users
+//       fileName: req.file.originalname,
+//       fileSize: req.file.size, // Capture file size in bytes
+//       fileUrl: fileUrl,
+//       user: req.body.user, // Assuming `req.user` has user info
+//       status: "pending",
+//     });
+
+//     await document.save();
+
+//     res.status(201).json({ message: "File uploaded successfully!", document });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .json({ message: "Error uploading file", error: error.message });
+//   }
+// };
+
+
+
+
+
 
 const uploadFile = async (req, res) => {
   try {
@@ -21,23 +67,55 @@ const uploadFile = async (req, res) => {
 
     // Create document entry in MongoDB
     const document = new Document({
-      projName: req.body.projName || null, // Optional for regular users
+      projName: req.body.projName || null,
       fileName: req.file.originalname,
-      fileSize: req.file.size, // Capture file size in bytes
+      fileSize: req.file.size,
       fileUrl: fileUrl,
-      user: req.body.user, // Assuming `req.user` has user info
+      user: req.body.user,
       status: "pending",
     });
 
     await document.save();
 
+    // Fetch project owners if projName is provided
+    if (req.body.projName) {
+      const projectExists = await editProject.findOne({ projectName: req.body.projName }).populate("projectOwners.ownerId", "email ownerName");
+
+      if (projectExists && projectExists.projectOwners.length > 0) {
+        for (const owner of projectExists.projectOwners) {
+          if (owner.ownerId?.email) {
+            const emailBody = {
+              from: process.env.EMAIL_USER,
+              to: owner.ownerId.email,
+              subject: `New File Uploaded for Project: ${req.body.projName}`,
+              text: `Hello ${owner.ownerId.ownerName},\n\nA new file named "${req.file.originalname}" has been uploaded for the project "${req.body.projName}".\n\nBest regards,\nYour Team`,
+            };
+
+            try {
+              await SendEmailUtil(emailBody);
+              console.log(`Email sent to ${owner.ownerId.email}`);
+            } catch (error) {
+              console.error("Error sending email:", error.message);
+            }
+          }
+        }
+      } else {
+        console.warn("No project owners found for the provided project name.");
+      }
+    }
+
     res.status(201).json({ message: "File uploaded successfully!", document });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error uploading file", error: error.message });
+    console.error("Error uploading file:", error.message);
+    res.status(500).json({ message: "Error uploading file", error: error.message });
   }
 };
+
+
+
+
+
+
 
 const getDocuments = async (req, res) => {
   try {
@@ -72,22 +150,30 @@ const getDocuments = async (req, res) => {
   }
 };
 
+
+
+
 const updateStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body; // Only send changed fields
+  try {
+      const { id } = req.params;
+      const updates = req.body; // Only send changed fields
 
-        const updatedDocument = await Document.findByIdAndUpdate(id, updates, { new: true });
+      const updatedDocument = await Document.findByIdAndUpdate(id, updates, { new: true });
 
-        if (!updatedDocument) {
-            return res.status(404).json({ message: "Document not found" });
-        }
+      if (!updatedDocument) {
+          return res.status(404).json({ message: "Document not found" });
+      }
 
-        res.status(200).json({ message: "Document updated successfully", document: updatedDocument });
-    } catch (error) {
-        res.status(500).json({ message: "Error updating document", error: error.message });
-    }
+      res.status(200).json({ message: "Document updated successfully", document: updatedDocument });
+  } catch (error) {
+      res.status(500).json({ message: "Error updating document", error: error.message });
+  }
 };
+
+
+
+
+
 
 const deleteDocument = async (req, res) => {
     try {
