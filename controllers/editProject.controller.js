@@ -12,99 +12,99 @@ import { v4 as uuidv4 } from "uuid";
 import { SendEmailUtil } from "../utils/emailsender.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
 
-// const createProject = asyncHandler(async (req, res) => {
-//   try {
-//     const {
-//       projectName,
-//       projectOwners,
-//       description,
-//       location,
-//       status,
-//       businessAreas,
-//       comapanyName,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//     } = req.body;
-//     const { files } = req;
+const createProject = asyncHandler(async (req, res) => {
+  try {
+    const {
+      projectName,
+      projectOwners,
+      description,
+      location,
+      status,
+      businessAreas,
+      comapanyName,
+      deadline,
+      physicalEducationRange,
+      daysLeft,
+    } = req.body;
+    const { files } = req;
 
-//     console.log("Received Project Data:", req.body);
-//     console.log("Received Files:", files?.projectBanner?.length);
+    console.log("Received Project Data:", req.body);
+    console.log("Received Files:", files?.projectBanner?.length);
 
-//     const existingProject = await editProject.findOne({ projectName });
-//     if (existingProject) {
-//       throw new ApiError(400, "Project name already taken.");
-//     }
+    const existingProject = await editProject.findOne({ projectName });
+    if (existingProject) {
+      throw new ApiError(400, "Project name already taken.");
+    }
 
-//     let projectBanners = [];
+    let projectBanners = [];
 
-//     if (files?.projectBanner?.length > 0) {
-//       if (files.projectBanner.length > 10) {
-//         throw new ApiError(400, "You can upload up to 10 banners.");
-//       }
+    if (files?.projectBanner?.length > 0) {
+      if (files.projectBanner.length > 10) {
+        throw new ApiError(400, "You can upload up to 10 banners.");
+      }
 
-//       const uploadFile = async (file) => {
-//         if (file.size > 5 * 1024 * 1024) {
-//           console.error(`File too large: ${file.originalname}`);
-//           return null;
-//         }
+      const uploadFile = async (file) => {
+        if (file.size > 5 * 1024 * 1024) {
+          console.error(`File too large: ${file.originalname}`);
+          return null;
+        }
 
-//         try {
-//           console.log(`Uploading file: ${file.originalname}`);
-//           const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-//           const uploadedImageUrl = await uploadToS3(
-//             file.buffer,
-//             uniqueFileName,
-//             file.mimetype
-//           );
-//           return uploadedImageUrl
-//             ? { url: uploadedImageUrl, uploadDate: new Date() }
-//             : null;
-//         } catch (uploadError) {
-//           console.error(`Upload failed for ${file.originalname}:`, uploadError);
-//           return null; // Do not fail everything if one file fails
-//         }
-//       };
+        try {
+          console.log(`Uploading file: ${file.originalname}`);
+          const uniqueFileName = `${uuidv4()}-${file.originalname}`;
+          const uploadedImageUrl = await uploadToS3(
+            file.buffer,
+            uniqueFileName,
+            file.mimetype
+          );
+          return uploadedImageUrl
+            ? { url: uploadedImageUrl, uploadDate: new Date() }
+            : null;
+        } catch (uploadError) {
+          console.error(`Upload failed for ${file.originalname}:`, uploadError);
+          return null; // Do not fail everything if one file fails
+        }
+      };
 
-//       // Upload in batches of 3 (prevents memory overload)
-//       const batchSize = 3;
-//       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
-//         const batch = files.projectBanner.slice(i, i + batchSize);
-//         console.log(`Uploading batch: ${i / batchSize + 1}`);
-//         const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
-//         projectBanners.push(
-//           ...uploadedBatch
-//             .filter((result) => result.status === "fulfilled" && result.value)
-//             .map((result) => result.value)
-//         );
-//       }
-//     }
+      // Upload in batches of 3 (prevents memory overload)
+      const batchSize = 3;
+      for (let i = 0; i < files.projectBanner.length; i += batchSize) {
+        const batch = files.projectBanner.slice(i, i + batchSize);
+        console.log(`Uploading batch: ${i / batchSize + 1}`);
+        const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
+        projectBanners.push(
+          ...uploadedBatch
+            .filter((result) => result.status === "fulfilled" && result.value)
+            .map((result) => result.value)
+        );
+      }
+    }
 
-//     console.log("Uploaded Banners:", projectBanners);
+    console.log("Uploaded Banners:", projectBanners);
 
-//     const projectData = {
-//       projectName,
-//       projectOwners,
-//       description,
-//       businessAreas,
-//       comapanyName,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       projectBanner: projectBanners,
-//     };
+    const projectData = {
+      projectName,
+      projectOwners,
+      description,
+      businessAreas,
+      comapanyName,
+      location,
+      status,
+      deadline,
+      physicalEducationRange,
+      daysLeft,
+      projectBanner: projectBanners,
+    };
 
-//     const project = await editProject.create(projectData);
-//     res
-//       .status(201)
-//       .json(new ApiResponse(201, project, "Project created successfully"));
-//   } catch (error) {
-//     console.error("Error in createProject:", error);
-//     res.status(500).json({ message: error.message || "Internal Server Error" });
-//   }
-// });
+    const project = await editProject.create(projectData);
+    res
+      .status(201)
+      .json(new ApiResponse(201, project, "Project created successfully"));
+  } catch (error) {
+    console.error("Error in createProject:", error);
+    res.status(500).json({ message: error.message || "Internal Server Error" });
+  }
+});
 
 // const editProjects = asyncHandler(async (req, res) => {
 //   try {
@@ -295,129 +295,129 @@ import { ShowNotification } from "../models/showNotificationSchema.js";
 //   }
 // });
 
-const createProject = asyncHandler(async (req, res) => {
-  try {
-    const {
-      projectName,
-      projectOwners,
-      description,
-      location,
-      status,
-      businessAreas,
-      comapanyName,
-      deadline,
-      physicalEducationRange,
-      daysLeft,
-    } = req.body;
-    const { files } = req;
+// const createProject = asyncHandler(async (req, res) => {
+//   try {
+//     const {
+//       projectName,
+//       projectOwners,
+//       description,
+//       location,
+//       status,
+//       businessAreas,
+//       comapanyName,
+//       deadline,
+//       physicalEducationRange,
+//       daysLeft,
+//     } = req.body;
+//     const { files } = req;
 
-    console.log("Received Project Data:", req.body);
-    console.log("Received Files:", files?.projectBanner?.length);
+//     console.log("Received Project Data:", req.body);
+//     console.log("Received Files:", files?.projectBanner?.length);
 
-    const existingProject = await editProject.findOne({ projectName });
-    if (existingProject) {
-      throw new ApiError(400, "Project name already taken.");
-    }
+//     const existingProject = await editProject.findOne({ projectName });
+//     if (existingProject) {
+//       throw new ApiError(400, "Project name already taken.");
+//     }
 
-    let projectBanners = [];
+//     let projectBanners = [];
 
-    // Check if projectBanner files exist
-    if (files?.projectBanner?.length > 0) {
-      if (files.projectBanner.length > 10) {
-        throw new ApiError(400, "You can upload up to 10 banners.");
-      }
+//     // Check if projectBanner files exist
+//     if (files?.projectBanner?.length > 0) {
+//       if (files.projectBanner.length > 10) {
+//         throw new ApiError(400, "You can upload up to 10 banners.");
+//       }
 
-      const uploadFile = async (file) => {
-        if (file.size > 5 * 1024 * 1024) {
-          console.error(`File too large: ${file.originalname}`);
-          return null;
-        }
+//       const uploadFile = async (file) => {
+//         if (file.size > 5 * 1024 * 1024) {
+//           console.error(`File too large: ${file.originalname}`);
+//           return null;
+//         }
 
-        try {
-          console.log(`Uploading file: ${file.originalname}`);
-          const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-          const uploadedImageUrl = await uploadToS3(
-            file.buffer,
-            uniqueFileName,
-            file.mimetype
-          );
-          return uploadedImageUrl
-            ? { url: uploadedImageUrl, uploadDate: new Date() }
-            : null;
-        } catch (uploadError) {
-          console.error(`Upload failed for ${file.originalname}:`, uploadError);
-          return null; // Do not fail everything if one file fails
-        }
-      };
+//         try {
+//           console.log(`Uploading file: ${file.originalname}`);
+//           const uniqueFileName = `${uuidv4()}-${file.originalname}`;
+//           const uploadedImageUrl = await uploadToS3(
+//             file.buffer,
+//             uniqueFileName,
+//             file.mimetype
+//           );
+//           return uploadedImageUrl
+//             ? { url: uploadedImageUrl, uploadDate: new Date() }
+//             : null;
+//         } catch (uploadError) {
+//           console.error(`Upload failed for ${file.originalname}:`, uploadError);
+//           return null; // Do not fail everything if one file fails
+//         }
+//       };
 
-      // Upload in batches of 3 (prevents memory overload)
-      const batchSize = 3;
-      for (let i = 0; i < files.projectBanner.length; i += batchSize) {
-        const batch = files.projectBanner.slice(i, i + batchSize);
-        console.log(`Uploading batch: ${i / batchSize + 1}`);
-        const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
-        projectBanners.push(
-          ...uploadedBatch
-            .filter((result) => result.status === "fulfilled" && result.value)
-            .map((result) => result.value)
-        );
-      }
-    }
+//       // Upload in batches of 3 (prevents memory overload)
+//       const batchSize = 3;
+//       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
+//         const batch = files.projectBanner.slice(i, i + batchSize);
+//         console.log(`Uploading batch: ${i / batchSize + 1}`);
+//         const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
+//         projectBanners.push(
+//           ...uploadedBatch
+//             .filter((result) => result.status === "fulfilled" && result.value)
+//             .map((result) => result.value)
+//         );
+//       }
+//     }
 
-    console.log("Uploaded Banners:", projectBanners);
+//     console.log("Uploaded Banners:", projectBanners);
 
-    const projectData = {
-      projectName,
-      projectOwners,
-      description,
-      businessAreas,
-      comapanyName,
-      location,
-      status,
-      deadline,
-      physicalEducationRange,
-      daysLeft,
-      projectBanner: projectBanners,
-    };
+//     const projectData = {
+//       projectName,
+//       projectOwners,
+//       description,
+//       businessAreas,
+//       comapanyName,
+//       location,
+//       status,
+//       deadline,
+//       physicalEducationRange,
+//       daysLeft,
+//       projectBanner: projectBanners,
+//     };
 
-    const project = await editProject.create(projectData);
+//     const project = await editProject.create(projectData);
 
-    const emailRecipients = (Array.isArray(projectOwners) ? projectOwners : [])
-      .map((ownerId) => ownerId?.email)
-      .filter(Boolean); // Filter out any falsy values
+//     const emailRecipients = (Array.isArray(projectOwners) ? projectOwners : [])
+//       .map((ownerId) => ownerId?.email)
+//       .filter(Boolean); // Filter out any falsy values
 
-    // Check if there are any recipients before sending the email
-    if (emailRecipients.length === 0) {
-      throw new Error("No recipients defined");
-    }
+//     // Check if there are any recipients before sending the email
+//     // if (emailRecipients.length === 0) {
+//     //   throw new Error("No recipients defined");
+//     // }
 
-    const emailBody = {
-      from: process.env.EMAIL_USER,
-      to: emailRecipients.join(","),
-      subject: `🔔 New Project Created: ${projectName}`,
-      html: `
-        <h3>New Project Created</h3>
-        <p>A new project named <strong>${projectName}</strong> has been created with the following details:</p>
-        <ul>
-          <li><strong>Description:</strong> ${description}</li>
-          <li><strong>Status:</strong> ${status}</li>
-          <li><strong>Deadline:</strong> ${deadline}</li>
-        </ul>
-        <p><strong>Created by:</strong> ${req.user.userName}</p>
-        <p style="font-size: 0.9em;"><em>This is an automated notification email.</em></p>
-      `,
-    };
+//     // const emailBody = {
+//     //   from: process.env.EMAIL_USER,
+//     //   to: emailRecipients.join(","),
+//     //   subject: `🔔 New Project Created: ${projectName}`,
+//     //   html: `
+//     //     <h3>New Project Created</h3>
+//     //     <p>A new project named <strong>${projectName}</strong> has been created with the following details:</p>
+//     //     <ul>
+//     //       <li><strong>Description:</strong> ${description}</li>
+//     //       <li><strong>Status:</strong> ${status}</li>
+//     //       <li><strong>Deadline:</strong> ${deadline}</li>
+//     //     </ul>
+//     //     <p><strong>Created by:</strong> ${req.user.userName}</p>
+//     //     <p style="font-size: 0.9em;"><em>This is an automated notification email.</em></p>
+//     //   `,
+//     // };
 
-    await SendEmailUtil(emailBody);
+//     // await SendEmailUtil(emailBody);
 
-    res
-      .status(201)
-      .json(new ApiResponse(201, project, "Project created successfully"));
-  } catch (error) {
-    console.error("Error in createProject:", error);
-    res.status(500).json({ message: error.message || "Internal Server Error" });
-  }
-});
+//     res
+//       .status(201)
+//       .json(new ApiResponse(201, project, "Project created successfully"));
+//   } catch (error) {
+//     console.error("Error in createProject:", error);
+//     res.status(500).json({ message: error.message || "Internal Server Error" });
+//   }
+// });
 
 const editProjects = asyncHandler(async (req, res) => {
   try {
