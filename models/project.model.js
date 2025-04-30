@@ -9,7 +9,7 @@ const editProjectSchema = new mongoose.Schema(
           ref: "User", // <- this MUST match the model name you're populating
         },
         ownerName: String,
-      }
+      },
     ],
     milestones: {
       type: [
@@ -110,4 +110,3 @@ const editProjectSchema = new mongoose.Schema(
 );
 
 export const editProject = mongoose.model("editProject", editProjectSchema);
-
