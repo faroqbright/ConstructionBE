@@ -4,9 +4,6 @@ import { Notification } from "../models/notifications.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
-
-
-
 const createNotification = asyncHandler(async (req, res) => {
   try {
     const { title, description, type, clientIds = [], userIds = [] } = req.body;
