@@ -5,49 +5,6 @@ import { editProject } from "../models/project.model.js";
 import {SendEmailUtil} from "../utils/emailsender.js"
 
 
-
-// const uploadFile = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ message: "No file uploaded" });
-//     }
-
-//     // Upload file to AWS S3
-//     const fileUrl = await uploadToS3(
-//       req.file.buffer,
-//       req.file.originalname,
-//       req.file.mimetype
-//     );
-
-//     if (!fileUrl) {
-//       return res.status(500).json({ message: "File upload failed" });
-//     }
-
-//     // Create document entry in MongoDB
-//     const document = new Document({
-//       projName: req.body.projName || null, // Optional for regular users
-//       fileName: req.file.originalname,
-//       fileSize: req.file.size, // Capture file size in bytes
-//       fileUrl: fileUrl,
-//       user: req.body.user, // Assuming `req.user` has user info
-//       status: "pending",
-//     });
-
-//     await document.save();
-
-//     res.status(201).json({ message: "File uploaded successfully!", document });
-//   } catch (error) {
-//     res
-//       .status(500)
-//       .json({ message: "Error uploading file", error: error.message });
-//   }
-// };
-
-
-
-
-
-
 const uploadFile = async (req, res) => {
   try {
     if (!req.file) {
@@ -152,21 +109,73 @@ const getDocuments = async (req, res) => {
 
 
 
-
 const updateStatus = async (req, res) => {
   try {
-      const { id } = req.params;
-      const updates = req.body; // Only send changed fields
+    const { id } = req.params;
+    const updates = req.body;
 
-      const updatedDocument = await Document.findByIdAndUpdate(id, updates, { new: true });
+    // Step 1: Update the document
+    const updatedDocument = await Document.findByIdAndUpdate(id, updates, { new: true });
 
-      if (!updatedDocument) {
-          return res.status(404).json({ message: "Document not found" });
+    if (!updatedDocument) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    // Step 2: Find related project using projName
+    const projectNameFromDocument = updatedDocument.projName;
+    console.log("ddfdfdfd",projectNameFromDocument);
+
+    const relatedProject = await editProject
+      .findOne({ projectName: projectNameFromDocument })
+      .populate("projectOwners.ownerId", "email ownerName") // populate owner emails
+      .populate("members", "email userName"); // correctly populate member emails
+
+    if (!relatedProject) {
+      return res.status(404).json({ message: "Project not found for this document" });
+    }
+
+    // Step 3: Collect owner and member emails
+    const ownerEmails = relatedProject.projectOwners
+      .map((owner) => owner.ownerId?.email)
+      .filter(Boolean);
+    
+      console.log("owner",ownerEmails);
+
+    const memberEmails = relatedProject.members
+      .map((member) => member?.email)
+      .filter(Boolean);
+      
+      console.log("member",memberEmails);
+    
+
+    const allEmails = [...new Set([...ownerEmails, ...memberEmails])]; // Unique emails
+
+    // Step 4: Send emails
+    for (const email of allEmails) {
+      try {
+        await SendEmailUtil({
+          to: email,
+          subject: "Document Status Updated",
+          text: `The status of document "${updatedDocument.fileName}" in project "${projectNameFromDocument}" has been updated to "${updatedDocument.status}".`,
+        });
+        console.log(`✅ Email sent to: ${email}`);
+      } catch (emailErr) {
+        console.error(`❌ Failed to send email to ${email}:`, emailErr.message);
       }
+    }
 
-      res.status(200).json({ message: "Document updated successfully", document: updatedDocument });
+    // Step 5: Response
+    res.status(200).json({
+      message: "Document updated and notifications sent",
+      document: updatedDocument,
+    });
+
   } catch (error) {
-      res.status(500).json({ message: "Error updating document", error: error.message });
+    console.error("❌ Error in updateStatus:", error);
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 

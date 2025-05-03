@@ -1,4 +1,5 @@
 import { editProject } from "../models/project.model.js";
+import{User} from "../models/user.model.js";
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -603,6 +604,218 @@ const editProjects = asyncHandler(async (req, res) => {
 });
 
 
+// const getAllProjects = asyncHandler(async (req, res) => {
+//   try {
+//     const { status, page } = req.query;
+//     const { isMain, _id: loggedInUserId, businessArea } = req.user;
+
+//     const validStatuses = [
+//       "Ongoing",
+//       "Pending",
+//       "Completed",
+//       "Awaiting Start",
+//       "On Hold",
+//       "Cancelled",
+//       "Archived",
+//     ];
+
+//     const baseFilter = {
+//       ...(status && validStatuses.includes(status) ? { status } : {}),
+//     };
+
+//     let finalFilter = baseFilter;
+
+//     if (!isMain) {
+//       const businessAreaProjects = await editProject.find(
+//         { businessAreas: businessArea },
+//         { _id: 1 }
+//       );
+//       const businessAreaProjectIds = businessAreaProjects.map((p) => p._id);
+
+//       finalFilter = {
+//         ...baseFilter,
+//         $and: [
+//           {
+//             $or: [
+//               { _id: { $in: businessAreaProjectIds } },
+//               { members: loggedInUserId },
+//               { "projectOwners.ownerId": loggedInUserId },
+//             ],
+//           },
+//         ],
+//       };
+//     }
+
+//     const pageNumber = page ? parseInt(page, 10) : null;
+//     const pageSize = 10;
+//     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
+
+//     let query = editProject.find(finalFilter)
+//       .populate({
+//         path: "members",
+//         select: "userName avatar role email",
+//         populate: {
+//           path: "role",
+//           select: "roleName",
+//         },
+//       })
+//       .populate({
+//         path: "projectOwners.ownerId",
+//         model: "User",
+//         select: "userName email role",
+//         populate: {
+//           path: "role",
+//           select: "roleName",
+//         },
+//       });
+
+//     query = query.sort({ createdAt: -1 });
+
+//     if (pageNumber) {
+//       query = query.skip(skip).limit(pageSize);
+//     }
+
+//     const projects = await query;
+//     const totalProjects = pageNumber
+//       ? await editProject.countDocuments(finalFilter)
+//       : null;
+
+//     const projectsWithDocuments = await Promise.all(
+//       projects.map(async (project) => {
+//         const isMember = project.members.some((member) =>
+//           member._id.equals(loggedInUserId)
+//         );
+//         const isOwner = project.projectOwners.some(
+//           (owner) =>
+//             owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+//         );
+
+//         const fromBusinessArea =
+//           !isMember &&
+//           !isOwner &&
+//           (typeof project.businessAreas === "string"
+//             ? project.businessAreas === businessArea
+//             : project.businessAreas?.includes(businessArea));
+
+//         const milestones = [
+//           { name: "Project Details", completed: true },
+//           { name: "Filling", completed: false },
+//           { name: "Payment", completed: false },
+//           { name: "Review", completed: false },
+//           { name: "Completed", completed: false },
+//         ];
+
+//         const isFillingComplete =
+//           project.description &&
+//           project.location &&
+//           project.projectName &&
+//           project.projectBanner?.length > 0 &&
+//           project.members?.length > 0;
+
+//         if (isFillingComplete) milestones[1].completed = true;
+
+//         const [projectReports, projectDocuments, financeDocuments] =
+//           await Promise.all([
+//             Document.find({ projName: project.projectName }),
+//             UserDocument.find({ projName: project.projectName }),
+//             FinanceDocument.find({ projName: project.projectName }),
+//           ]);
+
+//         if (financeDocuments?.length > 0) milestones[2].completed = true;
+//         if (milestones[1].completed && milestones[2].completed)
+//           milestones[3].completed = true;
+//         if (project.status === "Completed") milestones[4].completed = true;
+
+//         const updatedProjectOwners =
+//           project.projectOwners
+//             ?.filter((owner) => owner.ownerId)
+//             .map((owner) => ({
+//               ownerId: owner.ownerId?._id,
+//               ownerName: owner.ownerId?.userName || owner.ownerName || "",
+//               _id: owner._id,
+//               email: owner.ownerId?.email,
+//               role: owner.ownerId?.role,
+//             })) || [];
+
+//         const filteredDocuments =
+//           projectDocuments?.map((doc) => ({
+//             fileName: doc.fileName,
+//             fileUrl: doc.fileUrl,
+//             user: doc.user,
+//           })) || [];
+
+//         const filteredReports =
+//           projectReports?.map((report) => ({
+//             fileName: report.fileName,
+//             fileUrl: report.fileUrl,
+//             user: report.user,
+//             status: report.status,
+//             uploadedAt: report.uploadedAt,
+//           })) || [];
+
+//         const financeDetails =
+//           financeDocuments
+//             ?.map((doc) => ({
+//               id: doc._id,
+//               fileName: doc.fileName,
+//               fileUrl: doc.fileUrl,
+//               user: doc.user,
+//               financialExecution: doc.financialExecution,
+//               physicalExecution: doc.physicalExecution,
+//               uploadedAt: doc.uploadedAt,
+//               reference: doc.reference,
+//             }))
+//             .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)) ||
+//           [];
+
+//         const latestLog =
+//           project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
+//         const additionalMilestones = await AdditionalMilestone.find({
+//           projectId: project._id,
+//         }).populate({
+//           path: "userId",
+//           model: "User",
+//           select: "userName",
+//         });
+
+//         const projectObj = {
+//           ...project.toObject(),
+//           projectOwners: updatedProjectOwners,
+//           documents: filteredDocuments,
+//           financeDocuments: financeDetails,
+//           projectReports: filteredReports,
+//           latestLog,
+//           milestones,
+//           additionalMilestones,
+//         };
+
+//         if (!isMain) {
+//           projectObj.fromBusinessArea = fromBusinessArea;
+//         }
+
+//         return projectObj;
+//       })
+//     );
+
+//     res.status(200).json(
+//       new ApiResponse(
+//         200,
+//         {
+//           projects: projectsWithDocuments,
+//           ...(pageNumber && {
+//             currentPage: pageNumber,
+//             totalPages: Math.ceil(totalProjects / pageSize),
+//             totalProjects,
+//           }),
+//         },
+//         "Projects retrieved successfully"
+//       )
+//     );
+//   } catch (error) {
+//     throw new ApiError(400, error.message);
+//   }
+// });
 
 
 
@@ -627,6 +840,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
     };
 
     let finalFilter = baseFilter;
+
     if (!isMain) {
       const businessAreaProjects = await editProject.find(
         { businessAreas: businessArea },
@@ -652,32 +866,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(finalFilter).populate([
-      {
-        path: "members",
-        select: "userName avatar role email", // ✅ added email
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      },
-      {
-        path: "projectOwners.ownerId",
-        model: "User",
-        select: "userName role email", // ✅ added email
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      },
-    ]);
-    
-
-    query = query.sort({ createdAt: -1 });
-
-    if (pageNumber) {
-      query = query.skip(skip).limit(pageSize);
-    }
+    let query = editProject.find(finalFilter).sort({ createdAt: -1 });
+    if (pageNumber) query = query.skip(skip).limit(pageSize);
 
     const projects = await query;
     const totalProjects = pageNumber
@@ -686,11 +876,41 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        const isMember = project.members.some((member) =>
-          member._id.equals(loggedInUserId)
+        // 🔁 Fetch full member info manually
+        const memberDetails = await Promise.all(
+          (project.members || []).map(async (memberId) => {
+            const member = await User.findById(memberId).populate("role", "roleName");
+            return {
+              _id: member?._id,
+              userName: member?.userName,
+              avatar: member?.avatar,
+              email: member?.email,
+              role: member?.role,
+            };
+          })
+        );
+
+        // 🔁 Fetch projectOwners.ownerId manually
+        const updatedProjectOwners = await Promise.all(
+          (project.projectOwners || []).map(async (owner) => {
+            if (!owner.ownerId) return null;
+            const ownerData = await User.findById(owner.ownerId).populate("role", "roleName");
+            return {
+              ownerId: ownerData?._id,
+              ownerName: ownerData?.userName || owner.ownerName || "",
+              _id: owner._id,
+              email: ownerData?.email,
+              role: ownerData?.role,
+            };
+          })
+        );
+
+        const isMember = project.members.some((id) =>
+          id.toString() === loggedInUserId.toString()
         );
         const isOwner = project.projectOwners.some(
-          (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+          (owner) =>
+            owner.ownerId && owner.ownerId.toString() === loggedInUserId.toString()
         );
 
         const fromBusinessArea =
@@ -728,16 +948,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
         if (milestones[1].completed && milestones[2].completed)
           milestones[3].completed = true;
         if (project.status === "Completed") milestones[4].completed = true;
-
-        const updatedProjectOwners =
-          project.projectOwners
-            ?.filter((owner) => owner.ownerId)
-            .map((owner) => ({
-              ownerId: owner.ownerId?._id || owner.ownerId,
-              ownerName: owner.ownerId?.userName || owner.ownerName || "",
-              _id: owner._id,
-              email: owner.email || owner.ownerId.email,
-            })) || [];
 
         const filteredDocuments =
           projectDocuments?.map((doc) => ({
@@ -783,7 +993,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
         const projectObj = {
           ...project.toObject(),
-          projectOwners: updatedProjectOwners,
+          members: memberDetails,
+          projectOwners: updatedProjectOwners.filter(Boolean),
           documents: filteredDocuments,
           financeDocuments: financeDetails,
           projectReports: filteredReports,
@@ -791,12 +1002,12 @@ const getAllProjects = asyncHandler(async (req, res) => {
           milestones,
           additionalMilestones,
         };
-        
+
         if (!isMain) {
           projectObj.fromBusinessArea = fromBusinessArea;
         }
-        
-        return projectObj;        
+
+        return projectObj;
       })
     );
 
@@ -818,6 +1029,12 @@ const getAllProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
+
+
+
+
+
+
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
