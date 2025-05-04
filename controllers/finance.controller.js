@@ -4,55 +4,6 @@ import { editProject } from "../models/project.model.js";
 import  {SendEmailUtil} from "../utils/emailsender.js"
 
 
-
-// const uploadFinanceDocument = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//         return res.status(400).json({ message: "No file uploaded" });
-//     }
-
-//     const { projName, user, financialExecution, physicalExecution, fileName, reference } = req.body;
-
-//     if (!fileName) {
-//       return res.status(400).json({ message: "Filename is required" });
-//     }
-
-//     if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
-//       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
-//     }
-
-//     const projectExists = await editProject.findOne({ projectName: projName });
-//     if (!projectExists) {
-//       return res.status(404).json({ message: "Project not found" });
-//     }
-
-//     const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
-
-//     const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
-//     if (!fileUrl) {
-//       return res.status(500).json({ message: "File upload failed" });
-//     }
-
-//     const financeDocument = new FinanceDocument({
-//       projName,
-//       fileName: finalFileName,
-//       fileUrl,
-//       user,
-//       financialExecution,
-//       physicalExecution,
-//       reference,
-//       uploadedAt: new Date(), // ✅ Ensure timestamp is stored
-//     });
-
-//     await financeDocument.save();
-//     res.status(201).json({ message: "File uploaded successfully!", financeDocument });
-//   } catch (error) {
-//     res.status(500).json({ message: "Error uploading file", error: error.message });
-//   }
-// };
-
-
-
 const uploadFinanceDocument = async (req, res) => {
   try {
     if (!req.file) {
@@ -65,17 +16,26 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "Filename is required" });
     }
 
-    if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
+    if (
+      financialExecution < 0 || financialExecution > 100 ||
+      physicalExecution < 0 || physicalExecution > 100
+    ) {
       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
     }
 
-    const projectExists = await editProject.findOne({ projectName: projName }).populate("projectOwners.ownerId", "email ownerName");
-    
+    // ✅ Populate both projectOwners.ownerId and members
+    const projectExists = await editProject
+      .findOne({ projectName: projName })
+      .populate("projectOwners.ownerId", "email userName")
+      .populate("members", "email userName");
+
     if (!projectExists) {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
+    const finalFileName = fileName.includes(".")
+      ? fileName
+      : `${fileName}.${req.file.mimetype.split("/")[1]}`;
 
     const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
     if (!fileUrl) {
@@ -95,31 +55,46 @@ const uploadFinanceDocument = async (req, res) => {
 
     await financeDocument.save();
 
-    // Check and send emails to project owners
-    console.log(projectExists);
-    
-    const projectOwners = projectExists.projectOwners
-    if (projectOwners.length === 0) {
-      return res.status(404).json({ message: "No project owners found" });
+    const emailRecipients = [];
+
+    // ✅ Add project owner emails
+    if (projectExists.projectOwners?.length > 0) {
+      for (const owner of projectExists.projectOwners) {
+        if (owner.ownerId?.email) {
+          emailRecipients.push({
+            email: owner.ownerId.email,
+            name: owner.ownerId.userName || "Project Owner",
+          });
+        }
+      }
     }
 
-    // Prepare email body for each owner
-    for (const owner of projectOwners) {
-      if (owner.ownerId?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: owner.ownerId.email,
-          subject: `New File Uploaded for Project: ${projName}`,
-          text: `Hello ${owner.ownerId.userName},\n\nA new file named "${finalFileName}" has been uploaded for the project "${projName}".\n\nBest regards,\nYour Team`,
-        };
-
-        // Send the email
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to ${owner.ownerId.email}`);
-        } catch (error) {
-          console.error("Error sending email:", error.message);
+    // ✅ Add member emails
+    if (projectExists.members?.length > 0) {
+      for (const member of projectExists.members) {
+        if (member?.email) {
+          emailRecipients.push({
+            email: member.email,
+            name: member.userName || "Project Member",
+          });
         }
+      }
+    }
+
+    // ✅ Send emails
+    for (const recipient of emailRecipients) {
+      const emailBody = {
+        from: process.env.EMAIL_USER,
+        to: recipient.email,
+        subject: `New File Uploaded for Project: ${projName}`,
+        text: `Hello ${recipient.name},\n\nA new file named "${finalFileName}" has been uploaded for the project "${projName}".\n\nBest regards,\nYour Team`,
+      };
+
+      try {
+        await SendEmailUtil(emailBody);
+        console.log(`Email sent to ${recipient.email}`);
+      } catch (error) {
+        console.error("Error sending email:", error.message);
       }
     }
 
@@ -129,13 +104,6 @@ const uploadFinanceDocument = async (req, res) => {
     res.status(500).json({ message: "Error uploading file", error: error.message });
   }
 };
-
-
-
-
-
-
-
 
 
 const getFinanceDocuments = async (req, res) => {
@@ -163,22 +131,15 @@ const getFinanceDocuments = async (req, res) => {
   }
 };
 
+
 const updateFinanceDocument = async (req, res) => {
   try {
     const { id } = req.params;
-    let updates = { uploadedAt: new Date() }; // ✅ Always update timestamp
+    let updates = { uploadedAt: new Date() };
 
     const existingDocument = await FinanceDocument.findById(id);
     if (!existingDocument) {
       return res.status(404).json({ message: "Document not found" });
-    }
-
-    if (req.body.projName) {
-      const projectExists = await editProject.findOne({ projectName: req.body.projName });
-      if (!projectExists) {
-        return res.status(404).json({ message: "Project not found" });
-      }
-      updates.projName = req.body.projName;
     }
 
     if (req.body.financialExecution !== undefined) {
@@ -200,31 +161,66 @@ const updateFinanceDocument = async (req, res) => {
     }
 
     if (req.body.reference) {
-      updates.reference = req.body.reference; // ✅ Made reference editable
+      updates.reference = req.body.reference;
     }
 
-    if (req.file) {
-      const newFileUrl = await uploadToS3(req.file.buffer, req.file.originalname, req.file.mimetype);
-      updates.fileName = req.file.originalname;
-      updates.fileUrl = newFileUrl;
-
-      // ✅ Delete only if upload succeeds
-      if (newFileUrl && existingDocument.fileUrl) {
-        const oldFileKey = existingDocument.fileUrl.split(".com/")[1];
-        await deleteFromS3(oldFileKey);
-      }
-    }
-
-    if (Object.keys(updates).length === 1) { // Only `uploadedAt` present means no real updates
+    if (Object.keys(updates).length === 1) {
       return res.status(400).json({ message: "No changes detected" });
     }
 
     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(id, updates, { new: true });
-    res.status(200).json({ message: "Document updated successfully", document: updatedFinanceDocument });
+
+    const project = await editProject.findOne({ projectName: existingDocument.projName })
+      .populate("projectOwners.ownerId", "email userName")
+      .populate("members", "email userName");
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found for this document" });
+    }
+
+    for (const owner of project.projectOwners) {
+      if (owner.ownerId?.email) {
+        const emailBody = {
+          from: process.env.EMAIL_USER,
+          to: owner.ownerId.email,
+          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
+          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
+        };
+    
+        try {
+          await SendEmailUtil(emailBody);
+          console.log(`Email sent to project owner: ${owner.ownerId.email}`);
+        } catch (error) {
+          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
+        }
+      }
+    }
+    
+    for (const member of project.members) {
+      if (member?.email) {
+        const emailBody = {
+          from: process.env.EMAIL_USER,
+          to: member.email,
+          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
+          text: `Hello ${member.userName || "Project Member"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
+        };
+
+        try {
+          await SendEmailUtil(emailBody);
+          console.log(`Email sent to member: ${member.email}`);
+        } catch (error) {
+          console.error(`Error sending email to ${member.email}:`, error.message);
+        }
+      }
+    }
+
+    res.status(200).json({ message: "Document updated and notifications sent", document: updatedFinanceDocument });
   } catch (error) {
     res.status(500).json({ message: "Error updating document", error: error.message });
   }
 };
+
+
 
 const deleteFinanceDocument = async (req, res) => {
   try {
@@ -232,13 +228,67 @@ const deleteFinanceDocument = async (req, res) => {
     if (!financeDocument) {
       return res.status(404).json({ message: "Document not found" });
     }
+
+    // Delete file from S3
     const fileKey = financeDocument.fileUrl.split(".com/")[1];
     await deleteFromS3(fileKey);
+
+    // Find related project to notify stakeholders
+    const project = await editProject.findOne({ projectName: financeDocument.projName })
+      .populate("projectOwners.ownerId", "email userName")
+      .populate("members", "email userName");
+
+    if (!project) {
+      return res.status(404).json({ message: "Project not found for this document" });
+    }
+
+    // Delete document from DB
     await FinanceDocument.findByIdAndDelete(req.params.id);
-    res.status(200).json({ message: "Document deleted successfully!" });
+
+    // Prepare and send emails to project owners
+    for (const owner of project.projectOwners) {
+      if (owner.ownerId?.email) {
+        const emailBody = {
+          from: process.env.EMAIL_USER,
+          to: owner.ownerId.email,
+          subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
+          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
+        };
+
+        try {
+          await SendEmailUtil(emailBody);
+          console.log(`Email sent to project owner: ${owner.ownerId.email}`);
+        } catch (error) {
+          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
+        }
+      }
+    }
+
+    // Prepare and send emails to project members
+    for (const member of project.members) {
+      if (member?.email) {
+        const emailBody = {
+          from: process.env.EMAIL_USER,
+          to: member.email,
+          subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
+          text: `Hello ${member.userName || "Project Member"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
+        };
+
+        try {
+          await SendEmailUtil(emailBody);
+          console.log(`Email sent to member: ${member.email}`);
+        } catch (error) {
+          console.error(`Error sending email to ${member.email}:`, error.message);
+        }
+      }
+    }
+
+    res.status(200).json({ message: "Document deleted and notifications sent!" });
   } catch (error) {
     res.status(500).json({ message: "Error deleting document", error: error.message });
   }
 };
+
+
 
 export { uploadFinanceDocument, getFinanceDocuments, updateFinanceDocument, deleteFinanceDocument };
