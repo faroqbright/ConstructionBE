@@ -57,7 +57,7 @@ const uploadFinanceDocument = async (req, res) => {
 
     const emailRecipients = [];
 
-    // ✅ Add project owner emails
+    // ✅ Add project owner emails//
     if (projectExists.projectOwners?.length > 0) {
       for (const owner of projectExists.projectOwners) {
         if (owner.ownerId?.email) {

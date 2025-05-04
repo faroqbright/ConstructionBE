@@ -35,7 +35,7 @@ const uploadFile = async (req, res) => {
 
     await document.save();
 
-    // Notify project owners and members
+    // Notify project owners and members//
     if (req.body.projName) {
       const project = await editProject.findOne({ projectName: req.body.projName });
 
