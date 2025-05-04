@@ -28,22 +28,12 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
     }
 
-<<<<<<< HEAD
-    // ✅ Populate both projectOwners.ownerId and members
-    const projectExists = await editProject
-      .findOne({ projectName: projName })
-      .populate("projectOwners.ownerId", "email userName")
-      .populate("members", "email userName");
-
-    if (!projectExists) {
-=======
     const project = await editProject.findOne({ projectName: projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
     
     if (!project) {
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
       return res.status(404).json({ message: "Project not found" });
     }
 
@@ -69,52 +59,6 @@ const uploadFinanceDocument = async (req, res) => {
 
     await financeDocument.save({ session });
 
-<<<<<<< HEAD
-    const emailRecipients = [];
-
-    // ✅ Add project owner emails//
-    if (projectExists.projectOwners?.length > 0) {
-      for (const owner of projectExists.projectOwners) {
-        if (owner.ownerId?.email) {
-          emailRecipients.push({
-            email: owner.ownerId.email,
-            name: owner.ownerId.userName || "Project Owner",
-          });
-        }
-      }
-    }
-
-    // ✅ Add member emails
-    if (projectExists.members?.length > 0) {
-      for (const member of projectExists.members) {
-        if (member?.email) {
-          emailRecipients.push({
-            email: member.email,
-            name: member.userName || "Project Member",
-          });
-        }
-      }
-    }
-
-    // ✅ Send emails
-    for (const recipient of emailRecipients) {
-      const emailBody = {
-        from: process.env.EMAIL_USER,
-        to: recipient.email,
-        subject: `New File Uploaded for Project: ${projName}`,
-        text: `Hello ${recipient.name},\n\nA new file named "${finalFileName}" has been uploaded for the project "${projName}".\n\nBest regards,\nYour Team`,
-      };
-
-      try {
-        await SendEmailUtil(emailBody);
-        console.log(`Email sent to ${recipient.email}`);
-      } catch (error) {
-        console.error("Error sending email:", error.message);
-      }
-    }
-
-    res.status(201).json({ message: "File uploaded successfully!", financeDocument });
-=======
     // Notification recipients (owners + members + performing user)
     const notificationRecipients = [
       ...project.members.map(m => m._id),
@@ -141,7 +85,6 @@ const uploadFinanceDocument = async (req, res) => {
       financeDocument 
     });
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
   } catch (error) {
     await session.abortTransaction();
     console.error("Error uploading file:", error.message);
@@ -154,10 +97,6 @@ const uploadFinanceDocument = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 const getFinanceDocuments = async (req, res) => {
   try {
     const { isMain, _id: loggedInUserId } = req.user;
@@ -189,8 +128,6 @@ const getFinanceDocuments = async (req, res) => {
 };
 
 
-<<<<<<< HEAD
-=======
 // const updateFinanceDocument = async (req, res) => {
 //   try {
 //     const { id } = req.params;
@@ -280,25 +217,11 @@ const getFinanceDocuments = async (req, res) => {
 // };
 
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 const updateFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-<<<<<<< HEAD
-    const { id } = req.params;
-    let updates = { uploadedAt: new Date() };
-
-    const existingDocument = await FinanceDocument.findById(id);
-    if (!existingDocument) {
-      return res.status(404).json({ message: "Document not found" });
-    }
-
-    if (req.body.financialExecution !== undefined) {
-      if (req.body.financialExecution < 0 || req.body.financialExecution > 100) {
-        return res.status(400).json({ message: "Financial Execution must be between 0 and 100" });
-=======
       const { id } = req.params;
       let updates = {}; // Initialize updates object
       let project = null; // Declare project variable here, initialized to null
@@ -329,8 +252,7 @@ const updateFinanceDocument = async (req, res) => {
           const message = req.body.projName
               ? `Project '${req.body.projName}' not found.`
               : `Associated project '${existingDocument.projName}' not found.`;
-          return res.status(404).json({ message });
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
+        return res.status(404).json({ message });
       }
 
       // --- 1. Add projName to updates ONLY if it's actually changing ---
@@ -340,67 +262,6 @@ const updateFinanceDocument = async (req, res) => {
            // updates.projectId = project._id;
       }
 
-<<<<<<< HEAD
-    if (req.body.fileName) {
-      updates.fileName = req.body.fileName;
-    }
-
-    if (req.body.reference) {
-      updates.reference = req.body.reference;
-    }
-
-    if (Object.keys(updates).length === 1) {
-      return res.status(400).json({ message: "No changes detected" });
-    }
-
-    const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(id, updates, { new: true });
-
-    const project = await editProject.findOne({ projectName: existingDocument.projName })
-      .populate("projectOwners.ownerId", "email userName")
-      .populate("members", "email userName");
-
-    if (!project) {
-      return res.status(404).json({ message: "Project not found for this document" });
-    }
-
-    for (const owner of project.projectOwners) {
-      if (owner.ownerId?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: owner.ownerId.email,
-          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
-        };
-    
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to project owner: ${owner.ownerId.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
-        }
-      }
-    }
-    
-    for (const member of project.members) {
-      if (member?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: member.email,
-          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          text: `Hello ${member.userName || "Project Member"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
-        };
-
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to member: ${member.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${member.email}:`, error.message);
-        }
-      }
-    }
-
-    res.status(200).json({ message: "Document updated and notifications sent", document: updatedFinanceDocument });
-=======
       // --- 2. Handle File Update (Placeholder - Add your logic here) ---
       if (req.file) {
           console.log("File update detected - implement S3 delete/upload logic here.");
@@ -486,7 +347,6 @@ const updateFinanceDocument = async (req, res) => {
           document: updatedFinanceDocument
       });
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
   } catch (error) {
       console.error("Error updating finance document:", error);
       await session.abortTransaction(); // Ensure abortion on any error
@@ -501,8 +361,6 @@ const updateFinanceDocument = async (req, res) => {
 
 
 
-<<<<<<< HEAD
-=======
 
 // const deleteFinanceDocument = async (req, res) => {
 //   try {
@@ -520,7 +378,6 @@ const updateFinanceDocument = async (req, res) => {
 // };
 
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 const deleteFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -531,71 +388,15 @@ const deleteFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-<<<<<<< HEAD
-=======
     const project = await editProject.findOne({ projectName: financeDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
     // Delete file from S3
     const fileKey = financeDocument.fileUrl.split(".com/")[1];
     await deleteFromS3(fileKey);
 
-<<<<<<< HEAD
-    // Find related project to notify stakeholders
-    const project = await editProject.findOne({ projectName: financeDocument.projName })
-      .populate("projectOwners.ownerId", "email userName")
-      .populate("members", "email userName");
-
-    if (!project) {
-      return res.status(404).json({ message: "Project not found for this document" });
-    }
-
-    // Delete document from DB
-    await FinanceDocument.findByIdAndDelete(req.params.id);
-
-    // Prepare and send emails to project owners
-    for (const owner of project.projectOwners) {
-      if (owner.ownerId?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: owner.ownerId.email,
-          subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
-          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
-        };
-
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to project owner: ${owner.ownerId.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
-        }
-      }
-    }
-
-    // Prepare and send emails to project members
-    for (const member of project.members) {
-      if (member?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: member.email,
-          subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
-          text: `Hello ${member.userName || "Project Member"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
-        };
-
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to member: ${member.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${member.email}:`, error.message);
-        }
-      }
-    }
-
-    res.status(200).json({ message: "Document deleted and notifications sent!" });
-=======
     // Delete document
     await FinanceDocument.findByIdAndDelete(req.params.id, { session });
 
@@ -623,7 +424,6 @@ const deleteFinanceDocument = async (req, res) => {
       message: "Document deleted successfully!" 
     });
 
->>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ 
