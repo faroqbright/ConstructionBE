@@ -1,12 +1,21 @@
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import Document from "../models/documentModel.js";
 import { editProject } from "../models/project.model.js";
+import { SendEmailUtil } from "../utils/emailsender.js";
+import { ShowNotification } from "../models/showNotificationSchema.js";
+import mongoose from "mongoose";
 // import  {SendEmailUtil} from "../utils/emailsender.js"
 import {SendEmailUtil} from "../utils/emailsender.js"
+<<<<<<< HEAD
 import{User} from "../models/user.model.js";
+=======
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 
 
 const uploadFile = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
@@ -23,7 +32,11 @@ const uploadFile = async (req, res) => {
       return res.status(500).json({ message: "File upload failed" });
     }
 
+<<<<<<< HEAD
     // Save document to MongoDB
+=======
+    // Create document entry
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
     const document = new Document({
       projName: req.body.projName || null,
       fileName: req.file.originalname,
@@ -33,8 +46,9 @@ const uploadFile = async (req, res) => {
       status: "pending",
     });
 
-    await document.save();
+    await document.save({ session });
 
+<<<<<<< HEAD
     // Notify project owners and members//
     if (req.body.projName) {
       const project = await editProject.findOne({ projectName: req.body.projName });
@@ -51,10 +65,48 @@ const uploadFile = async (req, res) => {
               to: ownerUser.email,
               subject: `New File Uploaded for Project: ${req.body.projName}`,
               text: `Hello ${ownerUser.userName},\n\nA new file named "${req.file.originalname}" has been uploaded for the project "${req.body.projName}".\n\nBest regards,\nYour Team`,
+=======
+    let project;
+    if (req.body.projName) {
+      project = await editProject.findOne({ projectName: req.body.projName })
+        .populate("projectOwners.ownerId", "email ownerName")
+        .populate("members", "email userName")
+        .session(session);
+
+      if (project) {
+        // Create notifications for all relevant users
+        const notificationRecipients = [
+          ...project.members.map(m => m._id),
+          ...project.projectOwners.map(o => o.ownerId?._id).filter(Boolean),
+          req.user._id
+        ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+
+        const notificationPromises = notificationRecipients.map(userId => 
+          ShowNotification.create({
+            title: "Document Uploaded",
+            type: "Document Upload",
+            description: `New document "${req.file.originalname}" was uploaded${req.body.projName ? ` for project "${req.body.projName}"` : ''}`,
+            memberId: userId,
+            projectId: project?._id,
+          })
+        );
+
+        await Promise.all(notificationPromises);
+
+        // Send emails to project owners
+        for (const owner of project.projectOwners) {
+          if (owner.ownerId?.email) {
+            const emailBody = {
+              from: process.env.EMAIL_USER,
+              to: owner.ownerId.email,
+              subject: `New File Uploaded${req.body.projName ? ` for Project: ${req.body.projName}` : ''}`,
+              text: `Hello ${owner.ownerId.ownerName},\n\nA new file named "${req.file.originalname}" has been uploaded${req.body.projName ? ` for the project "${req.body.projName}"` : ''}.\n\nBest regards,\nYour Team`,
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
             };
 
             try {
               await SendEmailUtil(emailBody);
+<<<<<<< HEAD
               console.log(`Email sent to owner: ${ownerUser.email}`);
               notifiedEmails.add(ownerUser.email);
             } catch (error) {
@@ -96,14 +148,32 @@ const uploadFile = async (req, res) => {
       message: "File uploaded successfully!",
       document,
     });
+=======
+            } catch (emailError) {
+              console.error("Error sending email:", emailError);
+            }
+          }
+        }
+      }
+    }
+
+    await session.commitTransaction();
+    res.status(201).json({ message: "File uploaded successfully!", document });
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
   } catch (error) {
+    await session.abortTransaction();
     console.error("Error uploading file:", error.message);
     res.status(500).json({ message: "Error uploading file", error: error.message });
+  } finally {
+    session.endSession();
   }
 };
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 const getDocuments = async (req, res) => {
   try {
     const { isMain, _id: loggedInUserId } = req.user;
@@ -112,7 +182,7 @@ const getDocuments = async (req, res) => {
       ...(!isMain
         ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] }
         : {}),
-    }).sort({ createdAt: -1 });  // Sort by the creation date in descending order
+    }).sort({ createdAt: -1 });
 
     if (assignedProjects.length === 0) {
       return res.status(200).json({ message: "No assigned projects found" });
@@ -124,7 +194,7 @@ const getDocuments = async (req, res) => {
     }, {});
 
     const documents = await Document.find({ projName: { $in: Object.keys(projectMap) } })
-      .sort({ uploadedAt: -1 });  // Sort by uploadedAt in descending order
+      .sort({ uploadedAt: -1 });
 
     const documentsWithBanner = documents.map((doc) => ({
       ...doc.toObject(),
@@ -138,11 +208,28 @@ const getDocuments = async (req, res) => {
 };
 
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 const updateStatus = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const { id } = req.params;
     const updates = req.body;
+<<<<<<< HEAD
 
+=======
+    const { id } = req.params;
+    const updates = req.body;
+
+    const document = await Document.findById(id).session(session);
+    if (!document) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
     // Step 1: Update the document
     const updatedDocument = await Document.findByIdAndUpdate(id, updates, { new: true });
 
@@ -150,14 +237,64 @@ const updateStatus = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
+<<<<<<< HEAD
     // Step 2: Find the related project using projName
     const projectNameFromDocument = updatedDocument.projName;
     const relatedProject = await editProject.findOne({ projectName: projectNameFromDocument });
+=======
+    const updatedDocument = await Document.findByIdAndUpdate(
+      id, 
+      updates, 
+      { new: true, session }
+    );
+
+    // Create notification for status update
+    let project;
+    if (document.projName) {
+      project = await editProject.findOne({ projectName: document.projName })
+        .populate("projectOwners.ownerId", "email ownerName")
+        .populate("members", "email userName")
+        .session(session);
+    }
+
+    const notificationRecipients = [
+      ...(project?.members.map(m => m._id) || []),
+      ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
+      req.user._id
+    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+
+    const notificationPromises = notificationRecipients.map(userId =>
+      ShowNotification.create({
+        title: "Document Status Updated",
+        type: "Document Update",
+        description: `Document "${document.fileName}" status changed to "${updates.status}"`,
+        memberId: userId,
+        projectId: project?._id,
+      })
+    );
+
+    await Promise.all(notificationPromises);
+    await session.commitTransaction();
+
+    res.status(200).json({ 
+      message: "Document updated successfully", 
+      document: updatedDocument 
+    });
+    // Step 2: Find related project using projName
+    const projectNameFromDocument = updatedDocument.projName;
+    console.log("ddfdfdfd",projectNameFromDocument);
+
+    const relatedProject = await editProject
+      .findOne({ projectName: projectNameFromDocument })
+      .populate("projectOwners.ownerId", "email ownerName") // populate owner emails
+      .populate("members", "email userName"); // correctly populate member emails
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
 
     if (!relatedProject) {
       return res.status(404).json({ message: "Project not found for this document" });
     }
 
+<<<<<<< HEAD
     // Step 3: Gather all user IDs (owners + members)
     const ownerIds = relatedProject.projectOwners.map(owner => owner.ownerId);
     const memberIds = relatedProject.members;
@@ -185,17 +322,61 @@ const updateStatus = async (req, res) => {
     }
 
     // Step 6: Send response
+=======
+    // Step 3: Collect owner and member emails
+    const ownerEmails = relatedProject.projectOwners
+      .map((owner) => owner.ownerId?.email)
+      .filter(Boolean);
+    
+      console.log("owner",ownerEmails);
+
+    const memberEmails = relatedProject.members
+      .map((member) => member?.email)
+      .filter(Boolean);
+      
+      console.log("member",memberEmails);
+    
+
+    const allEmails = [...new Set([...ownerEmails, ...memberEmails])]; // Unique emails
+
+    // Step 4: Send emails
+    for (const email of allEmails) {
+      try {
+        await SendEmailUtil({
+          to: email,
+          subject: "Document Status Updated",
+          text: `The status of document "${updatedDocument.fileName}" in project "${projectNameFromDocument}" has been updated to "${updatedDocument.status}".`,
+        });
+        console.log(`✅ Email sent to: ${email}`);
+      } catch (emailErr) {
+        console.error(`❌ Failed to send email to ${email}:`, emailErr.message);
+      }
+    }
+
+    // Step 5: Response
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
     res.status(200).json({
       message: "Document updated and notifications sent",
       document: updatedDocument,
     });
 
   } catch (error) {
+<<<<<<< HEAD
+=======
+    await session.abortTransaction();
+    res.status(500).json({ 
+      message: "Error updating document", 
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82
     console.error("❌ Error in updateStatus:", error);
     res.status(500).json({
       message: "Internal server error",
       error: error.message,
     });
+<<<<<<< HEAD
   }
 };
 
@@ -258,3 +439,66 @@ const deleteDocument = async (req, res) => {
 
 
 export { uploadFile, getDocuments, updateStatus , deleteDocument };
+=======
+  }
+};
+
+const deleteDocument = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const document = await Document.findById(req.params.id).session(session);
+    if (!document) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    // Delete from AWS S3
+    const fileKey = document.fileUrl.split('.com/')[1];
+    await deleteFromS3(fileKey);
+
+    // Delete from MongoDB
+    await Document.findByIdAndDelete(req.params.id, { session });
+
+    // Create notification for deletion
+    let project;
+    if (document.projName) {
+      project = await editProject.findOne({ projectName: document.projName })
+        .populate("projectOwners.ownerId", "email ownerName")
+        .populate("members", "email userName")
+        .session(session);
+    }
+
+    const notificationRecipients = [
+      ...(project?.members.map(m => m._id) || []),
+      ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
+      req.user._id
+    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+
+    const notificationPromises = notificationRecipients.map(userId =>
+      ShowNotification.create({
+        title: "Document Deleted",
+        type: "Document Deletion",
+        description: `Document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ''}`,
+        memberId: userId,
+        projectId: project?._id,
+      })
+    );
+
+    await Promise.all(notificationPromises);
+    await session.commitTransaction();
+
+    res.status(200).json({ message: "Document deleted successfully!" });
+  } catch (error) {
+    await session.abortTransaction();
+    res.status(500).json({ 
+      message: "Error deleting document", 
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+export { uploadFile, getDocuments, updateStatus, deleteDocument };
+>>>>>>> 58727e08df3e4936850b3121270f9e9c09152f82

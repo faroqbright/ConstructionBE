@@ -3,6 +3,8 @@ import nodemailer from "nodemailer";
 // const rateLimit = require("express-rate-limit");
 
 const SendEmailUtil = async (body) => {
+  console.log('email testing');
+  
   return new Promise((resolve, reject) => {
     const transporter = nodemailer.createTransport({
       host: process.env.HOST,

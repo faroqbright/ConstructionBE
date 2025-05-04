@@ -1,5 +1,6 @@
 import { editProject } from "../models/project.model.js";
 import { Review } from "../models/reviewsModel.js";
+import mongoose from "mongoose";
 
 export const createReview = async (req, res) => {
   const { projectId, userId, message, rating } = req.body;
@@ -34,18 +35,39 @@ export const getReviewByProjectId = async (req, res) => {
 
   try {
     if (!projectId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Project ID is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Project ID is required",
+      });
+    }
+
+    // Check if the ID is exactly 24 characters (standard MongoDB ObjectId length)
+    if (projectId.length !== 24) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Project ID length - must be 24 characters",
+      });
+    }
+
+    // Validate that projectId is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Project ID format",
+      });
     }
 
     console.log(`Fetching reviews for projectId: ${projectId}`);
 
+    // Convert to ObjectId for consistent querying
+    const objectId = new mongoose.Types.ObjectId(projectId);
+
     // Fetch reviews for the given projectId
     const reviews = await Review.find(
-      { projectId },
+      { projectId: objectId },
       "message rating createdAt userId projectId"
     )
+      .populate("userId", "username email")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -61,40 +83,25 @@ export const getReviewByProjectId = async (req, res) => {
 
     // Fetch project details for this projectId
     const project = await editProject
-      .findById(projectId, "projectOwners projectName projectBanner")
+      .findById(objectId, "projectOwners projectName projectBanner")
       .lean();
 
-    if (!project) {
-      console.log("Project not found for given projectId.");
-    }
-
-    // Create project map (just one project in this case)
-    const projectMap = {};
-    if (project) {
-      projectMap[project._id.toString()] = {
-        projectOwners: project.projectOwners,
-        projectName: project.projectName,
-        projectBanner: project.projectBanner,
-      };
-    }
-
-    console.log("Project map created:", projectMap);
-
     // Combine reviews with project data
-    const reviewsWithProjectData = reviews.map((review) => {
-      const projectData = projectMap[review.projectId?.toString()] || null;
-      return {
-        ...review,
-        project: projectData,
-      };
-    });
+    const reviewsWithProjectData = reviews.map((review) => ({
+      ...review,
+      project: project
+        ? {
+            projectOwners: project.projectOwners,
+            projectName: project.projectName,
+            projectBanner: project.projectBanner,
+          }
+        : null,
+    }));
 
     res.status(200).json({
       success: true,
       data: reviewsWithProjectData,
     });
-
-    console.log("Response sent successfully");
   } catch (error) {
     console.error("ERROR in getReviewByProjectId:", error);
     res.status(500).json({
@@ -102,7 +109,10 @@ export const getReviewByProjectId = async (req, res) => {
       message: "Internal server error",
       error:
         process.env.NODE_ENV === "development"
-          ? { message: error.message, stack: error.stack }
+          ? {
+              message: error.message,
+              stack: error.stack,
+            }
           : undefined,
     });
   }
@@ -161,18 +171,28 @@ export const getAllReviews = async (req, res) => {
     console.log("7. Unique user IDs extracted:", userIds);
 
     console.log("8. Starting to combine review data with project data...");
-    const reviewsWithProjectData = reviews.map((review) => {
-      const projectData = projectMap[review.projectId?.toString()] || null;
-      console.log(
-        `8a. Processing review ${review._id} - project data:`,
-        projectData ? "found" : "not found"
-      );
+    // const reviewsWithProjectData = reviews.map((review) => {
+    //   const projectData = projectMap[review.projectId?.toString()] || null;
+    //   console.log(
+    //     `8a. Processing review ${review._id} - project data:`,
+    //     projectData ? "found" : "not found"
+    //   );
 
-      return {
-        ...review.toObject(),
-        project: projectData,
-      };
-    });
+    //   return {
+    //     ...review.toObject(),
+    //     project: projectData,
+    //   };
+    // });
+    const reviewsWithProjectData = reviews
+      .filter((review) => projectMap[review.projectId?.toString()])
+      .map((review) => {
+        const projectData = projectMap[review.projectId.toString()];
+        return {
+          ...review.toObject(),
+          project: projectData,
+        };
+      });
+
     console.log("9. Final data processing complete");
 
     res.status(200).json({
@@ -187,6 +207,44 @@ export const getAllReviews = async (req, res) => {
       stack: error.stack,
       name: error.name,
     });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+export const deleteProjectWithReviews = async (req, res) => {
+  const { projectId } = req.params;
+
+  try {
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Project ID is required",
+      });
+    }
+
+    // Step 1: Delete reviews related to the project
+    const deletedReviews = await Review.deleteMany({ projectId });
+
+    // Step 2: Delete the project
+    const deletedProject = await editProject.findByIdAndDelete(projectId);
+
+    if (!deletedProject) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Project and its ${deletedReviews.deletedCount} associated review(s) deleted successfully`,
+    });
+  } catch (error) {
+    console.error("Error in deleteProjectWithReviews:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
