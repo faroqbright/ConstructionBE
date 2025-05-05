@@ -14,6 +14,7 @@ const sendNotificationToDevices = async (tokens, title, body, data = {}) => {
     data
   };
 
+  
   try {
     const response = await messaging.sendMulticast(message);
     return response;
