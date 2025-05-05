@@ -202,13 +202,13 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
  */
 
 const clearAllNotifications = asyncHandler (async (req, res) => {
-  const { memberId } = req.params
+  const { id } = req.params
 
-  if (!mongoose.Types.ObjectId.isValid(memberId)){
+  if (!mongoose.Types.ObjectId.isValid(id)){
     throw new Error (400, "Invalid format for memberId")
   }
 
-  const result = await ShowNotification.deleteMany({ memberId })
+  const result = await ShowNotification.deleteMany({ id })
 
   if ( result.deletedCount === 0) {
     return res.status(200).json(new ApiResponse(200, {}, "No notifications found to delete"));
