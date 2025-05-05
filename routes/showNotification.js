@@ -23,7 +23,7 @@ router.route("/:id")
     .get(getNotificationById)
     // PATCH /api/v1/shownotifications/:id - Update the isRead status of a notification
     .patch(updateNotificationStatus)
-router.route("/:id")
+router.route("/:memberId")
     // Delete /api/v1/shownotifications/:id - Delete the notification of the user in the DB.
     .delete(clearAllNotifications)
 
