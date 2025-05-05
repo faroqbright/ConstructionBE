@@ -81,13 +81,13 @@ const editProjectSchema = new mongoose.Schema(
     },
     physicalEducationRange: {
       type: Number,
-      required: true,
+      // required: true,
       min: 1, // Minimum value
       max: 100, // Maximum value
     },
     financialEducationRange: {
       type: Number,
-      required: true,
+      // required: true,
       min: 1, // Minimum value
       max: 100, // Maximum value
     },
