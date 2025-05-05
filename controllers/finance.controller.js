@@ -83,6 +83,7 @@ const uploadFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Project not found" });
     }
 
+    const projectExists = await editProject.findOne({ projectName: projName });
     const projectOwners = projectExists.projectOwners
     if (projectOwners.length === 0) {
       return res.status(404).json({ message: "No project owners found" });
