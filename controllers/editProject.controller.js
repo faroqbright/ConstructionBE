@@ -1,5 +1,5 @@
 import { editProject } from "../models/project.model.js";
-import { User } from "../models/user.model.js"
+import { User } from "../models/user.model.js";
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -792,7 +792,7 @@ const editProjects = asyncHandler(async (req, res) => {
             </body>
             </html>
           `,
-        };        
+        };
 
         try {
           await SendEmailUtil(emailBody);
@@ -843,11 +843,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
     };
 
     // For non-main users, include all projects in their business area
+    // For non-main users, include all projects in their business area
     let finalFilter = baseFilter;
     if (!isMain) {
       finalFilter = {
         ...baseFilter,
-        businessAreas: { $in: [businessArea] },
+        businessAreas: {
+          $in: Array.isArray(businessArea) ? businessArea : [businessArea],
+        },
       };
     }
 
@@ -857,7 +860,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
     // Main query with population
-    let query = editProject.find(finalFilter)
+    let query = editProject
+      .find(finalFilter)
       .sort({ createdAt: -1 })
       .populate([
         {
@@ -1006,7 +1010,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
-
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
