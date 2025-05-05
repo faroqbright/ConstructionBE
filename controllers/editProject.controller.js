@@ -1,4 +1,5 @@
 import { editProject } from "../models/project.model.js";
+import { User } from "../models/user.model.js"
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -851,27 +852,28 @@ const getAllProjects = asyncHandler(async (req, res) => {
     const pageSize = 10;
     const skip = pageNumber ? (pageNumber - 1) * pageSize : 0;
 
-    let query = editProject.find(finalFilter).populate([
-      {
-        path: "members",
-        select: "userName avatar role email", // ✅ added email
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      },
-      {
-        path: "projectOwners.ownerId",
-        model: "User",
-        select: "userName role email", // ✅ added email
-        populate: {
-          path: "role",
-          select: "roleName",
-        },
-      },
-    ]);
+    let query = editProject.find(finalFilter).sort({ createdAt: -1 });
+    // ([
+    //   {
+    //     path: "members",
+    //     select: "userName avatar role email", // ✅ added email
+    //     populate: {
+    //       path: "role",
+    //       select: "roleName",
+    //     },
+    //   },
+    //   {
+    //     path: "projectOwners.ownerId",
+    //     model: "User",
+    //     select: "userName role email", // ✅ added email
+    //     populate: {
+    //       path: "role",
+    //       select: "roleName",
+    //     },
+    //   },
+    // ]);
 
-    query = query.sort({ createdAt: -1 });
+    // query = query.sort({ createdAt: -1 });
 
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
@@ -884,11 +886,40 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        const isMember = project.members.some((member) =>
-          member._id.equals(loggedInUserId)
+        const memberDetails = await Promise.all(
+          (project.members || []).map(async (memberId) => {
+            const member = await User.findById(memberId).populate("role", "roleName");
+            return {
+              _id: member?._id,
+              userName: member?.userName,
+              avatar: member?.avatar,
+              email: member?.email,
+              role: member?.role,
+            };
+          })
+        );
+
+        // 🔁 Fetch projectOwners.ownerId manually
+        const updatedProjectOwners = await Promise.all(
+          (project.projectOwners || []).map(async (owner) => {
+            if (!owner.ownerId) return null;
+            const ownerData = await User.findById(owner.ownerId).populate("role", "roleName");
+            return {
+              ownerId: ownerData?._id,
+              ownerName: ownerData?.userName || owner.ownerName || "",
+              _id: owner._id,
+              email: ownerData?.email,
+              role: ownerData?.role,
+            };
+          })
+        );
+
+        const isMember = project.members.some((id) =>
+          id.toString() === loggedInUserId.toString()
         );
         const isOwner = project.projectOwners.some(
-          (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+          (owner) =>
+            owner.ownerId && owner.ownerId.toString() === loggedInUserId.toString()
         );
 
         const fromBusinessArea =
@@ -927,15 +958,15 @@ const getAllProjects = asyncHandler(async (req, res) => {
           milestones[3].completed = true;
         if (project.status === "Completed") milestones[4].completed = true;
 
-        const updatedProjectOwners =
-          project.projectOwners
-            ?.filter((owner) => owner.ownerId)
-            .map((owner) => ({
-              ownerId: owner.ownerId?._id || owner.ownerId,
-              ownerName: owner.ownerId?.userName || owner.ownerName || "",
-              _id: owner._id,
-              email: owner.email || owner.ownerId.email,
-            })) || [];
+        // const updatedProjectOwners =
+        //   project.projectOwners
+        //     ?.filter((owner) => owner.ownerId)
+        //     .map((owner) => ({
+        //       ownerId: owner.ownerId?._id || owner.ownerId,
+        //       ownerName: owner.ownerId?.userName || owner.ownerName || "",
+        //       _id: owner._id,
+        //       email: owner.email || owner.ownerId.email,
+        //     })) || [];
 
         const filteredDocuments =
           projectDocuments?.map((doc) => ({
@@ -981,6 +1012,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
         const projectObj = {
           ...project.toObject(),
+          members: memberDetails,
           projectOwners: updatedProjectOwners,
           documents: filteredDocuments,
           financeDocuments: financeDetails,

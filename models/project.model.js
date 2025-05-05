@@ -85,6 +85,12 @@ const editProjectSchema = new mongoose.Schema(
       min: 1, // Minimum value
       max: 100, // Maximum value
     },
+    financialEducationRange: {
+      type: Number,
+      required: true,
+      min: 1, // Minimum value
+      max: 100, // Maximum value
+    },
     daysLeft: {
       type: String,
       required: true,

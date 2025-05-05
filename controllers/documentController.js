@@ -83,6 +83,31 @@ const uploadFile = async (req, res) => {
         }
       }
     }
+    if (req.body.projName) {
+      const projectExists = await editProject.findOne({ projectName: req.body.projName }).populate("projectOwners.ownerId", "email ownerName");
+
+      if (projectExists && projectExists.projectOwners.length > 0) {
+        for (const owner of projectExists.projectOwners) {
+          if (owner.ownerId?.email) {
+            const emailBody = {
+              from: process.env.EMAIL_USER,
+              to: owner.ownerId.email,
+              subject: `New File Uploaded for Project: ${req.body.projName}`,
+              text: `Hello ${owner.ownerId.ownerName},\n\nA new file named "${req.file.originalname}" has been uploaded for the project "${req.body.projName}".\n\nBest regards,\nYour Team`,
+            };
+
+            try {
+              await SendEmailUtil(emailBody);
+              console.log(`Email sent to ${owner.ownerId.email}`);
+            } catch (error) {
+              console.error("Error sending email:", error.message);
+            }
+          }
+        }
+      } else {
+        console.warn("No project owners found for the provided project name.");
+      }
+    }
 
     await session.commitTransaction();
     res.status(201).json({ message: "File uploaded successfully!", document });
@@ -171,6 +196,48 @@ const updateStatus = async (req, res) => {
         projectId: project?._id,
       })
     );
+
+    const projectNameFromDocument = updatedDocument.projName;
+    console.log("ddfdfdfd",projectNameFromDocument);
+
+    const relatedProject = await editProject
+      .findOne({ projectName: projectNameFromDocument })
+      .populate("projectOwners.ownerId", "email ownerName") // populate owner emails
+      .populate("members", "email userName"); // correctly populate member emails
+
+    if (!relatedProject) {
+      return res.status(404).json({ message: "Project not found for this document" });
+    }
+
+    // Step 3: Collect owner and member emails
+    const ownerEmails = relatedProject.projectOwners
+      .map((owner) => owner.ownerId?.email)
+      .filter(Boolean);
+    
+      console.log("owner",ownerEmails);
+
+    const memberEmails = relatedProject.members
+      .map((member) => member?.email)
+      .filter(Boolean);
+      
+      console.log("member",memberEmails);
+    
+
+    const allEmails = [...new Set([...ownerEmails, ...memberEmails])]; // Unique emails
+
+    // Step 4: Send emails
+    for (const email of allEmails) {
+      try {
+        await SendEmailUtil({
+          to: email,
+          subject: "Document Status Updated",
+          text: `The status of document "${updatedDocument.fileName}" in project "${projectNameFromDocument}" has been updated to "${updatedDocument.status}".`,
+        });
+        console.log(`✅ Email sent to: ${email}`);
+      } catch (emailErr) {
+        console.error(`❌ Failed to send email to ${email}:`, emailErr.message);
+      }
+    }
 
     await Promise.all(notificationPromises);
     await session.commitTransaction();
