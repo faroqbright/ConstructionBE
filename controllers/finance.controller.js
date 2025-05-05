@@ -225,235 +225,135 @@ const updateFinanceDocument = async (req, res) => {
   session.startTransaction();
 
   try {
-      const { id } = req.params;
-      let updates = {}; // Initialize updates object
-      // let project = null; // Declare project variable here, initialized to null
+    const { id } = req.params;
+    let updates = {};
+    let notify = false;
+    let executionChanges = []; // Track which execution values changed
 
-      // Fetch the existing document
-      const existingDocument = await FinanceDocument.findById(id).session(session);
-      if (!existingDocument) {
-          await session.abortTransaction();
-          session.endSession();
-          return res.status(404).json({ message: "Document not found" });
-      }
-      let notify = false;
+    // Fetch the existing document
+    const existingDocument = await FinanceDocument.findById(id).session(session);
+    if (!existingDocument) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Document not found" });
+    }
 
-      // Determine which project name to use for fetching project details
-      const projectNameToFetch = req.body.projName || existingDocument.projName;
-
-      // Fetch project details (needed for validation AND/OR notification)
-      // Ensure you populate needed fields if used elsewhere
-      project = await editProject.findOne({ projectName: projectNameToFetch })
-          // .populate("projectOwners.ownerId", "email userName") // Populate only if needed for other logic
-          // .populate("members", "email userName")             // Populate only if needed for other logic
-          .session(session);
-
-      if (!project) {
-          // If the intended project (new or old) doesn't exist
-          await session.abortTransaction();
-          session.endSession();
-          // Be specific if the new name caused the failure
-          const message = req.body.projName
-              ? `Project '${req.body.projName}' not found.`
-              : `Associated project '${existingDocument.projName}' not found.`;
-          return res.status(404).json({ message });
-      }
-
-      if (req.body.projName && req.body.projName !== existingDocument.projName) {
-          updates.projName = req.body.projName;
-      }
-
-      if (req.file) {
-           if (existingDocument.fileUrl) {
-              try {
-                  const urlParts = existingDocument.fileUrl.split(".com/");
-                  if (urlParts.length > 1) await deleteFromS3(urlParts[1]);
-              } catch (s3DeleteError) { console.error("Failed to delete old S3 file:", s3DeleteError); }
-           }
-           const uniqueFileName = `${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
-           const newFileUrl = await uploadToS3(req.file.buffer, uniqueFileName, req.file.mimetype);
-           if (!newFileUrl) throw new Error("S3 upload failed during update");
-           updates.fileName = req.file.originalname;
-           updates.fileUrl = newFileUrl;
-      }
-
-      // --- 3. Handle Other Fields (financialExecution, physicalExecution, reference) ---
-      if (req.body.financialExecution !== undefined && req.body.financialExecution !== null) {
-           const financialExec = parseFloat(req.body.financialExecution);
-           notify = true;
-           if (!isNaN(financialExec) && financialExec >= 0 && financialExec <= 100) {
-              updates.financialExecution = financialExec;
-           } else { console.warn(`Invalid financialExecution: ${req.body.financialExecution}`); }
-      }
-      if (req.body.physicalExecution !== undefined && req.body.physicalExecution !== null) {
-          const physicalExec = parseFloat(req.body.physicalExecution);
+    // Check for financial execution change
+    if (req.body.financialExecution !== undefined && req.body.financialExecution !== null) {
+      const financialExec = parseFloat(req.body.financialExecution);
+      if (!isNaN(financialExec))    {
+        if (financialExec !== existingDocument.financialExecution) {
+          updates.financialExecution = financialExec;
+          executionChanges.push(`Financial execution changed from ${existingDocument.financialExecution}% to ${financialExec}%`);
           notify = true;
-           if (!isNaN(physicalExec) && physicalExec >= 0 && physicalExec <= 100) {
-              updates.physicalExecution = physicalExec;
-           } else { console.warn(`Invalid physicalExecution: ${req.body.physicalExecution}`); }
+        }
       }
-       if (req.body.reference !== undefined) { // Allow empty string ""
-          updates.reference = req.body.reference;
+    }
+
+    // Check for physical execution change
+    if (req.body.physicalExecution !== undefined && req.body.physicalExecution !== null) {
+      const physicalExec = parseFloat(req.body.physicalExecution);
+      if (!isNaN(physicalExec)) {
+        if (physicalExec !== existingDocument.physicalExecution) {
+          updates.physicalExecution = physicalExec;
+          executionChanges.push(`Physical execution changed from ${existingDocument.physicalExecution}% to ${physicalExec}%`);
           notify = true;
+        }
       }
-       if (req.body.fileName !== undefined) { // Allow empty string ""
-          updates.fileName = req.body.fileName;
-          notify = true;
-      }
-       if (!notify) { // Allow empty string ""
-          return res.status(400).json({ message: "No chnges detect" })
-      }
+    }
 
-      // --- 4. Check if any actual updates were prepared ---
-      // Only proceed if there are changes other than just the timestamp
-      if (Object.keys(updates).length === 0) {
-           await session.abortTransaction();
-           session.endSession();
-          return res.status(400).json({ message: "No update data provided or no changes detected" });
-      }
+    // Handle other fields
+    if (req.body.reference !== undefined) {
+      updates.reference = req.body.reference;
+      notify = true;
+    }
 
-      // Add update timestamp
-      updates.uploadedAt = new Date(); // Or use a dedicated 'updatedAt' field
+    if (req.body.fileName !== undefined) {
+      updates.fileName = req.body.fileName;
+      notify = true;
+    }
 
-      // --- 5. Perform Database Update ---
-      const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
-          id,
-          updates,
-          { new: true, runValidators: true, session } // runValidators is good practice
-      );
+    if (!notify) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: "No changes detected" });
+    }
 
-      const project = await editProject.findOne({ projectName: existingDocument.projName })
+    // Add update timestamp
+    updates.updatedAt = new Date();
+
+    // Perform the update
+    const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
+      id,
+      updates,
+      { new: true, runValidators: true, session }
+    );
+
+    if (!updatedFinanceDocument) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(404).json({ message: "Document not found during update" });
+    }
+
+    // Get project details for notifications
+    const project = await editProject.findOne({ projectName: existingDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
-      .populate("members", "email userName");
+      .populate("members", "email userName")
+      .session(session);
 
     if (!project) {
+      await session.abortTransaction();
+      session.endSession();
       return res.status(404).json({ message: "Project not found for this document" });
     }
 
-    for (const owner of project.projectOwners) {
-      if (owner.ownerId?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: owner.ownerId.email,
-          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          html: `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <title>Finance Document Update</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                <tr>
-                  <td style="padding: 20px; text-align: center;">
-                    <h2 style="color: #333;">Finance Document Updated</h2>
-                    <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName || "Project Owner"}</strong>,</p>
-                    <p style="font-size: 16px; color: #555;">A finance document for the project <strong>"${existingDocument.projName}"</strong> has been updated.</p>
-                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to view the latest version.</p>
-        
-                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
-                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
-          `,
-        };        
-
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to project owner: ${owner.ownerId.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
-        }
-      }
+    // Prepare notification description with execution changes
+    let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
+    
+    if (executionChanges.length > 0) {
+      notificationDescription += ` Changes: ${executionChanges.join(', ')}`;
     }
 
-    for (const member of project.members) {
-      if (member?.email) {
-        const emailBody = {
-          from: process.env.EMAIL_USER,
-          to: member.email,
-          subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          html: `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <title>Finance Document Update</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                <tr>
-                  <td style="padding: 20px; text-align: center;">
-                    <h2 style="color: #333;">Finance Document Updated</h2>
-                    <p style="font-size: 16px; color: #555;">Dear <strong>${member.userName || "Project Member"}</strong>,</p>
-                    <p style="font-size: 16px; color: #555;">A finance document for the project <strong>"${existingDocument.projName}"</strong> has been updated.</p>
-                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to review the updated document.</p>
-        
-                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
-                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
-                  </td>
-                </tr>
-              </table>
-            </body>
-            </html>
-          `,
-        };
-        
-        try {
-          await SendEmailUtil(emailBody);
-          console.log(`Email sent to member: ${member.email}`);
-        } catch (error) {
-          console.error(`Error sending email to ${member.email}:`, error.message);
-        }
-      }
-    }
+    // Prepare notifications for all relevant users
+    const notificationRecipients = [
+      ...(project.members.map(m => m._id) || []),
+      ...(project.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
+      req.user._id
+    ].filter(
+      (v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i
+    );
 
-      if (!updatedFinanceDocument) {
-          // Should not happen if findById worked, but handle defensively
-           await session.abortTransaction();
-           session.endSession();
-          return res.status(404).json({ message: "Document not found during the update operation." });
-      }
+    // Create notifications in bulk
+    const notificationPromises = notificationRecipients.map(userId => 
+      ShowNotification.create([{
+        title: "Finance Document Updated",
+        type: "Document Update",
+        description: notificationDescription,
+        memberId: userId,
+        projectId: project._id,
+        documentId: updatedFinanceDocument._id
+      }], { session })
+    );
 
+    await Promise.all(notificationPromises);
+    await session.commitTransaction();
 
-      // --- 6. Create Update Notification ---
-      // Now 'project' is guaranteed to be defined (either the new or old project object, or null if fetch failed earlier)
-      // Use project._id directly since we checked for !project earlier
-      const notificationData = {
-          title: "Finance Document Updated",
-          type: "Document Update",
-          description: `Document "${updatedFinanceDocument.fileName || existingDocument.fileName}" for project "${project.projectName}" was updated.`, // Use updated name if available
-          memberId: req.user._id, // Assumes req.user is populated by auth middleware
-          projectId: project._id, // Use the fetched project's ID
-      };
-
-       // Create notification within the session
-      await ShowNotification.create([notificationData], { session }); // Use array form for create with session
-
-      // --- 7. Commit Transaction ---
-      await session.commitTransaction();
-
-      res.status(200).json({
-          message: "Document updated successfully",
-          document: updatedFinanceDocument
-      });
+    res.status(200).json({
+      message: "Document updated successfully",
+      document: updatedFinanceDocument
+    });
 
   } catch (error) {
-      console.error("Error updating finance document:", error);
-      await session.abortTransaction(); // Ensure abortion on any error
-      res.status(500).json({
-          message: "Error updating document",
-          error: error.message
-      });
+    console.error("Error updating finance document:", error);
+    await session.abortTransaction();
+    res.status(500).json({
+      message: "Error updating document",
+      error: error.message
+    });
   } finally {
-      session.endSession(); // Always end the session
+    session.endSession();
   }
 };
-
 const deleteFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
