@@ -217,16 +217,17 @@ const updateStatus = async (req, res) => {
 
     const document = await Document.findById(id).session(session);
     if (!document) {
+      await session.abortTransaction();
       return res.status(404).json({ message: "Document not found" });
     }
 
     const updatedDocument = await Document.findByIdAndUpdate(
-      id, 
-      updates, 
+      id,
+      updates,
       { new: true, session }
     );
 
-    // Create notification for status update
+    // Step 1: Get related project if it exists
     let project;
     if (document.projName) {
       project = await editProject.findOne({ projectName: document.projName })
@@ -235,6 +236,7 @@ const updateStatus = async (req, res) => {
         .session(session);
     }
 
+    // Step 2: Prepare notifications
     const notificationRecipients = [
       ...(project?.members.map(m => m._id) || []),
       ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
@@ -251,35 +253,29 @@ const updateStatus = async (req, res) => {
       })
     );
 
+    // Step 3: Get email recipients
     const projectNameFromDocument = updatedDocument.projName;
-    console.log("ddfdfdfd",projectNameFromDocument);
-
     const relatedProject = await editProject
       .findOne({ projectName: projectNameFromDocument })
-      .populate("projectOwners.ownerId", "email ownerName") // populate owner emails
-      .populate("members", "email userName"); // correctly populate member emails
+      .populate("projectOwners.ownerId", "email ownerName")
+      .populate("members", "email userName");
 
     if (!relatedProject) {
+      await session.abortTransaction();
       return res.status(404).json({ message: "Project not found for this document" });
     }
 
-    // Step 3: Collect owner and member emails
     const ownerEmails = relatedProject.projectOwners
-      .map((owner) => owner.ownerId?.email)
+      .map(owner => owner.ownerId?.email)
       .filter(Boolean);
-    
-      console.log("owner",ownerEmails);
 
     const memberEmails = relatedProject.members
-      .map((member) => member?.email)
+      .map(member => member?.email)
       .filter(Boolean);
-      
-      console.log("member",memberEmails);
-    
 
-    const allEmails = [...new Set([...ownerEmails, ...memberEmails])]; // Unique emails
+    const allEmails = [...new Set([...ownerEmails, ...memberEmails])];
 
-    // Step 4: Send emails
+    // Step 4: Send Emails
     for (const email of allEmails) {
       try {
         await SendEmailUtil({
@@ -296,20 +292,22 @@ const updateStatus = async (req, res) => {
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(200).json({ 
-      message: "Document updated successfully", 
-      document: updatedDocument 
+    res.status(200).json({
+      message: "Document updated successfully",
+      document: updatedDocument
     });
   } catch (error) {
     await session.abortTransaction();
-    res.status(500).json({ 
-      message: "Error updating document", 
-      error: error.message 
+    console.error("@ Error in updateStatus:", error);
+    res.status(500).json({
+      message: "Error updating document",
+      error: error.message
     });
   } finally {
     session.endSession();
   }
 };
+
 
 const deleteDocument = async (req, res) => {
   const session = await mongoose.startSession();

@@ -194,10 +194,40 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
     );
 });
 
-// --- Export all functions ---
+
+/**
+ * @description Delete all notifications for a specific member
+ * @route DELETE /api/v1/notifications/clear/:memberId
+ * @access Private (Requires authenticated user)
+ */
+
+const clearAllNotifications = asyncHandler (async (req, res) => {
+  const { memberId } = req.params
+
+  if (!mongoose.Types.ObjectId.isValid(memberId)){
+    throw new Error (400, "Invalid format for memberId")
+  }
+
+  const result = await ShowNotification.deleteMany({ memberId })
+
+  if ( result.deletedCount === 0) {
+    return res.status(200).json(new ApiResponse(200, {}, "No notifications found to delete"));
+  }
+
+  return res
+  .status(200)
+  .json(
+    new ApiResponse(
+      200,
+      { deletedCount: result.deletedCount },
+      "All notifications cleared successfully"
+    )
+  );
+})
 export {
   createNotification,
   getNotifications,
-  getNotificationById, // Add new function
-  updateNotificationStatus, // Add new function
+  getNotificationById, 
+  updateNotificationStatus, 
+  clearAllNotifications,
 };
