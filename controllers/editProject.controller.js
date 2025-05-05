@@ -842,12 +842,12 @@ const getAllProjects = asyncHandler(async (req, res) => {
       ...(status && validStatuses.includes(status) ? { status } : {}),
     };
 
-    // For non-main users, filter projects by business area
+    // For non-main users, include all projects in their business area
     let finalFilter = baseFilter;
     if (!isMain) {
       finalFilter = {
         ...baseFilter,
-        businessAreas: businessArea
+        businessAreas: { $in: [businessArea] },
       };
     }
 
@@ -879,7 +879,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
         },
       ]);
 
-    // Apply pagination if needed
     if (pageNumber) {
       query = query.skip(skip).limit(pageSize);
     }
@@ -889,18 +888,17 @@ const getAllProjects = asyncHandler(async (req, res) => {
       ? await editProject.countDocuments(finalFilter)
       : null;
 
-    // Enhanced project processing
     const projectsWithDocuments = await Promise.all(
       projects.map(async (project) => {
-        // Check user's relationship to project
-        const isMember = project.members.some(id => 
-          id._id.toString() === loggedInUserId.toString()
+        const isMember = project.members.some(
+          (id) => id._id.toString() === loggedInUserId.toString()
         );
-        const isOwner = project.projectOwners.some(owner => 
-          owner.ownerId && owner.ownerId._id.toString() === loggedInUserId.toString()
+        const isOwner = project.projectOwners.some(
+          (owner) =>
+            owner.ownerId &&
+            owner.ownerId._id.toString() === loggedInUserId.toString()
         );
 
-        // Milestones logic
         const milestones = [
           { name: "Project Details", completed: true },
           { name: "Filling", completed: false },
@@ -918,47 +916,55 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
         if (isFillingComplete) milestones[1].completed = true;
 
-        // Fetch related documents
-        const [projectReports, projectDocuments, financeDocuments] = await Promise.all([
-          Document.find({ projName: project.projectName }),
-          UserDocument.find({ projName: project.projectName }),
-          FinanceDocument.find({ projName: project.projectName }),
-        ]);
+        const [projectReports, projectDocuments, financeDocuments] =
+          await Promise.all([
+            Document.find({ projName: project.projectName }),
+            UserDocument.find({ projName: project.projectName }),
+            FinanceDocument.find({ projName: project.projectName }),
+          ]);
 
         if (financeDocuments?.length > 0) milestones[2].completed = true;
-        if (milestones[1].completed && milestones[2].completed) milestones[3].completed = true;
+        if (milestones[1].completed && milestones[2].completed)
+          milestones[3].completed = true;
         if (project.status === "Completed") milestones[4].completed = true;
 
-        // Process documents
-        const filteredDocuments = projectDocuments?.map(doc => ({
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-        })) || [];
-
-        const filteredReports = projectReports?.map(report => ({
-          fileName: report.fileName,
-          fileUrl: report.fileUrl,
-          user: report.user,
-          status: report.status,
-          uploadedAt: report.uploadedAt,
-        })) || [];
-
-        const financeDetails = financeDocuments
-          ?.map(doc => ({
-            id: doc._id,
+        const filteredDocuments =
+          projectDocuments?.map((doc) => ({
             fileName: doc.fileName,
             fileUrl: doc.fileUrl,
             user: doc.user,
-            financialExecution: doc.financialExecution,
-            physicalExecution: doc.physicalExecution,
-            uploadedAt: doc.uploadedAt,
-            reference: doc.reference,
-          }))
-          .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)) || [];
+          })) || [];
 
-        // Additional data
-        const latestLog = project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+        const filteredReports =
+          projectReports?.map((report) => ({
+            fileName: report.fileName,
+            fileUrl: report.fileUrl,
+            user: report.user,
+            status: report.status,
+            uploadedAt: report.uploadedAt,
+          })) || [];
+
+        const financeDetails =
+          financeDocuments
+            ?.map((doc) => ({
+              id: doc._id,
+              fileName: doc.fileName,
+              fileUrl: doc.fileUrl,
+              user: doc.user,
+              financialExecution: doc.financialExecution,
+              physicalExecution: doc.physicalExecution,
+              uploadedAt: doc.uploadedAt,
+              reference: doc.reference,
+            }))
+            .sort(
+              (a, b) =>
+                new Date(b.uploadedAt).getTime() -
+                new Date(a.uploadedAt).getTime()
+            ) || [];
+
+        const latestLog =
+          project.logs?.sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+
         const additionalMilestones = await AdditionalMilestone.find({
           projectId: project._id,
         }).populate({
@@ -1000,6 +1006,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
     throw new ApiError(400, error.message);
   }
 });
+
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
