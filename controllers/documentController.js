@@ -296,9 +296,9 @@ const updateStatus = async (req, res) => {
       message: "Document updated successfully",
       document: updatedDocument
     });
-  } catch {
+  } catch (error) {
     await session.abortTransaction();
-    console.error("@ Error in updateStatus:");  // ✅ Correct (matches your working code)
+    console.error("@ Error in updateStatus:", error);
     res.status(500).json({
       message: "Error updating document",
       error: error.message
