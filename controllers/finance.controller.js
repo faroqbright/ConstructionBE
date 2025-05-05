@@ -1,11 +1,9 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import FinanceDocument from "../models/finance.model.js";
 import { editProject } from "../models/project.model.js";
-import  {SendEmailUtil} from "../utils/emailsender.js"
+import { SendEmailUtil } from "../utils/emailsender.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
-
-
 
 // const uploadFinanceDocument = async (req, res) => {
 //   try {
@@ -53,38 +51,51 @@ import { ShowNotification } from "../models/showNotificationSchema.js";
 //   }
 // };
 
-
-
 const uploadFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const { projName, user, financialExecution, physicalExecution, fileName, reference } = req.body;
+    const {
+      projName,
+      user,
+      financialExecution,
+      physicalExecution,
+      fileName,
+      reference,
+    } = req.body;
 
     if (!fileName) {
       return res.status(400).json({ message: "Filename is required" });
     }
 
-    if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
-      return res.status(400).json({ message: "Execution values must be between 0 and 100" });
+    if (
+      financialExecution < 0 ||
+      financialExecution > 100 ||
+      physicalExecution < 0 ||
+      physicalExecution > 100
+    ) {
+      return res
+        .status(400)
+        .json({ message: "Execution values must be between 0 and 100" });
     }
 
-    const project = await editProject.findOne({ projectName: projName })
+    const project = await editProject
+      .findOne({ projectName: projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
-    
+
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
     const projectExists = await editProject.findOne({ projectName: projName });
-    const projectOwners = projectExists.projectOwners
+    const projectOwners = projectExists.projectOwners;
     if (projectOwners.length === 0) {
       return res.status(404).json({ message: "No project owners found" });
     }
@@ -120,7 +131,7 @@ const uploadFinanceDocument = async (req, res) => {
             </body>
             </html>
           `,
-        };        
+        };
 
         // Send the email
         try {
@@ -132,9 +143,15 @@ const uploadFinanceDocument = async (req, res) => {
       }
     }
 
-    const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
+    const finalFileName = fileName.includes(".")
+      ? fileName
+      : `${fileName}.${req.file.mimetype.split("/")[1]}`;
 
-    const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
+    const fileUrl = await uploadToS3(
+      req.file.buffer,
+      finalFileName,
+      req.file.mimetype
+    );
     if (!fileUrl) {
       return res.status(500).json({ message: "File upload failed" });
     }
@@ -154,13 +171,15 @@ const uploadFinanceDocument = async (req, res) => {
 
     // Notification recipients (owners + members + performing user)
     const notificationRecipients = [
-      ...project.members.map(m => m._id),
-      ...project.projectOwners.map(o => o.ownerId?._id).filter(Boolean),
-      req.user._id
-    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+      ...project.members.map((m) => m._id),
+      ...project.projectOwners.map((o) => o.ownerId?._id).filter(Boolean),
+      req.user._id,
+    ].filter(
+      (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
+    );
 
     // Create notifications
-    const notificationPromises = notificationRecipients.map(userId => 
+    const notificationPromises = notificationRecipients.map((userId) =>
       ShowNotification.create({
         title: "Finance Document Uploaded",
         type: "Document Upload",
@@ -173,17 +192,16 @@ const uploadFinanceDocument = async (req, res) => {
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(201).json({ 
-      message: "File uploaded successfully!", 
-      financeDocument 
+    res.status(201).json({
+      message: "File uploaded successfully!",
+      financeDocument,
     });
-
   } catch (error) {
     await session.abortTransaction();
     console.error("Error uploading file:", error.message);
-    res.status(500).json({ 
-      message: "Error uploading file", 
-      error: error.message 
+    res.status(500).json({
+      message: "Error uploading file",
+      error: error.message,
     });
   } finally {
     session.endSession();
@@ -195,10 +213,14 @@ const getFinanceDocuments = async (req, res) => {
     const { isMain, _id: loggedInUserId } = req.user;
 
     const assignedProjects = await editProject.find({
-      ...(!isMain ? { $or: [
-        { members: loggedInUserId }, 
-        { "projectOwners.ownerId": loggedInUserId }
-      ] } : {}),
+      ...(!isMain
+        ? {
+            $or: [
+              { members: loggedInUserId },
+              { "projectOwners.ownerId": loggedInUserId },
+            ],
+          }
+        : {}),
     });
 
     const projectNames = assignedProjects.map((proj) => proj.projectName);
@@ -207,18 +229,154 @@ const getFinanceDocuments = async (req, res) => {
       return res.status(200).json({ message: "No assigned projects found" });
     }
 
-    const financeDocuments = await FinanceDocument.find({ projName: { $in: projectNames } })
-      .sort({ uploadedAt: -1 });
+    const financeDocuments = await FinanceDocument.find({
+      projName: { $in: projectNames },
+    }).sort({ uploadedAt: -1 });
 
     res.status(200).json(financeDocuments);
   } catch (error) {
     console.error("Error fetching finance documents:", error.message);
-    res.status(500).json({ 
-      message: "Failed to fetch finance documents", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to fetch finance documents",
+      error: error.message,
     });
   }
 };
+
+// const updateFinanceDocument = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
+//   try {
+//     const { id } = req.params;
+//     let updates = {};
+//     let notify = false;
+//     let executionChanges = []; // Track which execution values changed
+
+//     // Fetch the existing document
+//     const existingDocument = await FinanceDocument.findById(id).session(session);
+//     if (!existingDocument) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Document not found" });
+//     }
+
+//     // Check for financial execution change
+//     if (req.body.financialExecution !== undefined && req.body.financialExecution !== null) {
+//       const financialExec = parseFloat(req.body.financialExecution);
+//       if (!isNaN(financialExec))    {
+//         if (financialExec !== existingDocument.financialExecution) {
+//           updates.financialExecution = financialExec;
+//           executionChanges.push(`Financial execution changed from ${existingDocument.financialExecution}% to ${financialExec}%`);
+//           notify = true;
+//         }
+//       }
+//     }
+
+//     // Check for physical execution change
+//     if (req.body.physicalExecution !== undefined && req.body.physicalExecution !== null) {
+//       const physicalExec = parseFloat(req.body.physicalExecution);
+//       if (!isNaN(physicalExec)) {
+//         if (physicalExec !== existingDocument.physicalExecution) {
+//           updates.physicalExecution = physicalExec;
+//           executionChanges.push(`Physical execution changed from ${existingDocument.physicalExecution}% to ${physicalExec}%`);
+//           notify = true;
+//         }
+//       }
+//     }
+
+//     // Handle other fields
+//     if (req.body.reference !== undefined) {
+//       updates.reference = req.body.reference;
+//       notify = true;
+//     }
+
+//     if (req.body.fileName !== undefined) {
+//       updates.fileName = req.body.fileName;
+//       notify = true;
+//     }
+
+//     if (!notify) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(400).json({ message: "No changes detected" });
+//     }
+
+//     // Add update timestamp
+//     updates.updatedAt = new Date();
+
+//     // Perform the update
+//     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
+//       id,
+//       updates,
+//       { new: true, runValidators: true, session }
+//     );
+
+//     if (!updatedFinanceDocument) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Document not found during update" });
+//     }
+
+//     // Get project details for notifications
+//     const project = await editProject.findOne({ projectName: existingDocument.projName })
+//       .populate("projectOwners.ownerId", "email userName")
+//       .populate("members", "email userName")
+//       .session(session);
+
+//     if (!project) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Project not found for this document" });
+//     }
+
+//     // Prepare notification description with execution changes
+//     let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
+
+//     if (executionChanges.length > 0) {
+//       notificationDescription += ` Changes: ${executionChanges.join(', ')}`;
+//     }
+
+//     // Prepare notifications for all relevant users
+//     const notificationRecipients = [
+//       ...(project.members.map(m => m._id) || []),
+//       ...(project.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
+//       req.user._id
+//     ].filter(
+//       (v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i
+//     );
+
+//     // Create notifications in bulk
+//     const notificationPromises = notificationRecipients.map(userId =>
+//       ShowNotification.create([{
+//         title: "Finance Document Updated",
+//         type: "Document Update",
+//         description: notificationDescription,
+//         memberId: userId,
+//         projectId: project._id,
+//         documentId: updatedFinanceDocument._id
+//       }], { session })
+//     );
+
+//     await Promise.all(notificationPromises);
+//     await session.commitTransaction();
+
+//     res.status(200).json({
+//       message: "Document updated successfully",
+//       document: updatedFinanceDocument
+//     });
+
+//   } catch (error) {
+//     console.error("Error updating finance document:", error);
+//     await session.abortTransaction();
+//     res.status(500).json({
+//       message: "Error updating document",
+//       error: error.message
+//     });
+//   } finally {
+//     session.endSession();
+//   }
+// };
 
 const updateFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
@@ -226,145 +384,186 @@ const updateFinanceDocument = async (req, res) => {
 
   try {
     const { id } = req.params;
-    let updates = {};
+    const updates = {};
     let notify = false;
-    let executionChanges = []; // Track which execution values changed
+    const executionChanges = [];
 
-    // Fetch the existing document
-    const existingDocument = await FinanceDocument.findById(id).session(session);
+    // Fetch the existing finance document
+    const existingDocument =
+      await FinanceDocument.findById(id).session(session);
     if (!existingDocument) {
       await session.abortTransaction();
-      session.endSession();
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Check for financial execution change
-    if (req.body.financialExecution !== undefined && req.body.financialExecution !== null) {
-      const financialExec = parseFloat(req.body.financialExecution);
-      if (!isNaN(financialExec))    {
-        if (financialExec !== existingDocument.financialExecution) {
-          updates.financialExecution = financialExec;
-          executionChanges.push(`Financial execution changed from ${existingDocument.financialExecution}% to ${financialExec}%`);
+    // Handle financial execution
+    if ("financialExecution" in req.body) {
+      const newFinancial = parseFloat(req.body.financialExecution);
+      if (!isNaN(newFinancial)) {
+        if (newFinancial !== existingDocument.financialExecution) {
+          updates.financialExecution = newFinancial;
+          executionChanges.push(
+            `Financial execution changed from ${existingDocument.financialExecution}% to ${newFinancial}%`
+          );
           notify = true;
         }
+      } else if (req.body.financialExecution === null) {
+        updates.financialExecution = null;
+        executionChanges.push(
+          `Financial execution removed (was ${existingDocument.financialExecution}%)`
+        );
+        notify = true;
       }
     }
 
-    // Check for physical execution change
-    if (req.body.physicalExecution !== undefined && req.body.physicalExecution !== null) {
-      const physicalExec = parseFloat(req.body.physicalExecution);
-      if (!isNaN(physicalExec)) {
-        if (physicalExec !== existingDocument.physicalExecution) {
-          updates.physicalExecution = physicalExec;
-          executionChanges.push(`Physical execution changed from ${existingDocument.physicalExecution}% to ${physicalExec}%`);
+    // Handle physical execution
+    if ("physicalExecution" in req.body) {
+      const newPhysical = parseFloat(req.body.physicalExecution);
+      if (!isNaN(newPhysical)) {
+        if (newPhysical !== existingDocument.physicalExecution) {
+          updates.physicalExecution = newPhysical;
+          executionChanges.push(
+            `Physical execution changed from ${existingDocument.physicalExecution}% to ${newPhysical}%`
+          );
           notify = true;
         }
+      } else if (req.body.physicalExecution === null) {
+        updates.physicalExecution = null;
+        executionChanges.push(
+          `Physical execution removed (was ${existingDocument.physicalExecution}%)`
+        );
+        notify = true;
       }
     }
 
-    // Handle other fields
-    if (req.body.reference !== undefined) {
+    // Reference and File Name
+    if (
+      req.body.reference !== undefined &&
+      req.body.reference !== existingDocument.reference
+    ) {
       updates.reference = req.body.reference;
       notify = true;
     }
 
-    if (req.body.fileName !== undefined) {
+    if (
+      req.body.fileName !== undefined &&
+      req.body.fileName !== existingDocument.fileName
+    ) {
       updates.fileName = req.body.fileName;
       notify = true;
     }
 
     if (!notify) {
       await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ message: "No changes detected" });
     }
 
-    // Add update timestamp
     updates.updatedAt = new Date();
 
     // Perform the update
     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
       id,
       updates,
-      { new: true, runValidators: true, session }
+      {
+        new: true,
+        runValidators: true,
+        session,
+      }
     );
 
     if (!updatedFinanceDocument) {
       await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ message: "Document not found during update" });
+      return res
+        .status(404)
+        .json({ message: "Document not found during update" });
     }
 
-    // Get project details for notifications
-    const project = await editProject.findOne({ projectName: existingDocument.projName })
+    // Fetch related project
+    const project = await editProject
+      .findOne({ projectName: existingDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
 
     if (!project) {
       await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ message: "Project not found for this document" });
+      return res
+        .status(404)
+        .json({ message: "Project not found for this document" });
     }
 
-    // Prepare notification description with execution changes
+    // Prepare notification content
     let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
-    
     if (executionChanges.length > 0) {
-      notificationDescription += ` Changes: ${executionChanges.join(', ')}`;
+      notificationDescription += ` Changes: ${executionChanges.join(", ")}`;
     }
 
-    // Prepare notifications for all relevant users
-    const notificationRecipients = [
-      ...(project.members.map(m => m._id) || []),
-      ...(project.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
-      req.user._id
-    ].filter(
-      (v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i
-    );
+    // Collect unique user IDs (project members, owners, and editor)
+    const recipients = new Set();
 
-    // Create notifications in bulk
-    const notificationPromises = notificationRecipients.map(userId => 
-      ShowNotification.create([{
-        title: "Finance Document Updated",
-        type: "Document Update",
-        description: notificationDescription,
-        memberId: userId,
-        projectId: project._id,
-        documentId: updatedFinanceDocument._id
-      }], { session })
+    if (Array.isArray(project.members)) {
+      project.members.forEach((m) => recipients.add(m._id.toString()));
+    }
+
+    if (Array.isArray(project.projectOwners)) {
+      project.projectOwners.forEach((o) => {
+        if (o.ownerId) recipients.add(o.ownerId._id.toString());
+      });
+    }
+
+    if (req.user && req.user._id) {
+      recipients.add(req.user._id.toString());
+    }
+
+    // Send notifications
+    const notificationPromises = Array.from(recipients).map((userId) =>
+      ShowNotification.create(
+        [
+          {
+            title: "Finance Document Updated",
+            type: "Document Update",
+            description: notificationDescription,
+            memberId: userId,
+            projectId: project._id,
+            documentId: updatedFinanceDocument._id,
+          },
+        ],
+        { session }
+      )
     );
 
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Document updated successfully",
-      document: updatedFinanceDocument
+      document: updatedFinanceDocument,
     });
-
   } catch (error) {
-    console.error("Error updating finance document:", error);
+    console.error("Update error:", error);
     await session.abortTransaction();
-    res.status(500).json({
-      message: "Error updating document",
-      error: error.message
-    });
+    return res
+      .status(500)
+      .json({ message: "Error updating document", error: error.message });
   } finally {
     session.endSession();
   }
 };
+
 const deleteFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const financeDocument = await FinanceDocument.findById(req.params.id).session(session);
+    const financeDocument = await FinanceDocument.findById(
+      req.params.id
+    ).session(session);
     if (!financeDocument) {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    const project = await editProject.findOne({ projectName: financeDocument.projName })
+    const project = await editProject
+      .findOne({ projectName: financeDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
@@ -378,12 +577,15 @@ const deleteFinanceDocument = async (req, res) => {
 
     // Create deletion notification
     const notificationRecipients = [
-      ...(project?.members.map(m => m._id) || []),
-      ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
-      req.user._id
-    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+      ...(project?.members.map((m) => m._id) || []),
+      ...(project?.projectOwners.map((o) => o.ownerId?._id).filter(Boolean) ||
+        []),
+      req.user._id,
+    ].filter(
+      (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
+    );
 
-    const notificationPromises = notificationRecipients.map(userId =>
+    const notificationPromises = notificationRecipients.map((userId) =>
       ShowNotification.create({
         title: "Finance Document Deleted",
         type: "Document Deletion",
@@ -423,13 +625,16 @@ const deleteFinanceDocument = async (req, res) => {
             </body>
             </html>
           `,
-        };        
+        };
 
         try {
           await SendEmailUtil(emailBody);
           console.log(`Email sent to project owner: ${owner.ownerId.email}`);
         } catch (error) {
-          console.error(`Error sending email to ${owner.ownerId.email}:`, error.message);
+          console.error(
+            `Error sending email to ${owner.ownerId.email}:`,
+            error.message
+          );
         }
       }
     }
@@ -465,35 +670,44 @@ const deleteFinanceDocument = async (req, res) => {
             </body>
             </html>
           `,
-        };        
+        };
 
         try {
           await SendEmailUtil(emailBody);
           console.log(`Email sent to member: ${member.email}`);
         } catch (error) {
-          console.error(`Error sending email to ${member.email}:`, error.message);
+          console.error(
+            `Error sending email to ${member.email}:`,
+            error.message
+          );
         }
       }
     }
 
-    res.status(200).json({ message: "Document deleted and notifications sent!" });
+    res
+      .status(200)
+      .json({ message: "Document deleted and notifications sent!" });
 
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(200).json({ 
-      message: "Document deleted successfully!" 
+    res.status(200).json({
+      message: "Document deleted successfully!",
     });
-
   } catch (error) {
     await session.abortTransaction();
-    res.status(500).json({ 
-      message: "Error deleting document", 
-      error: error.message 
+    res.status(500).json({
+      message: "Error deleting document",
+      error: error.message,
     });
   } finally {
     session.endSession();
   }
 };
 
-export { uploadFinanceDocument, getFinanceDocuments, updateFinanceDocument, deleteFinanceDocument };
+export {
+  uploadFinanceDocument,
+  getFinanceDocuments,
+  updateFinanceDocument,
+  deleteFinanceDocument,
+};
