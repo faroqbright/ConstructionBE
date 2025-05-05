@@ -846,9 +846,15 @@ const getAllProjects = asyncHandler(async (req, res) => {
     let finalFilter = baseFilter;
     if (!isMain) {
       const businessAreaProjects = await editProject.find(
-        { businessAreas: businessArea },
+        {
+          $or: [
+            { businessAreas: businessArea },
+            { businessAreas: { $in: [businessArea] } }, // In case it's an array
+          ],
+        },
         { _id: 1 }
       );
+
       const businessAreaProjectIds = businessAreaProjects.map((p) => p._id);
 
       finalFilter = {
