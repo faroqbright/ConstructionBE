@@ -1,5 +1,5 @@
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
-
+import { ShowNotification } from "../models/showNotificationSchema.js";
 
 export const createOrUpdateMilestone = async (req, res) => {
   const { id: projectId } = req.params;
@@ -16,7 +16,15 @@ export const createOrUpdateMilestone = async (req, res) => {
 
       await existingMilestone.save();
 
-      
+      // Create notification for milestone update
+      await ShowNotification.create({
+        title: "Milestone Updated",
+        type: "Milestone Update",
+        description: `Milestone "${title}" has been updated`,
+        memberId: userId,
+        projectId: projectId,
+      });
+
       return res.status(200).json({
         success: true,
         message: "Milestone updated successfully",
@@ -33,6 +41,15 @@ export const createOrUpdateMilestone = async (req, res) => {
       projectId,
     });
 
+    // Create notification for new milestone
+    await ShowNotification.create({
+      title: "New Milestone Created",
+      type: "Milestone Creation",
+      description: `New milestone "${title}" has been created`,
+      memberId: userId,
+      projectId: projectId,
+    });
+
     res.status(201).json({
       success: true,
       message: "Milestone created successfully",
@@ -46,7 +63,6 @@ export const createOrUpdateMilestone = async (req, res) => {
     });
   }
 };
-
 
 export const getAllMilestones = async (req, res) => {
   const { id: projectId } = req.params;
@@ -66,7 +82,6 @@ export const getAllMilestones = async (req, res) => {
   }
 };
 
-
 export const getSingleMilestone = async (req, res) => {
   const { id } = req.params;
 
@@ -83,7 +98,6 @@ export const getSingleMilestone = async (req, res) => {
   }
 };
 
-
 export const updateMilestone = async (req, res) => {
   const { id } = req.params;
   const updates = req.body;
@@ -99,6 +113,15 @@ export const updateMilestone = async (req, res) => {
       return res.status(404).json({ success: false, message: "Milestone not found" });
     }
 
+    // Create notification for milestone update
+    await ShowNotification.create({
+      title: "Milestone Updated",
+      type: "Milestone Update",
+      description: `Milestone "${updatedMilestone.title}" has been updated`,
+      memberId: updatedMilestone.userId,
+      projectId: updatedMilestone.projectId,
+    });
+
     res.status(200).json({
       success: true,
       message: "Milestone updated successfully",
@@ -110,7 +133,6 @@ export const updateMilestone = async (req, res) => {
   }
 };
 
-
 export const deleteMilestone = async (req, res) => {
   const { id } = req.params;
 
@@ -119,6 +141,15 @@ export const deleteMilestone = async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ success: false, message: "Milestone not found" });
     }
+
+    // Create notification for milestone deletion
+    await ShowNotification.create({
+      title: "Milestone Deleted",
+      type: "Milestone Deletion",
+      description: `Milestone "${deleted.title}" has been deleted`,
+      memberId: deleted.userId,
+      projectId: deleted.projectId,
+    });
 
     res.status(200).json({
       success: true,
