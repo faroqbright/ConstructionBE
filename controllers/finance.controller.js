@@ -385,8 +385,11 @@ const updateFinanceDocument = async (req, res) => {
   try {
     const { id } = req.params;
     const updates = {};
-    let notify = false;
-    const executionChanges = [];
+    let hasChanges = false;
+    const executionChanges = {
+      financial: null,
+      physical: null,
+    };
 
     // Fetch the existing finance document
     const existingDocument =
@@ -396,43 +399,47 @@ const updateFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Handle financial execution
+    // Handle financial execution independently
     if ("financialExecution" in req.body) {
       const newFinancial = parseFloat(req.body.financialExecution);
       if (!isNaN(newFinancial)) {
         if (newFinancial !== existingDocument.financialExecution) {
           updates.financialExecution = newFinancial;
-          executionChanges.push(
-            `Financial execution changed from ${existingDocument.financialExecution}% to ${newFinancial}%`
-          );
-          notify = true;
+          executionChanges.financial = {
+            old: existingDocument.financialExecution,
+            new: newFinancial,
+          };
+          hasChanges = true;
         }
       } else if (req.body.financialExecution === null) {
         updates.financialExecution = null;
-        executionChanges.push(
-          `Financial execution removed (was ${existingDocument.financialExecution}%)`
-        );
-        notify = true;
+        executionChanges.financial = {
+          old: existingDocument.financialExecution,
+          new: null,
+        };
+        hasChanges = true;
       }
     }
 
-    // Handle physical execution
+    // Handle physical execution independently
     if ("physicalExecution" in req.body) {
       const newPhysical = parseFloat(req.body.physicalExecution);
       if (!isNaN(newPhysical)) {
         if (newPhysical !== existingDocument.physicalExecution) {
           updates.physicalExecution = newPhysical;
-          executionChanges.push(
-            `Physical execution changed from ${existingDocument.physicalExecution}% to ${newPhysical}%`
-          );
-          notify = true;
+          executionChanges.physical = {
+            old: existingDocument.physicalExecution,
+            new: newPhysical,
+          };
+          hasChanges = true;
         }
       } else if (req.body.physicalExecution === null) {
         updates.physicalExecution = null;
-        executionChanges.push(
-          `Physical execution removed (was ${existingDocument.physicalExecution}%)`
-        );
-        notify = true;
+        executionChanges.physical = {
+          old: existingDocument.physicalExecution,
+          new: null,
+        };
+        hasChanges = true;
       }
     }
 
@@ -442,7 +449,7 @@ const updateFinanceDocument = async (req, res) => {
       req.body.reference !== existingDocument.reference
     ) {
       updates.reference = req.body.reference;
-      notify = true;
+      hasChanges = true;
     }
 
     if (
@@ -450,10 +457,10 @@ const updateFinanceDocument = async (req, res) => {
       req.body.fileName !== existingDocument.fileName
     ) {
       updates.fileName = req.body.fileName;
-      notify = true;
+      hasChanges = true;
     }
 
-    if (!notify) {
+    if (!hasChanges) {
       await session.abortTransaction();
       return res.status(400).json({ message: "No changes detected" });
     }
@@ -492,10 +499,36 @@ const updateFinanceDocument = async (req, res) => {
         .json({ message: "Project not found for this document" });
     }
 
-    // Prepare notification content
-    let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
-    if (executionChanges.length > 0) {
-      notificationDescription += ` Changes: ${executionChanges.join(", ")}`;
+    // Prepare separate notification descriptions
+    const notificationDescriptions = [];
+    const notificationTitles = [];
+
+    if (executionChanges.financial !== null) {
+      const financialMsg =
+        executionChanges.financial.new === null
+          ? `Financial execution removed (was ${executionChanges.financial.old}%)`
+          : `Financial execution changed from ${executionChanges.financial.old}% to ${executionChanges.financial.new}%`;
+
+      notificationDescriptions.push(financialMsg);
+      notificationTitles.push("Financial Execution Updated");
+    }
+
+    if (executionChanges.physical !== null) {
+      const physicalMsg =
+        executionChanges.physical.new === null
+          ? `Physical execution removed (was ${executionChanges.physical.old}%)`
+          : `Physical execution changed from ${executionChanges.physical.old}% to ${executionChanges.physical.new}%`;
+
+      notificationDescriptions.push(physicalMsg);
+      notificationTitles.push("Physical Execution Updated");
+    }
+
+    // For non-execution changes
+    if (notificationDescriptions.length === 0) {
+      notificationDescriptions.push(
+        `Document "${updatedFinanceDocument.fileName}" was updated`
+      );
+      notificationTitles.push("Document Updated");
     }
 
     // Collect unique user IDs (project members, owners, and editor)
@@ -515,28 +548,63 @@ const updateFinanceDocument = async (req, res) => {
       recipients.add(req.user._id.toString());
     }
 
-    // Send notifications
-    const notificationPromises = Array.from(recipients).map((userId) =>
-      ShowNotification.create(
-        [
-          {
-            title: "Finance Document Updated",
-            type: "Document Update",
-            description: notificationDescription,
-            memberId: userId,
-            projectId: project._id,
-            documentId: updatedFinanceDocument._id,
-          },
-        ],
-        { session }
-      )
-    );
+    // Send separate notifications for each change type
+    const notificationPromises = [];
+
+    Array.from(recipients).forEach((userId) => {
+      notificationTitles.forEach((title, index) => {
+        notificationPromises.push(
+          ShowNotification.create(
+            [
+              {
+                title: title,
+                type: "Document Update",
+                description: notificationDescriptions[index],
+                memberId: userId,
+                projectId: project._id,
+                documentId: updatedFinanceDocument._id,
+              },
+            ],
+            { session }
+          )
+        );
+      });
+    });
 
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
+    // Prepare response with separate messages
+    const responseMessages = [];
+    if (executionChanges.financial !== null) {
+      responseMessages.push({
+        type: "financial",
+        message:
+          executionChanges.financial.new === null
+            ? "Financial execution cleared successfully"
+            : "Financial execution updated successfully",
+      });
+    }
+
+    if (executionChanges.physical !== null) {
+      responseMessages.push({
+        type: "physical",
+        message:
+          executionChanges.physical.new === null
+            ? "Physical execution cleared successfully"
+            : "Physical execution updated successfully",
+      });
+    }
+
+    if (responseMessages.length === 0) {
+      responseMessages.push({
+        type: "general",
+        message: "Document updated successfully",
+      });
+    }
+
     return res.status(200).json({
-      message: "Document updated successfully",
+      messages: responseMessages,
       document: updatedFinanceDocument,
     });
   } catch (error) {
