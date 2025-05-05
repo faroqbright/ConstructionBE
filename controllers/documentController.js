@@ -71,8 +71,35 @@ const uploadFile = async (req, res) => {
               from: process.env.EMAIL_USER,
               to: owner.ownerId.email,
               subject: `New File Uploaded${req.body.projName ? ` for Project: ${req.body.projName}` : ''}`,
-              text: `Hello ${owner.ownerId.ownerName},\n\nA new file named "${req.file.originalname}" has been uploaded${req.body.projName ? ` for the project "${req.body.projName}"` : ''}.\n\nBest regards,\nYour Team`,
-            };
+              html: `
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                  <meta charset="UTF-8">
+                  <title>New Document Notification</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                    <tr>
+                      <td style="padding: 20px; text-align: center;">
+                        <h2 style="color: #333;">New Document Available</h2>
+                        <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.ownerName}</strong>,</p>
+                        <p style="font-size: 16px; color: #555;">A new document titled <strong>"${req.file.originalname}"</strong> has been uploaded${req.body.projName ? ` to the project <strong>"${req.body.projName}"</strong>` : ''}.</p>
+                        <p style="font-size: 16px; color: #555;">Click the button below to view the document:</p>
+          
+                        <a href="${process.env.DOCUMENT_BASE_URL}/${req.file.filename}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                          View Document
+                        </a>
+          
+                        <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p>
+                        <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+              `,
+            };          
 
             try {
               await SendEmailUtil(emailBody);
@@ -93,8 +120,35 @@ const uploadFile = async (req, res) => {
               from: process.env.EMAIL_USER,
               to: owner.ownerId.email,
               subject: `New File Uploaded for Project: ${req.body.projName}`,
-              text: `Hello ${owner.ownerId.ownerName},\n\nA new file named "${req.file.originalname}" has been uploaded for the project "${req.body.projName}".\n\nBest regards,\nYour Team`,
-            };
+              html: `
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                  <meta charset="UTF-8">
+                  <title>New Document Notification</title>
+                </head>
+                <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+                  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                    <tr>
+                      <td style="padding: 20px; text-align: center;">
+                        <h2 style="color: #333;">New Document Available</h2>
+                        <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.ownerName}</strong>,</p>
+                        <p style="font-size: 16px; color: #555;">A new document titled <strong>"${req.file.originalname}"</strong> has been uploaded for the project <strong>"${req.body.projName}"</strong>.</p>
+                        <p style="font-size: 16px; color: #555;">Click the button below to view the document:</p>
+            
+                        <a href="${process.env.DOCUMENT_BASE_URL}/${req.file.filename}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                          View Document
+                        </a>
+            
+                        <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p>
+                        <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                      </td>
+                    </tr>
+                  </table>
+                </body>
+                </html>
+              `,
+            };            
 
             try {
               await SendEmailUtil(emailBody);

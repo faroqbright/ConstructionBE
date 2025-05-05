@@ -95,8 +95,31 @@ const uploadFinanceDocument = async (req, res) => {
           from: process.env.EMAIL_USER,
           to: owner.ownerId.email,
           subject: `New File Uploaded for Project: ${projName}`,
-          text: `Hello ${owner.ownerId.userName},\n\nA new file named "${finalFileName}" has been uploaded for the project "${projName}".\n\nBest regards,\nYour Team`,
-        };
+          html: `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>New File Notification</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h2 style="color: #333;">New File Uploaded</h2>
+                    <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName}</strong>,</p>
+                    <p style="font-size: 16px; color: #555;">A new file named <strong>"${finalFileName}"</strong> has been uploaded for the project <strong>"${projName}"</strong>.</p>
+                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to view or download the file.</p>
+        
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
+                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
+        };        
 
         // Send the email
         try {
@@ -312,8 +335,31 @@ const updateFinanceDocument = async (req, res) => {
           from: process.env.EMAIL_USER,
           to: owner.ownerId.email,
           subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
-        };
+          html: `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>Finance Document Update</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h2 style="color: #333;">Finance Document Updated</h2>
+                    <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName || "Project Owner"}</strong>,</p>
+                    <p style="font-size: 16px; color: #555;">A finance document for the project <strong>"${existingDocument.projName}"</strong> has been updated.</p>
+                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to view the latest version.</p>
+        
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
+                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
+        };        
 
         try {
           await SendEmailUtil(emailBody);
@@ -330,9 +376,32 @@ const updateFinanceDocument = async (req, res) => {
           from: process.env.EMAIL_USER,
           to: member.email,
           subject: `Finance Document Updated for Project: ${existingDocument.projName}`,
-          text: `Hello ${member.userName || "Project Member"},\n\nA finance document for the project "${existingDocument.projName}" has been updated.\n\nBest regards,\nYour Team`,
+          html: `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>Finance Document Update</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h2 style="color: #333;">Finance Document Updated</h2>
+                    <p style="font-size: 16px; color: #555;">Dear <strong>${member.userName || "Project Member"}</strong>,</p>
+                    <p style="font-size: 16px; color: #555;">A finance document for the project <strong>"${existingDocument.projName}"</strong> has been updated.</p>
+                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to review the updated document.</p>
+        
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
+                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
         };
-
+        
         try {
           await SendEmailUtil(emailBody);
           console.log(`Email sent to member: ${member.email}`);
@@ -429,8 +498,31 @@ const deleteFinanceDocument = async (req, res) => {
           from: process.env.EMAIL_USER,
           to: owner.ownerId.email,
           subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
-          text: `Hello ${owner.ownerId.userName || "Project Owner"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
-        };
+          html: `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>Finance Document Deleted</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h2 style="color: #d9534f;">Finance Document Deleted</h2>
+                    <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName || "Project Owner"}</strong>,</p>
+                    <p style="font-size: 16px; color: #555;">A finance document associated with the project <strong>"${financeDocument.projName}"</strong> has been deleted.</p>
+                    <p style="font-size: 16px; color: #555;">If this was not expected, please contact the team for clarification.</p>
+        
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification. Do not reply to this email.</p>
+                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
+        };        
 
         try {
           await SendEmailUtil(emailBody);
@@ -448,8 +540,31 @@ const deleteFinanceDocument = async (req, res) => {
           from: process.env.EMAIL_USER,
           to: member.email,
           subject: `Finance Document Deleted for Project: ${financeDocument.projName}`,
-          text: `Hello ${member.userName || "Project Member"},\n\nA finance document associated with the project "${financeDocument.projName}" has been deleted.\n\nBest regards,\nYour Team`,
-        };
+          html: `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>Finance Document Deleted</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: center;">
+                    <h2 style="color: #d9534f;">Finance Document Deleted</h2>
+                    <p style="font-size: 16px; color: #555;">Dear <strong>${member.userName || "Project Member"}</strong>,</p>
+                    <p style="font-size: 16px; color: #555;">A finance document associated with the project <strong>"${financeDocument.projName}"</strong> has been deleted.</p>
+                    <p style="font-size: 16px; color: #555;">Please log in to view the latest changes or contact the team if you have any questions.</p>
+        
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification. Do not reply to this email.</p>
+                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
+          `,
+        };        
 
         try {
           await SendEmailUtil(emailBody);

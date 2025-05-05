@@ -766,18 +766,33 @@ const editProjects = asyncHandler(async (req, res) => {
           to: Array.from(emailRecipients).join(","),
           subject: `Project Update: ${existingProject.projectName}`,
           html: `
-            <h2>Project Update Notification</h2>
-            <p>The following changes were made to project <strong>${existingProject.projectName}</strong>:</p>
-            <ul>
-              ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
-            </ul>
-            <p><strong>Updated by:</strong> ${performingUser.userName}</p>
-            <p>Please log in to view the complete details.</p>
-            <p style="color: #888; font-size: 0.8em;">
-              This is an automated notification. Please do not reply to this email.
-            </p>
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+              <meta charset="UTF-8">
+              <title>Project Update Notification</title>
+            </head>
+            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                <tr>
+                  <td style="padding: 20px; text-align: left;">
+                    <h2 style="color: #333;">Project Update Notification</h2>
+                    <p style="font-size: 16px; color: #555;">The following changes were made to project <strong>${existingProject.projectName}</strong>:</p>
+                    <ul style="font-size: 16px; color: #555; padding-left: 20px;">
+                      ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
+                    </ul>
+                    <p style="font-size: 16px; color: #555;"><strong>Updated by:</strong> ${performingUser.userName}</p>
+                    <p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p>
+                    <p style="font-size: 14px; color: #999; margin-top: 30px;">
+                      This is an automated notification. Please do not reply to this email.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </body>
+            </html>
           `,
-        };
+        };        
 
         try {
           await SendEmailUtil(emailBody);
