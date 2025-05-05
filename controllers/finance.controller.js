@@ -384,32 +384,30 @@ const updateFinanceDocument = async (req, res) => {
 
   try {
     const { id } = req.params;
-    let updates = {};
+    const updates = {};
     let notify = false;
-    let executionChanges = []; // Track which execution values changed
+    const executionChanges = [];
 
-    // Fetch the existing document
+    // Fetch the existing finance document
     const existingDocument =
       await FinanceDocument.findById(id).session(session);
     if (!existingDocument) {
       await session.abortTransaction();
-      session.endSession();
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Handle financial execution change (only if specifically provided)
+    // Handle financial execution
     if ("financialExecution" in req.body) {
-      const financialExec = parseFloat(req.body.financialExecution);
-      if (!isNaN(financialExec)) {
-        if (financialExec !== existingDocument.financialExecution) {
-          updates.financialExecution = financialExec;
+      const newFinancial = parseFloat(req.body.financialExecution);
+      if (!isNaN(newFinancial)) {
+        if (newFinancial !== existingDocument.financialExecution) {
+          updates.financialExecution = newFinancial;
           executionChanges.push(
-            `Financial execution changed from ${existingDocument.financialExecution}% to ${financialExec}%`
+            `Financial execution changed from ${existingDocument.financialExecution}% to ${newFinancial}%`
           );
           notify = true;
         }
       } else if (req.body.financialExecution === null) {
-        // Handle null case if needed
         updates.financialExecution = null;
         executionChanges.push(
           `Financial execution removed (was ${existingDocument.financialExecution}%)`
@@ -418,19 +416,18 @@ const updateFinanceDocument = async (req, res) => {
       }
     }
 
-    // Handle physical execution change (only if specifically provided)
+    // Handle physical execution
     if ("physicalExecution" in req.body) {
-      const physicalExec = parseFloat(req.body.physicalExecution);
-      if (!isNaN(physicalExec)) {
-        if (physicalExec !== existingDocument.physicalExecution) {
-          updates.physicalExecution = physicalExec;
+      const newPhysical = parseFloat(req.body.physicalExecution);
+      if (!isNaN(newPhysical)) {
+        if (newPhysical !== existingDocument.physicalExecution) {
+          updates.physicalExecution = newPhysical;
           executionChanges.push(
-            `Physical execution changed from ${existingDocument.physicalExecution}% to ${physicalExec}%`
+            `Physical execution changed from ${existingDocument.physicalExecution}% to ${newPhysical}%`
           );
           notify = true;
         }
       } else if (req.body.physicalExecution === null) {
-        // Handle null case if needed
         updates.physicalExecution = null;
         executionChanges.push(
           `Physical execution removed (was ${existingDocument.physicalExecution}%)`
@@ -439,42 +436,49 @@ const updateFinanceDocument = async (req, res) => {
       }
     }
 
-    // Handle other fields (reference and fileName)
-    if (req.body.reference !== undefined) {
+    // Reference and File Name
+    if (
+      req.body.reference !== undefined &&
+      req.body.reference !== existingDocument.reference
+    ) {
       updates.reference = req.body.reference;
       notify = true;
     }
 
-    if (req.body.fileName !== undefined) {
+    if (
+      req.body.fileName !== undefined &&
+      req.body.fileName !== existingDocument.fileName
+    ) {
       updates.fileName = req.body.fileName;
       notify = true;
     }
 
     if (!notify) {
       await session.abortTransaction();
-      session.endSession();
       return res.status(400).json({ message: "No changes detected" });
     }
 
-    // Add update timestamp
     updates.updatedAt = new Date();
 
     // Perform the update
     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
       id,
       updates,
-      { new: true, runValidators: true, session }
+      {
+        new: true,
+        runValidators: true,
+        session,
+      }
     );
 
     if (!updatedFinanceDocument) {
       await session.abortTransaction();
-      session.endSession();
       return res
         .status(404)
         .json({ message: "Document not found during update" });
     }
 
-    // Get project details for notifications
+    // Fetch related project
     const project = await editProject
       .findOne({ projectName: existingDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
@@ -483,31 +487,36 @@ const updateFinanceDocument = async (req, res) => {
 
     if (!project) {
       await session.abortTransaction();
-      session.endSession();
       return res
         .status(404)
         .json({ message: "Project not found for this document" });
     }
 
-    // Prepare notification description with execution changes
+    // Prepare notification content
     let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
-
     if (executionChanges.length > 0) {
       notificationDescription += ` Changes: ${executionChanges.join(", ")}`;
     }
 
-    // Prepare notifications for all relevant users
-    const notificationRecipients = [
-      ...(project.members.map((m) => m._id) || []),
-      ...(project.projectOwners.map((o) => o.ownerId?._id).filter(Boolean) ||
-        []),
-      req.user._id,
-    ].filter(
-      (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
-    );
+    // Collect unique user IDs (project members, owners, and editor)
+    const recipients = new Set();
 
-    // Create notifications in bulk
-    const notificationPromises = notificationRecipients.map((userId) =>
+    if (Array.isArray(project.members)) {
+      project.members.forEach((m) => recipients.add(m._id.toString()));
+    }
+
+    if (Array.isArray(project.projectOwners)) {
+      project.projectOwners.forEach((o) => {
+        if (o.ownerId) recipients.add(o.ownerId._id.toString());
+      });
+    }
+
+    if (req.user && req.user._id) {
+      recipients.add(req.user._id.toString());
+    }
+
+    // Send notifications
+    const notificationPromises = Array.from(recipients).map((userId) =>
       ShowNotification.create(
         [
           {
@@ -526,17 +535,16 @@ const updateFinanceDocument = async (req, res) => {
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Document updated successfully",
       document: updatedFinanceDocument,
     });
   } catch (error) {
-    console.error("Error updating finance document:", error);
+    console.error("Update error:", error);
     await session.abortTransaction();
-    res.status(500).json({
-      message: "Error updating document",
-      error: error.message,
-    });
+    return res
+      .status(500)
+      .json({ message: "Error updating document", error: error.message });
   } finally {
     session.endSession();
   }
