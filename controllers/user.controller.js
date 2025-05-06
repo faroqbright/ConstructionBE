@@ -106,36 +106,37 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const login = asyncHandler(async (req, res) => {
   try {
-    const { email, password, fcmDeviceToken } = req.body;
+    const { email, password, fcmDeviceToken } = req.body
 
-    if (!email) throw new ApiError(400, "email is required");
+    if (!email) throw new ApiError(400, "Email is required")
 
-    const user = await User.findOne({ email }).populate("role");
-    if (!user) throw new ApiError(404, "User does not exist");
+    const user = await User.findOne({ email }).populate("role")
+    if (!user) throw new ApiError(404, "User does not exist")
 
-    const isPasswordValid = await user.isPasswordCorrect(password);
-    if (!isPasswordValid) throw new ApiError(401, "Invalid user credentials");
+    const isPasswordValid = await user.isPasswordCorrect(password)
+    if (!isPasswordValid) throw new ApiError(401, "Invalid user credentials")
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
 
-    user.fcmDeviceToken = fcmDeviceToken;
-    await user.save();
+    // Update FCM token if provided
+    if (fcmDeviceToken) {
+      user.fcmDeviceToken = fcmDeviceToken
+      await user.save()
+    }
 
-    // Initialize assignedBusinessAreas as empty
-    let assignedBusinessAreas = [];
-
-    // Only fetch and assign if user has a role with an _id
+    // Fetch assigned business areas
+    let assignedBusinessAreas = []
     if (user.role && user.role._id) {
       assignedBusinessAreas = await BusinessArea.find({
         role: user.role._id,
-      }).select("businessArea");
+      }).select("businessArea")
 
-      if (Array.isArray(assignedBusinessAreas) && assignedBusinessAreas.length > 0) {
-        const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
-
-        if (!user.businessArea && firstBusinessArea) {
-          user.businessArea = firstBusinessArea;
-          await user.save();
+      // If user doesn't have a business area set and there are assigned areas, set the first one
+      if (!user.businessArea && assignedBusinessAreas.length > 0) {
+        const firstBusinessArea = assignedBusinessAreas[0]?.businessArea
+        if (firstBusinessArea) {
+          user.businessArea = firstBusinessArea
+          await user.save()
         }
       }
     }
@@ -143,11 +144,9 @@ const login = asyncHandler(async (req, res) => {
     const options = {
       httpOnly: true,
       secure: true,
-    };
+    }
 
-    const loggedInUser = await User.findById(user._id)
-      .select("-password -refreshToken")
-      .populate("role");
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken").populate("role")
 
     return res
       .status(200)
@@ -162,14 +161,14 @@ const login = asyncHandler(async (req, res) => {
             accessToken,
             refreshToken,
           },
-          "User logged in successfully"
-        )
-      );
+          "User logged in successfully",
+        ),
+      )
   } catch (error) {
-    console.error("Login Error:", error);
-    throw new ApiError(500, error.message || "Internal server error");
+    console.error("Login Error:", error)
+    throw new ApiError(500, error.message || "Internal server error")
   }
-});
+})
 
 const forgetPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
