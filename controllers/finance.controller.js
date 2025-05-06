@@ -1,9 +1,55 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import FinanceDocument from "../models/finance.model.js";
 import { editProject } from "../models/project.model.js";
-import  {SendEmailUtil} from "../utils/emailsender.js"
+import { SendEmailUtil } from "../utils/emailsender.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
+
+// const uploadFinanceDocument = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//         return res.status(400).json({ message: "No file uploaded" });
+//     }
+
+//     const { projName, user, financialExecution, physicalExecution, fileName, reference } = req.body;
+
+//     if (!fileName) {
+//       return res.status(400).json({ message: "Filename is required" });
+//     }
+
+//     if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
+//       return res.status(400).json({ message: "Execution values must be between 0 and 100" });
+//     }
+
+//     const projectExists = await editProject.findOne({ projectName: projName });
+//     if (!projectExists) {
+//       return res.status(404).json({ message: "Project not found" });
+//     }
+
+//     const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
+
+//     const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
+//     if (!fileUrl) {
+//       return res.status(500).json({ message: "File upload failed" });
+//     }
+
+//     const financeDocument = new FinanceDocument({
+//       projName,
+//       fileName: finalFileName,
+//       fileUrl,
+//       user,
+//       financialExecution,
+//       physicalExecution,
+//       reference,
+//       uploadedAt: new Date(), // ✅ Ensure timestamp is stored
+//     });
+
+//     await financeDocument.save();
+//     res.status(201).json({ message: "File uploaded successfully!", financeDocument });
+//   } catch (error) {
+//     res.status(500).json({ message: "Error uploading file", error: error.message });
+//   }
+// };
 
 
 const uploadFinanceDocument = async (req, res) => {
@@ -135,7 +181,6 @@ const uploadFinanceDocument = async (req, res) => {
     session.endSession();
   }
 };
-
 
 const getFinanceDocuments = async (req, res) => {
   try {
@@ -402,6 +447,137 @@ const getFinanceDocuments = async (req, res) => {
 // };
 
 
+//     const { id } = req.params;
+//     let updates = {};
+//     let notify = false;
+//     let executionChanges = []; // Track which execution values changed
+
+//     // Fetch the existing document
+//     const existingDocument = await FinanceDocument.findById(id).session(session);
+//     if (!existingDocument) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Document not found" });
+//     }
+
+//     // Check for financial execution change
+//     if (req.body.financialExecution !== undefined && req.body.financialExecution !== null) {
+//       const financialExec = parseFloat(req.body.financialExecution);
+//       if (!isNaN(financialExec))    {
+//         if (financialExec !== existingDocument.financialExecution) {
+//           updates.financialExecution = financialExec;
+//           executionChanges.push(`Financial execution changed from ${existingDocument.financialExecution}% to ${financialExec}%`);
+//           notify = true;
+//         }
+//       }
+//     }
+
+//     // Check for physical execution change
+//     if (req.body.physicalExecution !== undefined && req.body.physicalExecution !== null) {
+//       const physicalExec = parseFloat(req.body.physicalExecution);
+//       if (!isNaN(physicalExec)) {
+//         if (physicalExec !== existingDocument.physicalExecution) {
+//           updates.physicalExecution = physicalExec;
+//           executionChanges.push(`Physical execution changed from ${existingDocument.physicalExecution}% to ${physicalExec}%`);
+//           notify = true;
+//         }
+//       }
+//     }
+
+//     // Handle other fields
+//     if (req.body.reference !== undefined) {
+//       updates.reference = req.body.reference;
+//       notify = true;
+//     }
+
+//     if (req.body.fileName !== undefined) {
+//       updates.fileName = req.body.fileName;
+//       notify = true;
+//     }
+
+//     if (!notify) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(400).json({ message: "No changes detected" });
+//     }
+
+//     // Add update timestamp
+//     updates.updatedAt = new Date();
+
+//     // Perform the update
+//     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
+//       id,
+//       updates,
+//       { new: true, runValidators: true, session }
+//     );
+
+//     if (!updatedFinanceDocument) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Document not found during update" });
+//     }
+
+//     // Get project details for notifications
+//     const project = await editProject.findOne({ projectName: existingDocument.projName })
+//       .populate("projectOwners.ownerId", "email userName")
+//       .populate("members", "email userName")
+//       .session(session);
+
+//     if (!project) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(404).json({ message: "Project not found for this document" });
+//     }
+
+//     // Prepare notification description with execution changes
+//     let notificationDescription = `Document "${updatedFinanceDocument.fileName}" in project "${project.projectName}" was updated.`;
+
+//     if (executionChanges.length > 0) {
+//       notificationDescription += ` Changes: ${executionChanges.join(', ')}`;
+//     }
+
+//     // Prepare notifications for all relevant users
+//     const notificationRecipients = [
+//       ...(project.members.map(m => m._id) || []),
+//       ...(project.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
+//       req.user._id
+//     ].filter(
+//       (v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i
+//     );
+
+//     // Create notifications in bulk
+//     const notificationPromises = notificationRecipients.map(userId =>
+//       ShowNotification.create([{
+//         title: "Finance Document Updated",
+//         type: "Document Update",
+//         description: notificationDescription,
+//         memberId: userId,
+//         projectId: project._id,
+//         documentId: updatedFinanceDocument._id
+//       }], { session })
+//     );
+
+//     await Promise.all(notificationPromises);
+//     await session.commitTransaction();
+
+//     res.status(200).json({
+//       message: "Document updated successfully",
+//       document: updatedFinanceDocument
+//     });
+
+//   } catch (error) {
+//     console.error("Error updating finance document:", error);
+//     await session.abortTransaction();
+//     res.status(500).json({
+//       message: "Error updating document",
+//       error: error.message
+//     });
+//   } finally {
+//     session.endSession();
+//   }
+// };
+
+
 
 const updateFinanceDocument = async (req, res) => {
   try {
@@ -505,11 +681,6 @@ const updateFinanceDocument = async (req, res) => {
     res.status(500).json({ message: "Error updating document", error: error.message });
   }
 };
-
-
-
-
-
 
 
 
@@ -655,4 +826,9 @@ const deleteFinanceDocument = async (req, res) => {
   }
 };
 
-export { uploadFinanceDocument, getFinanceDocuments, updateFinanceDocument, deleteFinanceDocument };
+export {
+  uploadFinanceDocument,
+  getFinanceDocuments,
+  updateFinanceDocument,
+  deleteFinanceDocument,
+};

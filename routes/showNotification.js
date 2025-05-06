@@ -2,33 +2,30 @@ import { Router } from "express";
 import {
     createNotification,
     getNotifications,
-    getNotificationById,      // <-- Import the new function
-    updateNotificationStatus, // <-- Import the new function
+    getNotificationById,      
+    updateNotificationStatus,
+    clearAllNotifications, 
 } from "../controllers/showNotificationController.js";
-import { verifyJWT } from "../middlewares/auth.middleware.js"; // Assuming you have this middleware
+import { verifyJWT } from "../middlewares/auth.middleware.js"; 
 
 const router = Router();
 
-// Apply authentication middleware to all notification routes
-// Ensures that only logged-in users can access these endpoints
 router.use(verifyJWT);
 
-// --- Notification Routes ---
-
-// Routes for the collection (/api/v1/notifications)
 router.route("/")
-    // POST /api/v1/notifications - Create a new notification
+    // POST /api/v1/shownotifications - Create a new notification
     .post(createNotification)
-    // GET /api/v1/notifications - Get notifications (filtered for the user)
+    // GET /api/v1/shownotifications - Get notifications (filtered for the user)
     .get(getNotifications);
 
-
-// Routes for a specific notification by ID (/api/v1/notifications/:id)
 router.route("/:id")
-    // GET /api/v1/notifications/:id - Get a specific notification by its ID
+    // GET /api/v1/shownotifications/:id - Get a specific notification by its ID
     .get(getNotificationById)
-    // PATCH /api/v1/notifications/:id - Update the isRead status of a notification
-    .patch(updateNotificationStatus);
+    // PATCH /api/v1/shownotifications/:id - Update the isRead status of a notification
+    .patch(updateNotificationStatus)
+router.route("/:memberId")
+    // Delete /api/v1/shownotifications/:id - Delete the notification of the user in the DB.
+    .delete(clearAllNotifications)
 
 
 export default router;

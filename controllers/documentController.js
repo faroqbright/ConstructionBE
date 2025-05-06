@@ -39,7 +39,8 @@ const uploadFile = async (req, res) => {
 
     let project;
     if (req.body.projName) {
-      project = await editProject.findOne({ projectName: req.body.projName })
+      project = await editProject
+        .findOne({ projectName: req.body.projName })
         .populate("projectOwners.ownerId", "email ownerName")
         .populate("members", "email userName")
         .session(session);
@@ -47,16 +48,18 @@ const uploadFile = async (req, res) => {
       if (project) {
         // Create notifications for all relevant users
         const notificationRecipients = [
-          ...project.members.map(m => m._id),
-          ...project.projectOwners.map(o => o.ownerId?._id).filter(Boolean),
-          req.user._id
-        ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+          ...project.members.map((m) => m._id),
+          ...project.projectOwners.map((o) => o.ownerId?._id).filter(Boolean),
+          req.user._id,
+        ].filter(
+          (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
+        );
 
-        const notificationPromises = notificationRecipients.map(userId => 
+        const notificationPromises = notificationRecipients.map((userId) =>
           ShowNotification.create({
             title: "Document Uploaded",
             type: "Document Upload",
-            description: `New document "${req.file.originalname}" was uploaded${req.body.projName ? ` for project "${req.body.projName}"` : ''}`,
+            description: `New document "${req.file.originalname}" was uploaded${req.body.projName ? ` for project "${req.body.projName}"` : ""}`,
             memberId: userId,
             projectId: project?._id,
           })
@@ -70,7 +73,7 @@ const uploadFile = async (req, res) => {
             const emailBody = {
               from: process.env.EMAIL_USER,
               to: owner.ownerId.email,
-              subject: `New File Uploaded${req.body.projName ? ` for Project: ${req.body.projName}` : ''}`,
+              subject: `New File Uploaded${req.body.projName ? ` for Project: ${req.body.projName}` : ""}`,
               html: `
                 <!DOCTYPE html>
                 <html lang="en">
@@ -84,7 +87,7 @@ const uploadFile = async (req, res) => {
                       <td style="padding: 20px; text-align: center;">
                         <h2 style="color: #333;">New Document Available</h2>
                         <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.ownerName}</strong>,</p>
-                        <p style="font-size: 16px; color: #555;">A new document titled <strong>"${req.file.originalname}"</strong> has been uploaded${req.body.projName ? ` to the project <strong>"${req.body.projName}"</strong>` : ''}.</p>
+                        <p style="font-size: 16px; color: #555;">A new document titled <strong>"${req.file.originalname}"</strong> has been uploaded${req.body.projName ? ` to the project <strong>"${req.body.projName}"</strong>` : ""}.</p>
                         <p style="font-size: 16px; color: #555;">Click the button below to view the document:</p>
           
                         <a href="${process.env.DOCUMENT_BASE_URL}/${req.file.filename}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">
@@ -99,7 +102,7 @@ const uploadFile = async (req, res) => {
                 </body>
                 </html>
               `,
-            };          
+            };
 
             try {
               await SendEmailUtil(emailBody);
@@ -111,7 +114,9 @@ const uploadFile = async (req, res) => {
       }
     }
     if (req.body.projName) {
-      const projectExists = await editProject.findOne({ projectName: req.body.projName }).populate("projectOwners.ownerId", "email ownerName");
+      const projectExists = await editProject
+        .findOne({ projectName: req.body.projName })
+        .populate("projectOwners.ownerId", "email ownerName");
 
       if (projectExists && projectExists.projectOwners.length > 0) {
         for (const owner of projectExists.projectOwners) {
@@ -148,7 +153,7 @@ const uploadFile = async (req, res) => {
                 </body>
                 </html>
               `,
-            };            
+            };
 
             try {
               await SendEmailUtil(emailBody);
@@ -168,7 +173,9 @@ const uploadFile = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Error uploading file:", error.message);
-    res.status(500).json({ message: "Error uploading file", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Error uploading file", error: error.message });
   } finally {
     session.endSession();
   }
@@ -178,11 +185,18 @@ const getDocuments = async (req, res) => {
   try {
     const { isMain, _id: loggedInUserId } = req.user;
 
-    const assignedProjects = await editProject.find({
-      ...(!isMain
-        ? { $or: [{ members: loggedInUserId }, { "projectOwners.ownerId": loggedInUserId }] }
-        : {}),
-    }).sort({ createdAt: -1 });
+    const assignedProjects = await editProject
+      .find({
+        ...(!isMain
+          ? {
+              $or: [
+                { members: loggedInUserId },
+                { "projectOwners.ownerId": loggedInUserId },
+              ],
+            }
+          : {}),
+      })
+      .sort({ createdAt: -1 });
 
     if (assignedProjects.length === 0) {
       return res.status(200).json({ message: "No assigned projects found" });
@@ -193,8 +207,9 @@ const getDocuments = async (req, res) => {
       return acc;
     }, {});
 
-    const documents = await Document.find({ projName: { $in: Object.keys(projectMap) } })
-      .sort({ uploadedAt: -1 });
+    const documents = await Document.find({
+      projName: { $in: Object.keys(projectMap) },
+    }).sort({ uploadedAt: -1 });
 
     const documentsWithBanner = documents.map((doc) => ({
       ...doc.toObject(),
@@ -203,7 +218,9 @@ const getDocuments = async (req, res) => {
 
     res.status(200).json(documentsWithBanner);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch documents", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch documents", error: error.message });
   }
 };
 
@@ -217,31 +234,36 @@ const updateStatus = async (req, res) => {
 
     const document = await Document.findById(id).session(session);
     if (!document) {
+      await session.abortTransaction();
       return res.status(404).json({ message: "Document not found" });
     }
 
-    const updatedDocument = await Document.findByIdAndUpdate(
-      id, 
-      updates, 
-      { new: true, session }
-    );
+    const updatedDocument = await Document.findByIdAndUpdate(id, updates, {
+      new: true,
+      session,
+    });
 
-    // Create notification for status update
+    // Step 1: Get related project if it exists
     let project;
     if (document.projName) {
-      project = await editProject.findOne({ projectName: document.projName })
+      project = await editProject
+        .findOne({ projectName: document.projName })
         .populate("projectOwners.ownerId", "email ownerName")
         .populate("members", "email userName")
         .session(session);
     }
 
+    // Step 2: Prepare notifications
     const notificationRecipients = [
-      ...(project?.members.map(m => m._id) || []),
-      ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
-      req.user._id
-    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+      ...(project?.members.map((m) => m._id) || []),
+      ...(project?.projectOwners.map((o) => o.ownerId?._id).filter(Boolean) ||
+        []),
+      req.user._id,
+    ].filter(
+      (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
+    );
 
-    const notificationPromises = notificationRecipients.map(userId =>
+    const notificationPromises = notificationRecipients.map((userId) =>
       ShowNotification.create({
         title: "Document Status Updated",
         type: "Document Update",
@@ -251,35 +273,31 @@ const updateStatus = async (req, res) => {
       })
     );
 
+    // Step 3: Get email recipients
     const projectNameFromDocument = updatedDocument.projName;
-    console.log("ddfdfdfd",projectNameFromDocument);
-
     const relatedProject = await editProject
       .findOne({ projectName: projectNameFromDocument })
-      .populate("projectOwners.ownerId", "email ownerName") // populate owner emails
-      .populate("members", "email userName"); // correctly populate member emails
+      .populate("projectOwners.ownerId", "email ownerName")
+      .populate("members", "email userName");
 
     if (!relatedProject) {
-      return res.status(404).json({ message: "Project not found for this document" });
+      await session.abortTransaction();
+      return res
+        .status(404)
+        .json({ message: "Project not found for this document" });
     }
 
-    // Step 3: Collect owner and member emails
     const ownerEmails = relatedProject.projectOwners
       .map((owner) => owner.ownerId?.email)
       .filter(Boolean);
-    
-      console.log("owner",ownerEmails);
 
     const memberEmails = relatedProject.members
       .map((member) => member?.email)
       .filter(Boolean);
-      
-      console.log("member",memberEmails);
-    
 
-    const allEmails = [...new Set([...ownerEmails, ...memberEmails])]; // Unique emails
+    const allEmails = [...new Set([...ownerEmails, ...memberEmails])];
 
-    // Step 4: Send emails
+    // Step 4: Send Emails
     for (const email of allEmails) {
       try {
         await SendEmailUtil({
@@ -296,18 +314,28 @@ const updateStatus = async (req, res) => {
     await Promise.all(notificationPromises);
     await session.commitTransaction();
 
-    res.status(200).json({ 
-      message: "Document updated successfully", 
-      document: updatedDocument 
+    res.status(200).json({
+      message: "Document updated successfully",
+      document: updatedDocument,
     });
   } catch (error) {
-    await session.abortTransaction();
-    res.status(500).json({ 
-      message: "Error updating document", 
-      error: error.message 
+    try {
+      await session.abortTransaction();
+    } catch (abortError) {
+      console.error("@ Error aborting transaction:", abortError.message);
+    }
+
+    console.error("@ Error in updateStatus:", error);
+    res.status(500).json({
+      message: "Error updating document",
+      error: error.message,
     });
   } finally {
-    session.endSession();
+    try {
+      await session.endSession();
+    } catch (endSessionError) {
+      console.error("@ Error ending session:", endSessionError.message);
+    }
   }
 };
 
@@ -322,7 +350,7 @@ const deleteDocument = async (req, res) => {
     }
 
     // Delete from AWS S3
-    const fileKey = document.fileUrl.split('.com/')[1];
+    const fileKey = document.fileUrl.split(".com/")[1];
     await deleteFromS3(fileKey);
 
     // Delete from MongoDB
@@ -331,23 +359,27 @@ const deleteDocument = async (req, res) => {
     // Create notification for deletion
     let project;
     if (document.projName) {
-      project = await editProject.findOne({ projectName: document.projName })
+      project = await editProject
+        .findOne({ projectName: document.projName })
         .populate("projectOwners.ownerId", "email ownerName")
         .populate("members", "email userName")
         .session(session);
     }
 
     const notificationRecipients = [
-      ...(project?.members.map(m => m._id) || []),
-      ...(project?.projectOwners.map(o => o.ownerId?._id).filter(Boolean) || []),
-      req.user._id
-    ].filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
+      ...(project?.members.map((m) => m._id) || []),
+      ...(project?.projectOwners.map((o) => o.ownerId?._id).filter(Boolean) ||
+        []),
+      req.user._id,
+    ].filter(
+      (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
+    );
 
-    const notificationPromises = notificationRecipients.map(userId =>
+    const notificationPromises = notificationRecipients.map((userId) =>
       ShowNotification.create({
         title: "Document Deleted",
         type: "Document Deletion",
-        description: `Document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ''}`,
+        description: `Document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ""}`,
         memberId: userId,
         projectId: project?._id,
       })
@@ -359,9 +391,9 @@ const deleteDocument = async (req, res) => {
     res.status(200).json({ message: "Document deleted successfully!" });
   } catch (error) {
     await session.abortTransaction();
-    res.status(500).json({ 
-      message: "Error deleting document", 
-      error: error.message 
+    res.status(500).json({
+      message: "Error deleting document",
+      error: error.message,
     });
   } finally {
     session.endSession();
