@@ -6,48 +6,6 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 
 const ALLOWED_USER_TYPES = ["Finance", "Production"];
 
-// const createClient = asyncHandler(async (req, res) => {
-//   try {
-//     const { body } = req;
-
-//     if (!ALLOWED_USER_TYPES.includes(body.userType)) {
-//       throw new ApiError(400, "Invalid userType.");
-//     }
-
-//     if (!body.companyName) {
-//       throw new ApiError(400, "Company name is required.");
-//     }
-
-//     const companyExists = await Company.findOne({ name: body.companyName });
-//     if (!companyExists) {
-//       throw new ApiError(400, "Company not found.");
-//     }
-
-//     const emailPresent = await User.findOne({ email: body.email });
-//     if (emailPresent) {
-//       throw new ApiError(400, "Email already exists.");
-//     }
-
-//     const createdBy = await User.findById(req.user._id);
-
-//     const userData = {
-//       ...body,
-//       createdBy: {
-//         userName: createdBy?.userName,
-//         userId: req.user._id,
-//       },
-//       isClient: true,
-//       status: "Active",
-//     };
-
-//     const userDataNew = await User.create(userData);
-
-//     res.status(201).json(new ApiResponse(201, userDataNew, "New User created successfully"));
-//   } catch (error) {
-//     throw new ApiError(400, error.message);
-//   }
-// });
-
 const createClient = asyncHandler(async (req, res) => {
   try {
     const { body } = req;
@@ -71,7 +29,7 @@ const createClient = asyncHandler(async (req, res) => {
     }
 
     const createdBy = await User.findById(req.user._id);
-
+    
     const userData = {
       ...body,
       createdBy: {
@@ -84,20 +42,7 @@ const createClient = asyncHandler(async (req, res) => {
 
     const userDataNew = await User.create(userData);
 
-    // Send notification to the creator (or others as needed)
-    await ShowNotification.create([
-      {
-        title: "New Client Created",
-        type: "Client Management",
-        description: `Client ${userDataNew.userName || userDataNew.email} was successfully created under company ${body.companyName}.`,
-        memberId: req.user._id, // sender/creator or replace with recipient
-        userId: userDataNew._id, // newly created user (optional, if you store it)
-      },
-    ]);
-
-    res
-      .status(201)
-      .json(new ApiResponse(201, userDataNew, "New User created successfully"));
+    res.status(201).json(new ApiResponse(201, userDataNew, "New User created successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
@@ -120,10 +65,7 @@ const editClient = asyncHandler(async (req, res) => {
     if (body.companyName) {
       const companyExists = await Company.findOne({ name: body.companyName });
       if (!companyExists) {
-        throw new ApiError(
-          400,
-          "Company not found. Please enter a valid company name."
-        );
+        throw new ApiError(400, "Company not found. Please enter a valid company name.");
       }
     }
 
@@ -147,9 +89,7 @@ const editClient = asyncHandler(async (req, res) => {
       runValidators: true,
     });
 
-    res
-      .status(200)
-      .json(new ApiResponse(200, updatedUser, "User updated successfully"));
+    res.status(200).json(new ApiResponse(200, updatedUser, "User updated successfully"));
   } catch (error) {
     throw new ApiError(400, error.message);
   }
@@ -168,20 +108,14 @@ const getClientById = asyncHandler(async (req, res) => {
 const getAllClients = asyncHandler(async (req, res) => {
   const users = await User.find({ isMain: false, isClient: true });
 
-  const companyNames = users.map((user) => user.companyName);
-
+  const companyNames = users.map(user => user.companyName);
+  
   const existingCompanies = await Company.find({ name: { $in: companyNames } });
-  const validCompanyNames = new Set(
-    existingCompanies.map((company) => company.name)
-  );
+  const validCompanyNames = new Set(existingCompanies.map(company => company.name));
 
-  const validUsers = users.filter((user) =>
-    validCompanyNames.has(user.companyName)
-  );
+  const validUsers = users.filter(user => validCompanyNames.has(user.companyName));
 
-  res
-    .status(200)
-    .json(new ApiResponse(200, validUsers, "All Users fetched successfully"));
+  res.status(200).json(new ApiResponse(200, validUsers, "All Users fetched successfully"));
 });
 
 const deleteClientById = asyncHandler(async (req, res) => {
@@ -194,10 +128,4 @@ const deleteClientById = asyncHandler(async (req, res) => {
   res.status(200).json(new ApiResponse(200, {}, "User deleted successfully"));
 });
 
-export {
-  createClient,
-  getAllClients,
-  getClientById,
-  deleteClientById,
-  editClient,
-};
+export { createClient, getAllClients, getClientById, deleteClientById, editClient };
