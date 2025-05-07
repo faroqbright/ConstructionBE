@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import FinanceDocument from "../models/finance.model.js";
 import { editProject } from "../models/project.model.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
@@ -31,12 +30,15 @@ const uploadFinanceDocument = async (req, res) => {
       .session(session);
 
     if (!project) {
+      session.endSession();
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const finalFileName = fileName.includes(".") ? fileName : `${fileName}.${req.file.mimetype.split("/")[1]}`;
+    const finalFileName = fileName.includes(".")
+      ? fileName
+      : `${fileName}.${req.file.mimetype.split("/")[1]}`;
 
-    // Notify only project owners
+    // Notify project owners
     for (const owner of project.projectOwners) {
       const user = owner.ownerId;
       if (user?.email) {
@@ -45,26 +47,13 @@ const uploadFinanceDocument = async (req, res) => {
           to: user.email,
           subject: `New File Uploaded for Project: ${projName}`,
           html: `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <title>New File Notification</title>
-            </head>
-            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                <tr>
-                  <td style="padding: 20px; text-align: center;">
-                    <h2 style="color: #333;">New File Uploaded</h2>
-                    <p style="font-size: 16px; color: #555;">Dear <strong>${user.userName}</strong>,</p>
-                    <p style="font-size: 16px; color: #555;">A new file named <strong>"${finalFileName}"</strong> has been uploaded for the project <strong>"${projName}"</strong>.</p>
-                    <p style="font-size: 16px; color: #555;">Please log in to your dashboard to view or download the file.</p>
-
-                    <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions, feel free to contact our team.</p>
-                    <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
-                  </td>
-                </tr>
-              </table>
+            <html>
+            <body style="font-family: Arial, sans-serif;">
+              <h2 style="color: #333;">New File Uploaded</h2>
+              <p>Dear <strong>${user.userName}</strong>,</p>
+              <p>A new file named <strong>"${finalFileName}"</strong> has been uploaded for the project <strong>"${projName}"</strong>.</p>
+              <p>Please log in to your dashboard to view or download the file.</p>
+              <p style="color: #888;">Best regards,<br>Your Team</p>
             </body>
             </html>
           `,
@@ -74,15 +63,13 @@ const uploadFinanceDocument = async (req, res) => {
           await SendEmailUtil(emailBody);
           console.log(`Email sent to ${user.email}`);
         } catch (error) {
-          console.error("Error sending email:", error.message);
+          console.error(`Failed to send email to ${user.email}:`, error.message);
         }
       }
     }
 
-    // Set local file URL or dummy URL (optional)
-    const fileUrl = `/uploads/${finalFileName}`; // Modify based on how you store files locally
+    const fileUrl = `/uploads/${finalFileName}`;
 
-    // Save document
     const financeDocument = new FinanceDocument({
       projName,
       fileName: finalFileName,
@@ -96,7 +83,6 @@ const uploadFinanceDocument = async (req, res) => {
 
     await financeDocument.save({ session });
 
-    // Create notifications (owners + members + uploader)
     const notificationRecipients = [
       ...project.members.map(m => m._id),
       ...project.projectOwners.map(o => o.ownerId?._id).filter(Boolean),
@@ -121,14 +107,12 @@ Best regards,
 
     await Promise.all(notificationPromises);
     await session.commitTransaction();
-
     res.status(201).json({
       message: "File uploaded successfully!",
-      financeDocument
+      financeDocument,
     });
 
   } catch (error) {
-    await session.abortTransaction();
     console.error("Error uploading file:", error.message);
     res.status(500).json({
       message: "Error uploading file",
@@ -138,6 +122,7 @@ Best regards,
     session.endSession();
   }
 };
+
 
 
 const getFinanceDocuments = async (req, res) => {
@@ -274,7 +259,6 @@ const updateFinanceDocument = async (req, res) => {
   }
 };
 
-
 const deleteFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -282,7 +266,6 @@ const deleteFinanceDocument = async (req, res) => {
   try {
     const financeDocument = await FinanceDocument.findById(req.params.id).session(session);
     if (!financeDocument) {
-      await session.abortTransaction();
       session.endSession();
       return res.status(404).json({ message: "Document not found" });
     }
@@ -291,8 +274,6 @@ const deleteFinanceDocument = async (req, res) => {
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
-
-    // Removed: await deleteFromS3(fileKey);
 
     await FinanceDocument.findByIdAndDelete(req.params.id, { session });
 
@@ -329,7 +310,6 @@ Best regards,
         };
         try {
           await SendEmailUtil(emailBody);
-          console.log(`Email sent to owner: ${owner.ownerId.email}`);
         } catch (error) {
           console.error(`Error sending email to owner ${owner.ownerId.email}:`, error.message);
         }
@@ -347,7 +327,6 @@ Best regards,
         };
         try {
           await SendEmailUtil(emailBody);
-          console.log(`Email sent to member: ${member.email}`);
         } catch (error) {
           console.error(`Error sending email to member ${member.email}:`, error.message);
         }
@@ -361,11 +340,11 @@ Best regards,
     return res.status(200).json({ message: "Document deleted and notifications sent!" });
 
   } catch (error) {
-    await session.abortTransaction();
     session.endSession();
     return res.status(500).json({ message: "Error deleting document", error: error.message });
   }
 };
+
 
 
 export {
