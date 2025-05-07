@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
-// import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
+import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import FinanceDocument from "../models/finance.model.js";
 import { editProject } from "../models/project.model.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
-
+ 
 
 const uploadFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
@@ -79,11 +79,8 @@ const uploadFinanceDocument = async (req, res) => {
       }
     }
 
-    // Upload to S3
-    const fileUrl = await uploadToS3(req.file.buffer, finalFileName, req.file.mimetype);
-    if (!fileUrl) {
-      return res.status(500).json({ message: "File upload failed" });
-    }
+    // Set local file URL or dummy URL (optional)
+    const fileUrl = `/uploads/${finalFileName}`; // Modify based on how you store files locally
 
     // Save document
     const financeDocument = new FinanceDocument({
@@ -135,6 +132,7 @@ const uploadFinanceDocument = async (req, res) => {
     session.endSession();
   }
 };
+
 
 const getFinanceDocuments = async (req, res) => {
   try {
