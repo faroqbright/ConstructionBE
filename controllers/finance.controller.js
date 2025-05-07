@@ -93,11 +93,11 @@ const uploadFinanceDocument = async (req, res) => {
       ShowNotification.create({
         title: `New Finance Document Uploaded to the "${finalFileName}"`,
         type: "Document Upload",
-        description: `We would like to inform you that a New finance document "${finalFileName}" was uploaded for project "${projName}"`,
+        description: `A New finance document "${finalFileName}" was uploaded for project "${projName}"`,
         lengthyDesc: `We would like to inform you that a New finance document "${finalFileName}" was uploaded for project "${projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
-</br>
+//
 Best regards,
-</br>
+//
 [Soapro Team]
 `,
         memberId: userId,
@@ -287,11 +287,11 @@ const deleteFinanceDocument = async (req, res) => {
       ShowNotification.create({
         title: `New Finance Document Deleted "${financeDocument.projName}"`,
         type: "Document Deletion",
-        description: `We would like to inform you that a new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}"`,
+        description: `A new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}"`,
         lengthyDesc: `We would like to inform you that a new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
-</br>
+//
 Best regards,
-</br>
+//
 [Soapro Team]
 `,
         memberId: userId,

@@ -393,11 +393,11 @@ const editProjects = asyncHandler(async (req, res) => {
           ShowNotification.create({
             title: `New Document Available for "${projectName}"`,
             type: "Project Update",
-            description: `We would like to inform you that a new document has been edited to the project "${projectName}"`,
+            description: `A new document has been edited to the project "${projectName}"`,
             lengthyDesc: `We would like to inform you that a new document has been edited to the project "${projectName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
-</br>
+//
 Best regards,
-</br>
+//
 [Soapro Team]
 `,
             memberId: userId,
@@ -943,11 +943,11 @@ const deleteProject = asyncHandler(async (req, res) => {
       ShowNotification.create({
         title: `New Document Available for ${project.projectName}`,
         type: "Project Deletion",
-        description: `We would like to inform you that a new document "${project.projectName}" was deleted by ${performingUser.userName}`,
+        description: `A new document "${project.projectName}" was deleted by ${performingUser.userName}`,
         lengthyDesc: `We would like to inform you that a new document "${project.projectName}" was deleted by ${performingUser.userName}.To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
-</br>
+//
 Best regards,
-</br>
+//
 [Soapro Team]
 `,
         memberId: userId,

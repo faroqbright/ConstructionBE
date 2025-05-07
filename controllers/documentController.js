@@ -59,9 +59,9 @@ const uploadFile = async (req, res) => {
           ShowNotification.create({
             title: `New Document Available for "${req.body.projName}"`,
             type: "Document Upload",
-            description: `We would like to inform you that a new document "${req.file.originalname}" has been uploaded to the project ${req.body.projName ? ` for project "${req.body.projName}"` : ""}`,
-            lengthyDesc: `We would like to inform you that a new document "${req.file.originalname}" has been uploaded to the project ${req.body.projName ? ` for project "${req.body.projName}"` : ""}.To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
+            description: `A new document "${req.file.originalname}" has been uploaded to the project ${req.body.projName ? ` for project "${req.body.projName}"` : ""}`,
+            lengthyDesc: `We would like to inform you that a new document "${req.file.originalname}" has been uploaded to the project ${req.body.projName ? ` for project "${req.body.projName}"` : ""}.To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.//
+Best regards,//
 [Soapro Team]`,
             memberId: userId,
             projectId: project?._id,
@@ -270,9 +270,9 @@ const updateStatus = async (req, res) => {
       ShowNotification.create({
         title: `New Document Available for "${req.body.projName}"`,
         type: "Document Update",
-        description: `We would like to inform you that a new document "${document.fileName}" status changed to "${updates.status}"`,
-        lengthyDesc: `We would like to inform you that a new document "${document.fileName}" status changed to "${updates.status}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
+        description: `A new document "${document.fileName}" status changed to "${updates.status}"`,
+        lengthyDesc: `We would like to inform you that a new document "${document.fileName}" status changed to "${updates.status}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.//
+Best regards,//
 [Soapro Team]`,
         memberId: userId,
         projectId: project?._id,
@@ -385,11 +385,11 @@ const deleteDocument = async (req, res) => {
       ShowNotification.create({
         title: `New Document Available for "${document.projName}"`,
         type: "Document Deletion",
-        description: `We would like to inform you that a new document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ""}`,
+        description: `A new document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ""}`,
         lengthyDesc: `We would like to inform you that a new document "${document.fileName}" was deleted${document.projName ? ` from project "${document.projName}"` : ""}.To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
-</br>
+//
 Best regards,
-</br>
+//
 [Soapro Team]
 `,
         memberId: userId,

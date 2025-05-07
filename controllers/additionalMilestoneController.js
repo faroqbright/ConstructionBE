@@ -115,10 +115,10 @@ export const createOrUpdateMilestone = async (req, res) => {
       await ShowNotification.create({
         title: `New Milestone Updated for "${title}"`,
         type: "Milestone Update",
-        description: `We would like to inform you that a new document has been created to the project "${title}"`,
-        lengthyDesc: `We would like to inform you that a new document has been created to the project "${title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
-[Soapro Team]`,
+        description: `A new document has been created to the project "${title}"`,
+        lengthyDesc: `We would like to inform you that a new document has been created to the project "${title}".To view or download the document, please access the project's section on the platform.<br>Should you have any questions or require assistance, our team remains at your disposal.//
+        Best regards,//
+        [Soapro Team]`,
         memberId: userId,
         projectId,
       });
@@ -174,9 +174,9 @@ Best regards,</br>
     await ShowNotification.create({
       title: `New Milestone Created for "${title}"`,
       type: "Milestone Creation",
-      description: `We would like to inform you that a new document has been created to the project "${title}"`,
-      lengthyDesc: `We would like to inform you that a new document has been created to the project "${title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
+      description: `A new document has been created to the project "${title}"`,
+      lengthyDesc: `We would like to inform you that a new document has been created to the project "${title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.//
+Best regards,//
 [Soapro Team]`,
       memberId: userId,
       projectId,
@@ -336,9 +336,9 @@ export const updateMilestone = async (req, res) => {
     await ShowNotification.create({
       title: `New Milestone Updated for "${title}"`,
       type: "Milestone Update",
-      description: `We would like to inform you that a new document has been updated to the project "${updatedMilestone.title}"`,
-      lengthyDesc: `We would like to inform you that a new document has been updated to the project "${updatedMilestone.title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
+      description: `A new document has been updated to the project "${updatedMilestone.title}"`,
+      lengthyDesc: `We would like to inform you that a new document has been updated to the project "${updatedMilestone.title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.//
+Best regards,//
 [Soapro Team]`,
       memberId: updatedMilestone.userId,
       projectId: updatedMilestone.projectId,
@@ -466,9 +466,9 @@ export const deleteMilestone = async (req, res) => {
     await ShowNotification.create({
       title: "Milestone Deleted",
       type: "Milestone Deletion",
-      description: `We would like to inform you that a new document has been deleted to the project "${deleted.title}"`,
-      lengthyDesc: `We would like to inform you that a new document has been deleted to the project "${deleted.title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.</br>
-Best regards,</br>
+      description: `A new document has been deleted to the project "${deleted.title}"`,
+      lengthyDesc: `We would like to inform you that a new document has been deleted to the project "${deleted.title}".To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.//
+Best regards,//
 [Soapro Team]`,
 
       memberId: deleted.userId,
