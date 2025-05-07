@@ -378,6 +378,35 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     throw new ApiError(403, "Invalid refresh token", error.message);
   }
 });
+
+const updateFcmToken = asyncHandler(async (req, res) => {
+  try {
+    const { fcmToken } = req.body;
+    const userId = req.user._id;
+
+    if (!fcmToken) {
+      throw new ApiError(400, "FCM token is required");
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { fcmDeviceToken: fcmToken }, // Using fcmDeviceToken to match your existing field
+      { new: true }
+    ).select("-password -refreshToken");
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, user, "FCM token updated successfully"));
+  } catch (error) {
+    throw new ApiError(error.statusCode || 500, error.message);
+  }
+});
+
+
 export {
   registerUser,
   verifyOTP,
@@ -389,4 +418,5 @@ export {
   getUserProfile,
   updateProfile,
   refreshAccessToken,
+  updateFcmToken, // Add this line
 };

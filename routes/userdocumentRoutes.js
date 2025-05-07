@@ -7,6 +7,7 @@ import {
   deleteUserDocument,
 } from "../controllers/userdocumentController.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { updateFcmToken } from "../controllers/user.controller.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -45,5 +46,7 @@ router
     updateUserDocumentStatus
   ) // Now supports file uploads
   .delete(verifyJWT, deleteUserDocument);
+
+  router.route('/update-fcm-token').post(verifyJWT, updateFcmToken);
 
 export default router;

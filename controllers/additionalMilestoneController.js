@@ -18,9 +18,9 @@ export const createOrUpdateMilestone = async (req, res) => {
 
       // Create notification for milestone update
       await ShowNotification.create({
-        title: "Milestone Updated",
+        title: `New Milestone Updated for "${title}"`,
         type: "Milestone Update",
-        description: `Milestone "${title}" has been updated`,
+        description: `We would like to inform you that a new document titled "[File Name]" has been uploaded to the project "${title}"`,
         memberId: userId,
         projectId: projectId,
       });

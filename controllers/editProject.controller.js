@@ -12,6 +12,7 @@ import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
 import { SendEmailUtil } from "../utils/emailsender.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
+import sendFirebaseNotification from "../utils/firebaseNotification.js";
 
 const createProject = asyncHandler(async (req, res) => {
   try {
@@ -754,6 +755,28 @@ const editProjects = asyncHandler(async (req, res) => {
       // Execute all notifications
       if (notificationPromises.length > 0) {
         await Promise.all(notificationPromises);
+
+        // Get FCM tokens for all recipients
+        const usersToNotify = await User.find({
+          _id: {
+            $in: Array.from(emailRecipients).map(
+              (id) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        }).select("fcmToken");
+
+        const validTokens = usersToNotify
+          .map((user) => user.fcmToken)
+          .filter(Boolean);
+
+        if (validTokens.length > 0) {
+          await sendFirebaseNotification(validTokens, {
+            title: "Project Updated",
+            description: `Project "${existingProject.projectName}" was updated: ${changesSummary.join(", ")}`,
+            type: "Project Update",
+            projectId: existingProject._id,
+          });
+        }
       }
 
       // Commit transaction
@@ -824,27 +847,37 @@ const editProjects = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, page, milestoneUserIds } = req.query
-    const { isMain, _id: loggedInUserId } = req.user
+    const { status, page, milestoneUserIds } = req.query;
+    const { isMain, _id: loggedInUserId } = req.user;
 
     // Safely access assignedBusinessAreas with a fallback to empty array
-    const assignedBusinessAreas = req.user.assignedBusinessAreas || []
+    const assignedBusinessAreas = req.user.assignedBusinessAreas || [];
 
-    const validStatuses = ["Ongoing", "Pending", "Completed", "Awaiting Start", "On Hold", "Cancelled", "Archived"]
+    const validStatuses = [
+      "Ongoing",
+      "Pending",
+      "Completed",
+      "Awaiting Start",
+      "On Hold",
+      "Cancelled",
+      "Archived",
+    ];
 
     // Base filter for status
     const baseFilter = {
       ...(status && validStatuses.includes(status) ? { status } : {}),
-    }
+    };
 
     // Extract business areas from assignedBusinessAreas
     const userBusinessAreas =
-      assignedBusinessAreas.length > 0 ? assignedBusinessAreas.map((area) => area.businessArea) : []
+      assignedBusinessAreas.length > 0
+        ? assignedBusinessAreas.map((area) => area.businessArea)
+        : [];
 
     // console.log("User business areas extracted:", userBusinessAreas)
 
     // For non-admin users, use a more efficient query
-    let finalFilter = baseFilter
+    let finalFilter = baseFilter;
     if (!isMain) {
       finalFilter = {
         ...baseFilter,
@@ -856,18 +889,20 @@ const getAllProjects = asyncHandler(async (req, res) => {
           { "projectOwners.ownerId": loggedInUserId },
 
           // Project belongs to any of user's assigned business areas
-          ...(userBusinessAreas.length > 0 ? [{ businessAreas: { $in: userBusinessAreas } }] : []),
+          ...(userBusinessAreas.length > 0
+            ? [{ businessAreas: { $in: userBusinessAreas } }]
+            : []),
         ],
-      }
+      };
     }
 
     // Handle pagination
-    const pageNumber = page ? Number.parseInt(page, 10) : 1
-    const pageSize = 10
-    const skip = (pageNumber - 1) * pageSize
+    const pageNumber = page ? Number.parseInt(page, 10) : 1;
+    const pageSize = 10;
+    const skip = (pageNumber - 1) * pageSize;
 
     // Get total count for pagination
-    const totalProjects = await editProject.countDocuments(finalFilter)
+    const totalProjects = await editProject.countDocuments(finalFilter);
 
     // Get projects with population
     let query = editProject
@@ -890,59 +925,73 @@ const getAllProjects = asyncHandler(async (req, res) => {
           },
         },
       ])
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: -1 });
 
     if (pageNumber) {
-      query = query.skip(skip).limit(pageSize)
+      query = query.skip(skip).limit(pageSize);
     }
 
     // Get all projects first
-    const projects = await query
+    const projects = await query;
 
     // Handle milestone user filtering if requested
-    let filteredProjects = projects
-    if (milestoneUserIds && Array.isArray(JSON.parse(milestoneUserIds)) && JSON.parse(milestoneUserIds).length > 0) {
-      const userIds = JSON.parse(milestoneUserIds)
+    let filteredProjects = projects;
+    if (
+      milestoneUserIds &&
+      Array.isArray(JSON.parse(milestoneUserIds)) &&
+      JSON.parse(milestoneUserIds).length > 0
+    ) {
+      const userIds = JSON.parse(milestoneUserIds);
 
-      const projectIds = projects.map((project) => project._id)
+      const projectIds = projects.map((project) => project._id);
       const allMilestones = await AdditionalMilestone.find({
         projectId: { $in: projectIds },
       }).populate({
         path: "userId",
         model: "User",
         select: "userName _id",
-      })
+      });
 
-      const projectMilestonesMap = {}
+      const projectMilestonesMap = {};
       allMilestones.forEach((milestone) => {
-        const projectId = milestone.projectId.toString()
+        const projectId = milestone.projectId.toString();
         if (!projectMilestonesMap[projectId]) {
-          projectMilestonesMap[projectId] = []
+          projectMilestonesMap[projectId] = [];
         }
-        projectMilestonesMap[projectId].push(milestone)
-      })
+        projectMilestonesMap[projectId].push(milestone);
+      });
 
       filteredProjects = projects.filter((project) => {
-        const projectId = project._id.toString()
-        const milestones = projectMilestonesMap[projectId] || []
+        const projectId = project._id.toString();
+        const milestones = projectMilestonesMap[projectId] || [];
 
-        return milestones.some((milestone) => milestone.userId && userIds.includes(milestone.userId._id.toString()))
-      })
+        return milestones.some(
+          (milestone) =>
+            milestone.userId &&
+            userIds.includes(milestone.userId._id.toString())
+        );
+      });
     }
 
     // Process projects with additional data
     const projectsWithDetails = await Promise.all(
       filteredProjects.map(async (project) => {
-        const isMember = project.members.some((member) => member._id.equals(loggedInUserId))
+        const isMember = project.members.some((member) =>
+          member._id.equals(loggedInUserId)
+        );
 
-        const isOwner = project.projectOwners.some((owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId))
+        const isOwner = project.projectOwners.some(
+          (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+        );
 
         const fromBusinessArea =
           !isMember &&
           !isOwner &&
           (typeof project.businessAreas === "string"
             ? userBusinessAreas.includes(project.businessAreas)
-            : project.businessAreas?.some((area) => userBusinessAreas.includes(area)))
+            : project.businessAreas?.some((area) =>
+                userBusinessAreas.includes(area)
+              ));
 
         return {
           ...project.toObject(),
@@ -951,9 +1000,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
             isOwner,
             fromBusinessArea,
           },
-        }
-      }),
-    )
+        };
+      })
+    );
 
     res.status(200).json(
       new ApiResponse(
@@ -966,14 +1015,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
             totalProjects,
           },
         },
-        "Projects retrieved successfully",
-      ),
-    )
+        "Projects retrieved successfully"
+      )
+    );
   } catch (error) {
-    console.error("Error in getAllProjects:", error)
-    throw new ApiError(400, error.message)
+    console.error("Error in getAllProjects:", error);
+    throw new ApiError(400, error.message);
   }
-})
+});
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {

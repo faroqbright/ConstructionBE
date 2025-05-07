@@ -18,6 +18,10 @@ const showNotificationSchema = new Schema(
       type: String,
       trim: true,
     },
+    lengthyDesc: {
+      type: String,
+      trim: true,
+    },
     // Changed ownerId/memberId to recipientId for clarity
     // A notification is typically *for* one specific user
     memberId: {

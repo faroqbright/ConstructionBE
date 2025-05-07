@@ -13,7 +13,7 @@ import mongoose from "mongoose";
  * @access Private (Requires authenticated user)
  */
 const createNotification = asyncHandler(async (req, res) => {
-  const { title, type, description, memberId, projectId } = req.body;
+  const { title, type, description, lengthyDesc, memberId, projectId } = req.body;
 
   // Basic validation
   if (!title || !type || !memberId) {
@@ -33,6 +33,7 @@ const createNotification = asyncHandler(async (req, res) => {
     title,
     type,
     description: description || "", // Default if empty
+    lengthyDesc: lengthyDesc || "",
     memberId,
     ...(projectId && { projectId }), // Conditionally add projectId
   };

@@ -76,7 +76,11 @@ const userSchema = new mongoose.Schema(
     },
     businessArea: {
       type: String,
-    }    
+    }    ,
+    fcmToken: {
+      type: String,
+      default: null
+    },
   },
   {
     timestamps: true,
