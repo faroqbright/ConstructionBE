@@ -26,6 +26,7 @@ const createProject = asyncHandler(async (req, res) => {
       comapanyName,
       deadline,
       physicalEducationRange,
+      financialEducationRange,
       daysLeft,
     } = req.body;
     const { files } = req;
@@ -94,6 +95,7 @@ const createProject = asyncHandler(async (req, res) => {
       status,
       deadline,
       physicalEducationRange,
+      financialEducationRange,
       daysLeft,
       projectBanner: projectBanners,
     };
@@ -107,319 +109,6 @@ const createProject = asyncHandler(async (req, res) => {
     res.status(500).json({ message: error.message || "Internal Server Error" });
   }
 });
-
-// const editProjects = asyncHandler(async (req, res) => {
-//   try {
-//     const { projectId } = req.params;
-//     const {
-//       projectName,
-//       projectOwners,
-//       description,
-//       location,
-//       businessAreas,
-//       comapanyName,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       members,
-//       removeBanners = [],
-//     } = req.body;
-
-//     const { files } = req;
-
-//     const existingProject = await editProject.findById(projectId).populate("projectOwners.ownerId", "email userName");
-
-//     if (!existingProject) {
-//       throw new ApiError(404, "Project not found");
-//     }
-
-//     let updateData = {};
-//     let logs = [];
-//     let updatedProjectBanners = existingProject.projectBanner || [];
-//     let changesSummary = [];
-
-//     // ✅ Project name change
-//     let updatedProjectName = existingProject.projectName;
-//     if (projectName && projectName !== existingProject.projectName) {
-//       const nameTaken = await editProject.findOne({ projectName });
-//       if (nameTaken) {
-//         const uniqueSuffix = uuidv4().split("-")[0];
-//         updatedProjectName = `${projectName}-${uniqueSuffix}`;
-//       } else {
-//         updatedProjectName = projectName;
-//       }
-
-//       logs.push({
-//         actionType: "Project Name Change",
-//         message: `Project name changed from "${existingProject.projectName}" to "${updatedProjectName}" by ${req.user.userName}`,
-//         userId: req.user.id,
-//         timestamp: new Date(),
-//       });
-//       changesSummary.push(`Project name changed to "${updatedProjectName}"`);
-//     }
-
-//     // ✅ Status change
-//     if (status && status !== existingProject.status) {
-//       logs.push({
-//         actionType: "Status Update",
-//         message: `Status changed from "${existingProject.status}" to "${status}" by ${req.user.userName}`,
-//         userId: req.user.id,
-//         timestamp: new Date(),
-//       });
-//       changesSummary.push(`Status updated to "${status}"`);
-//     }
-
-//     // ✅ Deadline change
-//     if (deadline) {
-//       const parsedDeadline = new Date(deadline);
-//       const existingDeadline = existingProject.deadline ? new Date(existingProject.deadline) : null;
-
-//       if (isNaN(parsedDeadline.getTime())) {
-//         throw new ApiError(400, "Invalid deadline value provided");
-//       }
-
-//       if (!existingDeadline || parsedDeadline.toISOString() !== existingDeadline.toISOString()) {
-//         logs.push({
-//           actionType: "Deadline Change",
-//           message: `Deadline updated to "${parsedDeadline.toISOString()}" by ${req.user.userName}`,
-//           userId: req.user.id,
-//           timestamp: new Date(),
-//         });
-//         changesSummary.push(`Deadline updated to "${parsedDeadline.toISOString()}"`);
-//       }
-//     }
-
-//     // ✅ Remove banners
-//     if (removeBanners.length > 0) {
-//       updatedProjectBanners = updatedProjectBanners.filter(
-//         (banner) => !removeBanners.includes(banner.url)
-//       );
-//       logs.push({
-//         actionType: "Project Banner Removal",
-//         message: `Removed ${removeBanners.length} banner(s) by ${req.user.userName}`,
-//         userId: req.user.id,
-//         timestamp: new Date(),
-//       });
-//       changesSummary.push(`${removeBanners.length} banner(s) removed`);
-//     }
-
-//     // ✅ Add banners
-//     if (files?.projectBanner?.length > 0) {
-//       if (updatedProjectBanners.length + files.projectBanner.length > 10) {
-//         throw new ApiError(400, "You can only have up to 10 banners.");
-//       }
-
-//       for (const file of files.projectBanner) {
-//         const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-//         const uploadedImageUrl = await uploadToS3(file.buffer, uniqueFileName, file.mimetype);
-//         if (uploadedImageUrl) {
-//           updatedProjectBanners.push({
-//             url: uploadedImageUrl,
-//             uploadDate: new Date(),
-//           });
-//         }
-//       }
-
-//       logs.push({
-//         actionType: "Project Banner Addition",
-//         message: `Added ${files.projectBanner.length} new banner(s) by ${req.user.userName}`,
-//         userId: req.user.id,
-//         timestamp: new Date(),
-//       });
-//       changesSummary.push(`${files.projectBanner.length} new banner(s) added`);
-//     }
-
-//     // ✅ Update finance document timestamps
-//     if (req.body.financeDocuments?.length > 0) {
-//       for (const docId of req.body.financeDocuments) {
-//         await FinanceDocument.findByIdAndUpdate(docId, {
-//           $set: { uploadedAt: new Date() },
-//         });
-//       }
-//     }
-
-//     // ✅ Construct updateData
-//     updateData = {
-//       ...updateData,
-//       projectName: updatedProjectName,
-//       description,
-//       location,
-//       status,
-//       businessAreas,
-//       comapanyName,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       projectBanner: updatedProjectBanners,
-//       ...(members && { members }),
-//       ...(projectOwners && {
-//         projectOwners: projectOwners
-//           .filter((ownerId) => ownerId)
-//           .map((ownerId) => ({
-//             ownerId: new mongoose.Types.ObjectId(ownerId),
-//           })),
-//       }),
-//       logs: [...existingProject.logs, ...logs],
-//     };
-
-//     // ✅ Update project in DB
-//     const updatedProject = await editProject.findByIdAndUpdate(projectId, { $set: updateData }, { new: true });
-
-//     // ✅ Send email notification
-//     const emailRecipients = existingProject.projectOwners
-//       .map((owner) => owner.ownerId?.email)
-//       .filter(Boolean);
-
-//     const emailBody = {
-//       from: process.env.EMAIL_USER,
-//       to: emailRecipients.join(","),
-//       subject: `🔔 Project "${existingProject.projectName}" has been updated`,
-//       html: `
-//         <h3>Project Updated</h3>
-//         <p>The following changes were made to <strong>${existingProject.projectName}</strong>:</p>
-//         <ul>
-//           ${changesSummary.length > 0 ? changesSummary.map(change => `<li>${change}</li>`).join("") : "<li>No significant changes detected.</li>"}
-//         </ul>
-//         <p><strong>Updated by:</strong> ${req.user.userName}</p>
-//         <p style="font-size: 0.9em;"><em>This is an automated notification email.</em></p>
-//       `,
-//     };
-
-//     await SendEmailUtil(emailBody);
-
-//     res
-//       .status(200)
-//       .json(new ApiResponse(200, updatedProject, "Project updated successfully"));
-//   } catch (error) {
-//     console.error("Error updating project:", error.message);
-//     res.status(500).json({ message: error.message || "Internal Server Error" });
-//   }
-// });
-
-// const createProject = asyncHandler(async (req, res) => {
-//   try {
-//     const {
-//       projectName,
-//       projectOwners,
-//       description,
-//       location,
-//       status,
-//       businessAreas,
-//       comapanyName,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//     } = req.body;
-//     const { files } = req;
-
-//     console.log("Received Project Data:", req.body);
-//     console.log("Received Files:", files?.projectBanner?.length);
-
-//     const existingProject = await editProject.findOne({ projectName });
-//     if (existingProject) {
-//       throw new ApiError(400, "Project name already taken.");
-//     }
-
-//     let projectBanners = [];
-
-//     // Check if projectBanner files exist
-//     if (files?.projectBanner?.length > 0) {
-//       if (files.projectBanner.length > 10) {
-//         throw new ApiError(400, "You can upload up to 10 banners.");
-//       }
-
-//       const uploadFile = async (file) => {
-//         if (file.size > 5 * 1024 * 1024) {
-//           console.error(`File too large: ${file.originalname}`);
-//           return null;
-//         }
-
-//         try {
-//           console.log(`Uploading file: ${file.originalname}`);
-//           const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-//           const uploadedImageUrl = await uploadToS3(
-//             file.buffer,
-//             uniqueFileName,
-//             file.mimetype
-//           );
-//           return uploadedImageUrl
-//             ? { url: uploadedImageUrl, uploadDate: new Date() }
-//             : null;
-//         } catch (uploadError) {
-//           console.error(`Upload failed for ${file.originalname}:`, uploadError);
-//           return null; // Do not fail everything if one file fails
-//         }
-//       };
-
-//       // Upload in batches of 3 (prevents memory overload)
-//       const batchSize = 3;
-//       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
-//         const batch = files.projectBanner.slice(i, i + batchSize);
-//         console.log(`Uploading batch: ${i / batchSize + 1}`);
-//         const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
-//         projectBanners.push(
-//           ...uploadedBatch
-//             .filter((result) => result.status === "fulfilled" && result.value)
-//             .map((result) => result.value)
-//         );
-//       }
-//     }
-
-//     console.log("Uploaded Banners:", projectBanners);
-
-//     const projectData = {
-//       projectName,
-//       projectOwners,
-//       description,
-//       businessAreas,
-//       comapanyName,
-//       location,
-//       status,
-//       deadline,
-//       physicalEducationRange,
-//       daysLeft,
-//       projectBanner: projectBanners,
-//     };
-
-//     const project = await editProject.create(projectData);
-
-//     const emailRecipients = (Array.isArray(projectOwners) ? projectOwners : [])
-//       .map((ownerId) => ownerId?.email)
-//       .filter(Boolean); // Filter out any falsy values
-
-//     // Check if there are any recipients before sending the email
-//     // if (emailRecipients.length === 0) {
-//     //   throw new Error("No recipients defined");
-//     // }
-
-//     // const emailBody = {
-//     //   from: process.env.EMAIL_USER,
-//     //   to: emailRecipients.join(","),
-//     //   subject: `🔔 New Project Created: ${projectName}`,
-//     //   html: `
-//     //     <h3>New Project Created</h3>
-//     //     <p>A new project named <strong>${projectName}</strong> has been created with the following details:</p>
-//     //     <ul>
-//     //       <li><strong>Description:</strong> ${description}</li>
-//     //       <li><strong>Status:</strong> ${status}</li>
-//     //       <li><strong>Deadline:</strong> ${deadline}</li>
-//     //     </ul>
-//     //     <p><strong>Created by:</strong> ${req.user.userName}</p>
-//     //     <p style="font-size: 0.9em;"><em>This is an automated notification email.</em></p>
-//     //   `,
-//     // };
-
-//     // await SendEmailUtil(emailBody);
-
-//     res
-//       .status(201)
-//       .json(new ApiResponse(201, project, "Project created successfully"));
-//   } catch (error) {
-//     console.error("Error in createProject:", error);
-//     res.status(500).json({ message: error.message || "Internal Server Error" });
-//   }
-// });
 
 const editProjects = asyncHandler(async (req, res) => {
   try {
@@ -440,6 +129,8 @@ const editProjects = asyncHandler(async (req, res) => {
       members,
       status,
       deadline,
+      physicalEducationRange,
+      financialEducationRange,
       removeBanners = [],
     } = req.body;
 
@@ -630,6 +321,38 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     }
 
+    let rangeFieldsChanged = false;
+
+    if (
+      physicalEducationRange &&
+      physicalEducationRange !== existingProject.physicalEducationRange
+    ) {
+      logs.push({
+        actionType: "Physical Education Range Update",
+        message: `Physical Education Range changed from "${existingProject.physicalEducationRange}" to "${physicalEducationRange}" by ${performingUser.userName}`,
+        userId: performingUser._id,
+        timestamp: new Date(),
+      });
+      changesSummary.push("Physical Education Range updated");
+      importantFieldsChanged = true;
+      rangeFieldsChanged = true;
+    }
+
+    if (
+      financialEducationRange &&
+      financialEducationRange !== existingProject.financialEducationRange
+    ) {
+      logs.push({
+        actionType: "Financial Education Range Update",
+        message: `Financial Education Range changed from "${existingProject.financialEducationRange}" to "${financialEducationRange}" by ${performingUser.userName}`,
+        userId: performingUser._id,
+        timestamp: new Date(),
+      });
+      changesSummary.push("Financial Education Range updated");
+      importantFieldsChanged = true;
+      rangeFieldsChanged = true;
+    }
+
     // Prepare final update data
     updateData = {
       ...updateData,
@@ -640,6 +363,8 @@ const editProjects = asyncHandler(async (req, res) => {
       comapanyName,
       status,
       deadline,
+      physicalEducationRange,
+      financialEducationRange,
       projectBanner: updatedProjectBanners,
       logs: [...(existingProject.logs || []), ...logs],
     };
@@ -666,9 +391,15 @@ const editProjects = asyncHandler(async (req, res) => {
       const createNotification = (userId, title, description) => {
         notificationPromises.push(
           ShowNotification.create({
-            title,
+            title: `New Document Available for "${projectName}"`,
             type: "Project Update",
-            description,
+            description: `We would like to inform you that a new document has been edited to the project "${projectName}"`,
+            lengthyDesc: `We would like to inform you that a new document has been edited to the project "${projectName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
+</br>
+Best regards,
+</br>
+[Soapro Team]
+`,
             memberId: userId,
             projectId: existingProject._id,
           })
@@ -1210,9 +941,15 @@ const deleteProject = asyncHandler(async (req, res) => {
     // Create notifications for all recipients
     const notificationPromises = notificationRecipients.map((userId) =>
       ShowNotification.create({
-        title: "Project Deleted",
+        title: `New Document Available for ${project.projectName}`,
         type: "Project Deletion",
-        description: `Project "${project.projectName}" was deleted by ${performingUser.userName}`,
+        description: `We would like to inform you that a new document "${project.projectName}" was deleted by ${performingUser.userName}`,
+        lengthyDesc: `We would like to inform you that a new document "${project.projectName}" was deleted by ${performingUser.userName}.To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
+</br>
+Best regards,
+</br>
+[Soapro Team]
+`,
         memberId: userId,
         projectId: project._id, // Keep reference even though project is deleted
       })
