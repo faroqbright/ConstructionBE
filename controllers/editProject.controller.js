@@ -483,32 +483,32 @@ Best regards,
         });
       }
 
-      // Execute all notifications
-      if (notificationPromises.length > 0) {
-        await Promise.all(notificationPromises);
+      // // Execute all notifications
+      // if (notificationPromises.length > 0) {
+      //   await Promise.all(notificationPromises);
 
-        // Get FCM tokens for all recipients
-        const usersToNotify = await User.find({
-          _id: {
-            $in: Array.from(emailRecipients).map(
-              (id) => new mongoose.Types.ObjectId(id)
-            ),
-          },
-        }).select("fcmToken");
+      //   // Get FCM tokens for all recipients
+      //   // const usersToNotify = await User.find({
+      //   //   _id: {
+      //   //     $in: Array.from(emailRecipients).map(
+      //   //       (id) => new mongoose.Types.ObjectId(id)
+      //   //     ),
+      //   //   },
+      //   // }).select("fcmToken");
 
-        const validTokens = usersToNotify
-          .map((user) => user.fcmToken)
-          .filter(Boolean);
+      //   // const validTokens = usersToNotify
+      //   //   .map((user) => user.fcmToken)
+      //   //   .filter(Boolean);
 
-        if (validTokens.length > 0) {
-          await sendFirebaseNotification(validTokens, {
-            title: "Project Updated",
-            description: `Project "${existingProject.projectName}" was updated: ${changesSummary.join(", ")}`,
-            type: "Project Update",
-            projectId: existingProject._id,
-          });
-        }
-      }
+      //   // if (validTokens.length > 0) {
+      //   //   await sendFirebaseNotification(validTokens, {
+      //   //     title: "Project Updated",
+      //   //     description: `Project "${existingProject.projectName}" was updated: ${changesSummary.join(", ")}`,
+      //   //     type: "Project Update",
+      //   //     projectId: existingProject._id,
+      //   //   });
+      //   // }
+      // }
 
       // Commit transaction
       await session.commitTransaction();
