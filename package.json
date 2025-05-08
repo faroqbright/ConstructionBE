@@ -29,6 +29,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.19.2",
     "fcm-node": "^1.6.1",
+    "firebase": "^11.7.1",
     "firebase-admin": "^12.7.0",
     "http": "^0.0.1-security",
     "jsonwebtoken": "^9.0.2",
