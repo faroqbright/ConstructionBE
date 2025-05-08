@@ -38,6 +38,9 @@ bower_components
 # Compiled binary addons (https://nodejs.org/api/addons.html)
 build/Release
 
+# Firebase service account key - DO NOT PUSH
+utils/construction-app-9c584-29c3df5d7f34.json
+
 # Dependency directories
 node_modules/
 jspm_packages/
