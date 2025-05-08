@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const serviceAccountPath = path.join(__dirname, 'construction-app-9c584-f09ef0f5a6d7.json');
+const serviceAccountPath = path.join(__dirname, 'construction-app-9c584-29c3df5d7f34.json');
 
 let initialized = false;
 
