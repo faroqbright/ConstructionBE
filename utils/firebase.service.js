@@ -1,3 +1,4 @@
+// ../utils/firebase.service.js
 import admin from 'firebase-admin';
 import { readFile } from 'fs/promises';
 import path from 'path';
@@ -67,8 +68,10 @@ export const sendNotification = async (tokens, title, body, data = {}) => {
         };
 
         const response = await admin.messaging().send(message);
+        console.log(`Successfully sent message to ${token}:`, response);
         successCount++;
       } catch (err) {
+        console.error(`Failed to send to token ${token}:`, err.message);
         if (err.errorInfo) {
           console.error('Error Info:', JSON.stringify(err.errorInfo, null, 2));
         }
@@ -77,6 +80,7 @@ export const sendNotification = async (tokens, title, body, data = {}) => {
       }
     }
 
+    console.log(`Notification send complete: ${successCount} successes, ${failureCount} failures.`);
     if (failedTokens.length > 0) {
       console.log('List of tokens that failed:', failedTokens);
       // Optional: Clean up database here if needed
@@ -86,4 +90,4 @@ export const sendNotification = async (tokens, title, body, data = {}) => {
   } catch (error) {
     console.error('Error sending notification via Firebase:', error);
   }
-}; 
+};
