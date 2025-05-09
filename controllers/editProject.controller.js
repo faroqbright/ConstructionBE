@@ -171,7 +171,7 @@ const editProjects = asyncHandler(async (req, res) => {
     }
 
     const {
-      projectName, // This is the new potential project name from req.body
+      projectName,
       projectOwners,
       description,
       location,
@@ -179,7 +179,7 @@ const editProjects = asyncHandler(async (req, res) => {
       comapanyName,
       members,
       status,
-      deadline,
+      deadline, // This is req.body.deadline
       physicalEducationRange,
       financialEducationRange,
       removeBanners = [],
@@ -190,8 +190,8 @@ const editProjects = asyncHandler(async (req, res) => {
 
     const existingProject = await editProject
       .findById(projectId)
-      .populate("projectOwners.ownerId", "email userName _id") // Keep existing populates
-      .populate("members", "email userName _id") // Keep existing populates
+      .populate("projectOwners.ownerId", "email userName _id")
+      .populate("members", "email userName _id")
       .lean();
 
     if (!existingProject) {
@@ -206,7 +206,7 @@ const editProjects = asyncHandler(async (req, res) => {
     let membersChanged = false;
     let ownersChanged = false;
 
-    let finalProjectName = existingProject.projectName; // Use this for notifications if name changes
+    let finalProjectName = existingProject.projectName;
     if (projectName && projectName !== existingProject.projectName) {
       const nameTaken = await editProject.findOne({
         projectName,
@@ -215,7 +215,6 @@ const editProjects = asyncHandler(async (req, res) => {
       finalProjectName = nameTaken
         ? `${projectName}-${uuidv4().split("-")[0]}`
         : projectName;
-      // updateData.projectName will be set later with all other fields
       logs.push({
         actionType: "Project Name Change",
         message: `Project name changed from "${existingProject.projectName}" to "${finalProjectName}" by ${performingUser.userName}`,
@@ -225,7 +224,7 @@ const editProjects = asyncHandler(async (req, res) => {
       changesSummary.push(`Project name changed to "${finalProjectName}"`);
       importantFieldsChanged = true;
     } else {
-      finalProjectName = existingProject.projectName; // No change, use existing
+      finalProjectName = existingProject.projectName;
     }
 
     if (status && status !== existingProject.status) {
@@ -238,28 +237,27 @@ const editProjects = asyncHandler(async (req, res) => {
       changesSummary.push(`Status updated to "${status}"`);
       importantFieldsChanged = true;
     }
-    if (deadline !== undefined) {
-      // Check if deadline is part of the request body
-      let existingDeadlineStr = existingProject.deadline
-        ? new Date(existingProject.deadline).toISOString().split("T")[0]
-        : null;
-      const newDeadlineStr = deadline
-        ? new Date(deadline).toISOString().split("T")[0]
-        : null;
 
-      if (newDeadlineStr !== existingDeadlineStr) {
+    // *** MODIFIED DEADLINE HANDLING FOR LOGGING ***
+    if (deadline !== undefined) { // Check if deadline is part of the request body
+      const existingDeadlineFormatted = toSafeISODateString(existingProject.deadline);
+      const newDeadlineFormatted = toSafeISODateString(deadline); // `deadline` here is req.body.deadline
+
+      if (newDeadlineFormatted !== existingDeadlineFormatted) {
         logs.push({
           actionType: "Deadline Change",
-          message: `Deadline updated from "${existingDeadlineStr || "N/A"}" to "${newDeadlineStr || "N/A"}" by ${performingUser.userName}`,
+          message: `Deadline updated from "${existingDeadlineFormatted || "N/A"}" to "${newDeadlineFormatted || "cleared"}" by ${performingUser.userName}`,
           userId: performingUser._id,
           timestamp: new Date(),
         });
         changesSummary.push(
-          `Deadline updated to "${newDeadlineStr || "cleared"}"`
+          `Deadline updated to "${newDeadlineFormatted || "cleared"}"`
         );
         importantFieldsChanged = true;
       }
     }
+    // *** END MODIFIED DEADLINE HANDLING ***
+
 
     const fieldUpdates = [
       { key: "description", value: description, name: "Description" },
@@ -270,7 +268,6 @@ const editProjects = asyncHandler(async (req, res) => {
 
     fieldUpdates.forEach(({ key, value, name }) => {
       if (value !== undefined && value !== existingProject[key]) {
-        // Check for undefined to allow empty strings
         logs.push({
           actionType: `${name} Update`,
           message: `${name} updated by ${performingUser.userName}`,
@@ -411,7 +408,7 @@ const editProjects = asyncHandler(async (req, res) => {
     }
 
     updateData = {
-      projectName: finalProjectName, // Use the potentially suffixed name
+      projectName: finalProjectName,
       description:
         description !== undefined ? description : existingProject.description,
       location: location !== undefined ? location : existingProject.location,
@@ -424,12 +421,12 @@ const editProjects = asyncHandler(async (req, res) => {
           ? comapanyName
           : existingProject.comapanyName,
       status: status !== undefined ? status : existingProject.status,
-      deadline:
+      deadline: // For DB update, pass the raw value; Mongoose will attempt to cast it.
         deadline !== undefined
-          ? deadline === "" || deadline === null
+          ? deadline === "" || deadline === null // Explicitly clearing
             ? null
-            : deadline
-          : existingProject.deadline, // Handle empty string for clearing deadline
+            : deadline // Pass original value from req.body
+          : existingProject.deadline, // Not in request, keep existing
       physicalEducationRange:
         physicalEducationRange !== undefined
           ? physicalEducationRange
@@ -439,8 +436,13 @@ const editProjects = asyncHandler(async (req, res) => {
           ? financialEducationRange
           : existingProject.financialEducationRange,
       projectBanner: updatedProjectBanners,
-      logs: [...(existingProject.logs || []), ...logs],
+      // Ensure all log timestamps are valid Date objects before saving
+      logs: [...(existingProject.logs || []), ...logs].map(log => ({
+        ...log,
+        timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp) // Ensure it's a Date object
+      })),
     };
+
     if (membersChanged && Array.isArray(members)) {
       updateData.members = members
         .filter(Boolean)
@@ -452,7 +454,8 @@ const editProjects = asyncHandler(async (req, res) => {
         .map((id) => ({ ownerId: new mongoose.Types.ObjectId(id) }));
     }
 
-    if (Object.keys(logs).length === 0) {
+    if (Object.keys(logs).length === 0 && JSON.stringify(updatedProjectBanners) === JSON.stringify(existingProject.projectBanner || [])) {
+      // Added check for banners if logs are empty
       return res
         .status(200)
         .json(
@@ -473,177 +476,124 @@ const editProjects = asyncHandler(async (req, res) => {
         .findByIdAndUpdate(
           projectId,
           { $set: updateData },
-          { new: true, session }
+          { new: true, session, runValidators: true } // Added runValidators
         )
-        .populate("members", "email userName _id")
-        .populate("projectOwners.ownerId", "email userName _id");
+        .populate("members", "email userName _id notificationToken fcmDeviceToken") // Added tokens for push
+        .populate("projectOwners.ownerId", "email userName _id notificationToken fcmDeviceToken"); // Added tokens for push
 
       if (!updatedProject) {
         throw new ApiError(500, "Failed to update project after changes.");
       }
 
-      const notificationPromises = [];
-      const emailRecipients = new Set();
-
-      const createNotification = (userId, title, descriptionForInApp) => {
-        // Renamed description to avoid clash
-        notificationPromises.push(
-          ShowNotification.create(
-            [
-              {
-                title: `Project Update: "${updatedProject.projectName}"`,
-                type: "Project Update",
-                description: descriptionForInApp, // Use specific description for in-app
-                memberId: userId,
-                projectId: updatedProject._id,
-              },
-            ],
-            { session }
-          )
-        );
-      };
-
-      const pushNotificationUserIds = new Set();
+      // Consolidate notification logic
+      const inAppNotificationsToCreate = [];
+      const involvedUserIdsForNotifications = new Set();
 
       if (importantFieldsChanged || membersChanged || ownersChanged) {
-        updatedProject.members?.forEach((member) => {
-          if (member?._id) pushNotificationUserIds.add(member._id.toString());
-          if (member?.email) emailRecipients.add(member.email);
-        });
-        updatedProject.projectOwners?.forEach((ownerObj) => {
-          if (ownerObj?.ownerId?._id)
-            pushNotificationUserIds.add(ownerObj.ownerId._id.toString());
-          if (ownerObj?.ownerId?.email)
-            emailRecipients.add(ownerObj.ownerId.email);
-        });
-        if (performingUser?._id)
-          pushNotificationUserIds.add(performingUser._id.toString());
-        if (performingUser?.email) emailRecipients.add(performingUser.email);
-
-        const allInvolvedUserIdsForInApp = new Set();
-        if (membersChanged) {
-          const oldMemberIds = (existingProject.members || [])
-            .map((m) => m._id?.toString())
-            .filter(Boolean);
-          const newMemberIds = (updatedProject.members || [])
-            .map((m) => m._id?.toString())
-            .filter(Boolean);
-          [...oldMemberIds, ...newMemberIds].forEach((id) =>
-            allInvolvedUserIdsForInApp.add(id)
-          );
-        }
-        if (ownersChanged) {
-          const oldOwnerIds = (existingProject.projectOwners || [])
-            .map((o) => o.ownerId?._id?.toString())
-            .filter(Boolean);
-          const newOwnerIds = (updatedProject.projectOwners || [])
-            .map((o) => o.ownerId?._id?.toString())
-            .filter(Boolean);
-          [...oldOwnerIds, ...newOwnerIds].forEach((id) =>
-            allInvolvedUserIdsForInApp.add(id)
-          );
-        }
-        // For general important field changes, notify current members and owners
-        if (importantFieldsChanged && changesSummary.length > 0) {
-          (updatedProject.members || []).forEach((m) =>
-            allInvolvedUserIdsForInApp.add(m._id?.toString())
-          );
-          (updatedProject.projectOwners || []).forEach((o) =>
-            allInvolvedUserIdsForInApp.add(o.ownerId?._id?.toString())
-          );
-        }
-        // Always notify the performing user if there were changes
-        if (changesSummary.length > 0 && performingUser?._id) {
-          allInvolvedUserIdsForInApp.add(performingUser._id?.toString());
-        }
-
-        const inAppNotificationMessage = `Project "${updatedProject.projectName}" updated by ${performingUser.userName}: ${changesSummary.join(", ")}.`;
-        allInvolvedUserIdsForInApp.forEach((userIdStr) => {
-          if (userIdStr) {
-            createNotification(
-              new mongoose.Types.ObjectId(userIdStr),
-              `Project Update: "${updatedProject.projectName}"`,
-              inAppNotificationMessage
-            );
+          // Collect all users involved or affected by the change for in-app and potentially push
+          (updatedProject.members || []).forEach(m => m?._id && involvedUserIdsForNotifications.add(m._id.toString()));
+          (updatedProject.projectOwners || []).forEach(o => o?.ownerId?._id && involvedUserIdsForNotifications.add(o.ownerId._id.toString()));
+          
+          // Ensure performing user is notified if they are not part of the project lists
+          if (performingUser?._id) {
+            involvedUserIdsForNotifications.add(performingUser._id.toString());
           }
-        });
-      }
 
-      if (notificationPromises.length > 0) {
-        await Promise.all(notificationPromises);
+          const inAppNotificationMessage = `Project "${updatedProject.projectName}" updated by ${performingUser.userName}: ${changesSummary.join(", ")}.`;
+          
+          Array.from(involvedUserIdsForNotifications).forEach(userIdStr => {
+              if (userIdStr) { // Ensure userIdStr is not null/undefined
+                  inAppNotificationsToCreate.push({
+                      title: `Project Update: "${updatedProject.projectName}"`,
+                      type: "Project Update",
+                      description: inAppNotificationMessage,
+                      memberId: new mongoose.Types.ObjectId(userIdStr),
+                      projectId: updatedProject._id,
+                  });
+              }
+          });
+      }
+      
+      if (inAppNotificationsToCreate.length > 0) {
+          await ShowNotification.create(inAppNotificationsToCreate, { session, ordered: true });
       }
 
       await session.commitTransaction();
 
-      // --- PUSH NOTIFICATION LOGIC (after commit) ---
-      if (pushNotificationUserIds.size > 0 && changesSummary.length > 0) {
-        try {
-          const usersForPush = await User.find({
-            _id: {
-              $in: Array.from(pushNotificationUserIds).map(
-                (id) => new mongoose.Types.ObjectId(id)
-              ),
-            },
-            fcmDeviceToken: { $ne: null, $exists: true, $ne: "" },
-          })
-            .select("fcmDeviceToken")
-            .lean();
+      // --- PUSH NOTIFICATION & EMAIL LOGIC (after commit) ---
+      if ((importantFieldsChanged || membersChanged || ownersChanged) && changesSummary.length > 0) {
+        const usersForNotifications = [];
+        const emailAddressSet = new Set();
 
-          const fcmTokens = usersForPush
-            .map((u) => u.fcmDeviceToken)
+        // Re-fetch or use populated users if they have tokens/emails
+        updatedProject.members?.forEach(member => {
+            if (member?._id) usersForNotifications.push(member);
+            if (member?.email) emailAddressSet.add(member.email);
+        });
+        updatedProject.projectOwners?.forEach(ownerObj => {
+            if (ownerObj?.ownerId?._id) usersForNotifications.push(ownerObj.ownerId);
+            if (ownerObj?.ownerId?.email) emailAddressSet.add(ownerObj.ownerId.email);
+        });
+         // Add performing user if not already included and details exist
+        if (performingUser?._id && !usersForNotifications.find(u => u._id.equals(performingUser._id))) {
+            // If performingUser object from req.user doesn't have token/email, you might need to fetch it
+            // For now, assume req.user is sufficiently populated or handle as needed
+            usersForNotifications.push(performingUser); 
+        }
+        if(performingUser?.email) emailAddressSet.add(performingUser.email);
+
+
+        // PUSH
+        const fcmTokens = usersForNotifications
+            .map(u => u.fcmDeviceToken || u.notificationToken) // Check both fields
             .filter(Boolean);
-
-          if (fcmTokens.length > 0) {
+        
+        if (fcmTokens.length > 0) {
             const pushTitle = `Project Update: ${updatedProject.projectName}`;
             const pushBody = `Project "${updatedProject.projectName}" updated by ${performingUser.userName}: ${changesSummary.join(", ")}.`;
-            await sendPushNotification(fcmTokens, pushTitle, pushBody, {
-              projectId: updatedProject._id.toString(),
-              type: "PROJECT_UPDATE",
-              click_action: "FLUTTER_NOTIFICATION_CLICK",
-            });
-          }
-        } catch (pushError) {
-          console.error(
-            "Failed to send project update push notifications:",
-            pushError
-          );
+            try {
+                await sendPushNotification(fcmTokens, pushTitle, pushBody, {
+                    projectId: updatedProject._id.toString(),
+                    type: "PROJECT_UPDATE",
+                    click_action: "FLUTTER_NOTIFICATION_CLICK", // Keep if used by Flutter
+                });
+            } catch (pushError) {
+                console.error("Failed to send project update push notifications:", pushError.message);
+            }
         }
-      }
-      // --- END PUSH NOTIFICATION LOGIC ---
 
-      if (
-        (importantFieldsChanged || membersChanged || ownersChanged) &&
-        emailRecipients.size > 0 &&
-        changesSummary.length > 0
-      ) {
-        const emailBody = {
-          from: process.env.EMAIL_FROM || "noreply@example.com", // Fallback if EMAIL_FROM is not set
-          to: Array.from(emailRecipients).join(","),
-          subject: `Project Update: ${updatedProject.projectName}`,
-          html: `
-            <!DOCTYPE html>
-            <html lang="en">
-            <head><meta charset="UTF-8"><title>Project Update Notification</title></head>
-            <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                <tr><td style="padding: 20px; text-align: left;">
-                    <h2 style="color: #333;">Project Update Notification</h2>
-                    <p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p>
-                    <p style="font-size: 16px; color: #555;">Changes:</p>
-                    <ul style="font-size: 16px; color: #555; padding-left: 20px;">
-                      ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
-                    </ul>
-                    <p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p>
-                    <p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification. Please do not reply to this email.</p>
-                </td></tr>
-              </table>
-            </body></html>`,
-        };
-        try {
-          await SendEmailUtil(emailBody);
-        } catch (emailError) {
-          console.error("Failed to send notification email:", emailError);
-        }
+        // EMAIL
+        if (emailAddressSet.size > 0) {
+            const emailBody = {
+                from: process.env.EMAIL_FROM || "noreply@example.com",
+                to: Array.from(emailAddressSet).join(","), // Send one email to all or individual? Current is BCC-like.
+                                                           // For individual: iterate and send. For To/CC: format appropriately.
+                subject: `Project Update: ${updatedProject.projectName}`,
+                html: `
+                    <!DOCTYPE html>
+                    <html lang="en">
+                    <head><meta charset="UTF-8"><title>Project Update Notification</title></head>
+                    <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+                      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                        <tr><td style="padding: 20px; text-align: left;">
+                            <h2 style="color: #333;">Project Update Notification</h2>
+                            <p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p>
+                            <p style="font-size: 16px; color: #555;">Changes:</p>
+                            <ul style="font-size: 16px; color: #555; padding-left: 20px;">
+                              ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
+                            </ul>
+                            <p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p>
+                            <p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification. Please do not reply to this email.</p>
+                        </td></tr>
+                      </table>
+                    </body></html>`,
+            };
+            try {
+                await SendEmailUtil(emailBody);
+            } catch (emailError) {
+                console.error("Failed to send project update notification email:", emailError.message);
+            }
+          }
       }
 
       res
@@ -653,17 +603,22 @@ const editProjects = asyncHandler(async (req, res) => {
         );
     } catch (error) {
       await session.abortTransaction();
-      throw error;
+      // Re-throw to be caught by the outer try-catch for consistent error response
+      throw error; 
     } finally {
       session.endSession();
     }
   } catch (error) {
-    console.error("Error updating project:", error);
+    // Log the full error for server-side debugging
+    console.error("Error in editProjects controller:", error.message, error.stack); 
+    
+    // Send a structured error response to the client
     const statusCode = error instanceof ApiError ? error.statusCode : 500;
-    res.status(statusCode).json({
-      message: error.message || "Internal Server Error",
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-    });
+    const message = error instanceof ApiError ? error.message : "An internal server error occurred during project update.";
+    
+    res.status(statusCode).json(
+      new ApiResponse(statusCode, null, message, error.errors || []) // Assuming ApiResponse can handle errors array
+    );
   }
 });
 
