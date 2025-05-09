@@ -1,25 +1,43 @@
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
-import { editProject } from "../models/project.model.js"; // Your project model
-import { User } from "../models/user.model.js"; // Your User model
-import { AdditionalMilestone } from "../models/additionalMilestone.js";
+import { editProject } from "../models/project.model.js";
+import { User } from "../models/user.model.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadToS3 } from "../utils/cloudinary.js"; // Your S3 uploader
+import { uploadToS3 } from "../utils/cloudinary.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
+import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
+import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
-// --- ADDED FOR PUSH NOTIFICATIONS ---
-import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
+
+const toSafeISODateString = (
+  dateInput,
+  placeholderIfNullOrUndefined = null
+) => {
+  if (dateInput === null || dateInput === undefined) {
+    return placeholderIfNullOrUndefined;
+  }
+  if (dateInput === "") {
+    return null;
+  }
+  const date = new Date(dateInput);
+  if (date instanceof Date && !isNaN(date.getTime())) {
+    return date.toISOString().split("T")[0];
+  }
+  return typeof dateInput === "string"
+    ? `Invalid Date: ${dateInput}`
+    : "Invalid Date Input";
+};
 
 const createProject = asyncHandler(async (req, res) => {
   try {
     const {
       projectName,
-      projectOwners, // Assuming this is an array of User IDs
+      projectOwners,
       description,
       location,
       status,
@@ -31,32 +49,53 @@ const createProject = asyncHandler(async (req, res) => {
       daysLeft,
     } = req.body;
     const { files } = req;
-    const performingUser = req.user; // Assuming req.user is available
+    const performingUser = req.user;
 
-    console.log("Received Project Data:", req.body);
-    console.log("Received Files:", files?.projectBanner?.length);
-
-    const existingProject = await editProject.findOne({ projectName });
-    if (existingProject) {
+    const existingProjectCheck = await editProject.findOne({ projectName });
+    if (existingProjectCheck) {
       throw new ApiError(400, "Project name already taken.");
     }
 
-    let projectBanners = [];
+    let validatedDeadline = null;
+    if (deadline) {
+      const parsedDate = new Date(deadline);
+      if (!(parsedDate instanceof Date && !isNaN(parsedDate.getTime()))) {
+        throw new ApiError(
+          400,
+          `Invalid date format for deadline: '${deadline}'. Please use a valid date string (e.g., YYYY-MM-DD).`
+        );
+      }
+      validatedDeadline = parsedDate;
+    }
 
+    const validatedProjectOwners = [];
+    if (Array.isArray(projectOwners)) {
+      projectOwners.forEach((ownerId) => {
+        if (!mongoose.Types.ObjectId.isValid(ownerId)) {
+          throw new ApiError(
+            400,
+            `Invalid project owner ID format: ${ownerId}`
+          );
+        }
+        validatedProjectOwners.push({
+          ownerId: new mongoose.Types.ObjectId(ownerId),
+        });
+      });
+    }
+
+    let projectBanners = [];
     if (files?.projectBanner?.length > 0) {
       if (files.projectBanner.length > 10) {
         throw new ApiError(400, "You can upload up to 10 banners.");
       }
-
       const uploadFile = async (file) => {
         if (file.size > 5 * 1024 * 1024) {
-          console.error(`File too large: ${file.originalname}`);
+          // Max 5MB
+          console.warn(`File too large, skipped: ${file.originalname}`);
           return null;
         }
-
         try {
-          console.log(`Uploading file: ${file.originalname}`);
-          const uniqueFileName = `${uuidv4()}-${file.originalname}`;
+          const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
           const uploadedImageUrl = await uploadToS3(
             file.buffer,
             uniqueFileName,
@@ -66,15 +105,17 @@ const createProject = asyncHandler(async (req, res) => {
             ? { url: uploadedImageUrl, uploadDate: new Date() }
             : null;
         } catch (uploadError) {
-          console.error(`Upload failed for ${file.originalname}:`, uploadError);
-          return null; // Do not fail everything if one file fails
+          console.error(
+            `Upload failed for ${file.originalname}:`,
+            uploadError.message
+          );
+          return null;
         }
       };
 
       const batchSize = 3;
       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
         const batch = files.projectBanner.slice(i, i + batchSize);
-        console.log(`Uploading batch: ${i / batchSize + 1}`);
         const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
         projectBanners.push(
           ...uploadedBatch
@@ -84,54 +125,58 @@ const createProject = asyncHandler(async (req, res) => {
       }
     }
 
-    console.log("Uploaded Banners:", projectBanners);
-
     const projectData = {
       projectName,
-      projectOwners: Array.isArray(projectOwners)
-        ? projectOwners.map((ownerId) => ({ ownerId }))
-        : [], // Ensure projectOwners is structured if needed by schema
+      projectOwners: validatedProjectOwners,
       description,
       businessAreas,
-      comapanyName,
+      comapanyName, // Typo "comapanyName"
       location,
-      status,
-      deadline,
+      status: status || "Pending", // Default status
+      deadline: validatedDeadline,
       physicalEducationRange,
       financialEducationRange,
       daysLeft,
       projectBanner: projectBanners,
-      createdBy: performingUser?._id, // Optional: track creator
+      createdBy: performingUser?._id,
+      logs: [
+        {
+          actionType: "Project Creation",
+          message: `Project "${projectName}" created by ${performingUser?.userName || "system"}`,
+          userId: performingUser?._id,
+          timestamp: new Date(),
+        },
+      ],
     };
 
     const project = await editProject.create(projectData);
 
-    // --- PUSH NOTIFICATION LOGIC ---
-    if (project) {
-      const recipientUserIds = new Set();
-      if (Array.isArray(projectOwners)) {
-        projectOwners.forEach((ownerId) => {
-          if (mongoose.Types.ObjectId.isValid(ownerId)) {
-            recipientUserIds.add(ownerId.toString());
-          }
-        });
+    if (project && validatedProjectOwners.length > 0) {
+      const recipientUserIds = new Set(
+        validatedProjectOwners.map((po) => po.ownerId.toString())
+      );
+      if (performingUser?._id) {
+        recipientUserIds.add(performingUser._id.toString());
       }
-      // Optionally notify the creator as well
-      // if (performingUser?._id) {
-      //   recipientUserIds.add(performingUser._id.toString());
-      // }
 
       if (recipientUserIds.size > 0) {
         try {
           const usersForPush = await User.find({
-            _id: { $in: Array.from(recipientUserIds) },
-            fcmDeviceToken: { $ne: null, $exists: true, $ne: "" },
+            _id: {
+              $in: Array.from(recipientUserIds).map(
+                (id) => new mongoose.Types.ObjectId(id)
+              ),
+            },
+            $or: [
+              { fcmDeviceToken: { $ne: null, $exists: true, $ne: "" } },
+              { notificationToken: { $ne: null, $exists: true, $ne: "" } },
+            ],
           })
-            .select("fcmDeviceToken")
+            .select("fcmDeviceToken notificationToken")
             .lean();
 
           const fcmTokens = usersForPush
-            .map((u) => u.fcmDeviceToken)
+            .map((u) => u.fcmDeviceToken || u.notificationToken)
             .filter(Boolean);
 
           if (fcmTokens.length > 0) {
@@ -140,110 +185,156 @@ const createProject = asyncHandler(async (req, res) => {
             await sendPushNotification(fcmTokens, pushTitle, pushBody, {
               projectId: project._id.toString(),
               type: "PROJECT_CREATED",
-              click_action: "FLUTTER_NOTIFICATION_CLICK",
             });
           }
         } catch (pushError) {
           console.error(
             "Failed to send project creation push notifications:",
-            pushError
+            pushError.message
           );
         }
       }
     }
-    // --- END PUSH NOTIFICATION LOGIC ---
 
     res
       .status(201)
       .json(new ApiResponse(201, project, "Project created successfully"));
   } catch (error) {
-    console.error("Error in createProject:", error);
-    res.status(500).json({ message: error.message || "Internal Server Error" });
+    console.error("Error in createProject (FULL ERROR OBJECT):", error);
+    const statusCode =
+      error instanceof ApiError
+        ? error.statusCode
+        : error.name === "ValidationError" || error.name === "CastError"
+          ? 400
+          : 500;
+    const message =
+      error instanceof ApiError
+        ? error.message
+        : "An error occurred during project creation.";
+    const errors =
+      error instanceof ApiError
+        ? error.errors
+        : error.errors ||
+          (error.name === "ValidationError" ? error.errors : []);
+    res
+      .status(statusCode)
+      .json(new ApiResponse(statusCode, null, message, errors));
   }
 });
 
 const editProjects = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
+    const performingUser = req.user;
 
     if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      throw new ApiError(400, "Invalid project ID");
+      throw new ApiError(400, "Invalid project ID format.");
     }
 
     const {
-      projectName,
-      projectOwners,
-      description,
-      location,
-      businessAreas,
-      comapanyName,
-      members,
-      status,
-      deadline, // This is req.body.deadline
-      physicalEducationRange,
-      financialEducationRange,
+      projectName: newProjectNameInput,
+      projectOwners: newProjectOwnerIdsInput,
+      description: newDescriptionInput,
+      location: newLocationInput,
+      businessAreas: newBusinessAreasInput,
+      comapanyName: newCompanyNameInput,
+      members: newMemberIdsInput,
+      status: newStatusInput,
+      deadline: newDeadlineInput,
+      physicalEducationRange: newPhysicalEducationRangeInput,
+      financialEducationRange: newFinancialEducationRangeInput,
       removeBanners = [],
     } = req.body;
 
     const { files } = req;
-    const performingUser = req.user;
 
     const existingProject = await editProject
       .findById(projectId)
-      .populate("projectOwners.ownerId", "email userName _id")
-      .populate("members", "email userName _id")
+      .populate(
+        "projectOwners.ownerId",
+        "email userName _id notificationToken fcmDeviceToken"
+      )
+      .populate(
+        "members",
+        "email userName _id notificationToken fcmDeviceToken"
+      )
       .lean();
 
     if (!existingProject) {
-      throw new ApiError(404, "Project not found");
+      throw new ApiError(404, "Project not found.");
     }
 
-    let updateData = {};
-    let logs = [];
-    let updatedProjectBanners = existingProject.projectBanner || [];
-    let changesSummary = [];
+    const updateData = {};
+    const logs = [];
+    let updatedProjectBanners = [...(existingProject.projectBanner || [])];
+    const changesSummary = [];
     let importantFieldsChanged = false;
-    let membersChanged = false;
-    let ownersChanged = false;
+    let membersListChanged = false;
+    let ownersListChanged = false;
 
     let finalProjectName = existingProject.projectName;
-    if (projectName && projectName !== existingProject.projectName) {
+    if (
+      newProjectNameInput &&
+      newProjectNameInput !== existingProject.projectName
+    ) {
       const nameTaken = await editProject.findOne({
-        projectName,
+        projectName: newProjectNameInput,
         _id: { $ne: projectId },
       });
-      finalProjectName = nameTaken
-        ? `${projectName}-${uuidv4().split("-")[0]}`
-        : projectName;
-      logs.push({
-        actionType: "Project Name Change",
-        message: `Project name changed from "${existingProject.projectName}" to "${finalProjectName}" by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
-      });
+      if (nameTaken) {
+        finalProjectName = `${newProjectNameInput}-${uuidv4().split("-")[0]}`;
+        logs.push({
+          actionType: "Project Name Change (Auto-Adjusted)",
+          message: `Project name "${newProjectNameInput}" was taken, changed to "${finalProjectName}" by ${performingUser.userName}. Original: "${existingProject.projectName}"`,
+          userId: performingUser._id,
+          timestamp: new Date(),
+        });
+      } else {
+        finalProjectName = newProjectNameInput;
+        logs.push({
+          actionType: "Project Name Change",
+          message: `Project name changed from "${existingProject.projectName}" to "${finalProjectName}" by ${performingUser.userName}`,
+          userId: performingUser._id,
+          timestamp: new Date(),
+        });
+      }
+      updateData.projectName = finalProjectName;
       changesSummary.push(`Project name changed to "${finalProjectName}"`);
       importantFieldsChanged = true;
-    } else {
-      finalProjectName = existingProject.projectName;
     }
 
-    if (status && status !== existingProject.status) {
+    if (newStatusInput && newStatusInput !== existingProject.status) {
+      updateData.status = newStatusInput;
       logs.push({
         actionType: "Status Update",
-        message: `Status changed from "${existingProject.status}" to "${status}" by ${performingUser.userName}`,
+        message: `Status changed from "${existingProject.status}" to "${newStatusInput}" by ${performingUser.userName}`,
         userId: performingUser._id,
         timestamp: new Date(),
       });
-      changesSummary.push(`Status updated to "${status}"`);
+      changesSummary.push(`Status updated to "${newStatusInput}"`);
       importantFieldsChanged = true;
     }
 
-    // *** MODIFIED DEADLINE HANDLING FOR LOGGING ***
-    if (deadline !== undefined) { // Check if deadline is part of the request body
-      const existingDeadlineFormatted = toSafeISODateString(existingProject.deadline);
-      const newDeadlineFormatted = toSafeISODateString(deadline); // `deadline` here is req.body.deadline
-
+    if (newDeadlineInput !== undefined) {
+      let newDeadlineForDb = null;
+      if (newDeadlineInput === "" || newDeadlineInput === null) {
+        newDeadlineForDb = null;
+      } else {
+        const parsedDate = new Date(newDeadlineInput);
+        if (!(parsedDate instanceof Date && !isNaN(parsedDate.getTime()))) {
+          throw new ApiError(
+            400,
+            `Invalid date format for deadline: '${newDeadlineInput}'. Please use a valid date string (e.g., YYYY-MM-DD) or null/empty to clear.`
+          );
+        }
+        newDeadlineForDb = parsedDate;
+      }
+      const existingDeadlineFormatted = toSafeISODateString(
+        existingProject.deadline
+      );
+      const newDeadlineFormatted = toSafeISODateString(newDeadlineForDb);
       if (newDeadlineFormatted !== existingDeadlineFormatted) {
+        updateData.deadline = newDeadlineForDb;
         logs.push({
           actionType: "Deadline Change",
           message: `Deadline updated from "${existingDeadlineFormatted || "N/A"}" to "${newDeadlineFormatted || "cleared"}" by ${performingUser.userName}`,
@@ -256,18 +347,39 @@ const editProjects = asyncHandler(async (req, res) => {
         importantFieldsChanged = true;
       }
     }
-    // *** END MODIFIED DEADLINE HANDLING ***
 
-
-    const fieldUpdates = [
-      { key: "description", value: description, name: "Description" },
-      { key: "location", value: location, name: "Location" },
-      { key: "businessAreas", value: businessAreas, name: "Business Areas" },
-      { key: "comapanyName", value: comapanyName, name: "Company Name" },
+    const simpleFieldUpdates = [
+      {
+        key: "description",
+        newValue: newDescriptionInput,
+        name: "Description",
+      },
+      { key: "location", newValue: newLocationInput, name: "Location" },
+      {
+        key: "businessAreas",
+        newValue: newBusinessAreasInput,
+        name: "Business Areas",
+      },
+      {
+        key: "comapanyName",
+        newValue: newCompanyNameInput,
+        name: "Company Name",
+      },
+      {
+        key: "physicalEducationRange",
+        newValue: newPhysicalEducationRangeInput,
+        name: "Physical Education Range",
+      },
+      {
+        key: "financialEducationRange",
+        newValue: newFinancialEducationRangeInput,
+        name: "Financial Education Range",
+      },
     ];
 
-    fieldUpdates.forEach(({ key, value, name }) => {
-      if (value !== undefined && value !== existingProject[key]) {
+    simpleFieldUpdates.forEach(({ key, newValue, name }) => {
+      if (newValue !== undefined && newValue !== existingProject[key]) {
+        updateData[key] = newValue;
         logs.push({
           actionType: `${name} Update`,
           message: `${name} updated by ${performingUser.userName}`,
@@ -279,66 +391,25 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     });
 
-    if (removeBanners.length > 0) {
-      updatedProjectBanners = updatedProjectBanners.filter(
-        (banner) => !removeBanners.includes(banner.url)
-      );
-      logs.push({
-        actionType: "Banner Removal",
-        message: `${removeBanners.length} banner(s) removed by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
-      });
-      changesSummary.push(`${removeBanners.length} banner(s) removed`);
-      importantFieldsChanged = true;
-    }
-
-    if (files?.projectBanner?.length > 0) {
-      if (updatedProjectBanners.length + files.projectBanner.length > 10) {
-        throw new ApiError(400, "Maximum 10 banners allowed");
-      }
-      const uploadPromises = files.projectBanner.map(async (file) => {
-        const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-        const uploadedImageUrl = await uploadToS3(
-          file.buffer,
-          uniqueFileName,
-          file.mimetype
-        );
-        return uploadedImageUrl
-          ? { url: uploadedImageUrl, uploadDate: new Date() }
-          : null;
-      });
-      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);
-      updatedProjectBanners.push(...newBanners);
-      logs.push({
-        actionType: "Banner Addition",
-        message: `${newBanners.length} new banner(s) added by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
-      });
-      changesSummary.push(`${newBanners.length} new banner(s) added`);
-      importantFieldsChanged = true;
-    }
-
-    if (Array.isArray(members)) {
+    if (Array.isArray(newMemberIdsInput)) {
+      const validatedNewMemberIds = newMemberIdsInput
+        .filter(Boolean)
+        .map((id) => {
+          if (!mongoose.Types.ObjectId.isValid(id))
+            throw new ApiError(400, `Invalid member ID format: ${id}`);
+          return id.toString();
+        });
       const existingMemberIds = (existingProject.members || []).map((m) =>
         m._id.toString()
       );
-      const newMemberIds = members.filter(Boolean).map((id) => {
-        if (!mongoose.Types.ObjectId.isValid(id))
-          throw new ApiError(400, `Invalid member ID: ${id}`);
-        return new mongoose.Types.ObjectId(id).toString();
-      });
-
-      const setExisting = new Set(existingMemberIds);
-      const setNew = new Set(newMemberIds);
-
       if (
-        setExisting.size !== setNew.size ||
-        !existingMemberIds.every((id) => setNew.has(id)) ||
-        !newMemberIds.every((id) => setExisting.has(id))
+        JSON.stringify(validatedNewMemberIds.sort()) !==
+        JSON.stringify(existingMemberIds.sort())
       ) {
-        membersChanged = true;
+        updateData.members = validatedNewMemberIds.map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
+        membersListChanged = true;
         logs.push({
           actionType: "Members Update",
           message: `Project members updated by ${performingUser.userName}`,
@@ -350,25 +421,25 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     }
 
-    if (Array.isArray(projectOwners)) {
+    if (Array.isArray(newProjectOwnerIdsInput)) {
+      const validatedNewOwnerIds = newProjectOwnerIdsInput
+        .filter(Boolean)
+        .map((id) => {
+          if (!mongoose.Types.ObjectId.isValid(id))
+            throw new ApiError(400, `Invalid project owner ID format: ${id}`);
+          return id.toString();
+        });
       const existingOwnerIds = (existingProject.projectOwners || [])
         .map((o) => o.ownerId?._id.toString())
         .filter(Boolean);
-      const newOwnerIds = projectOwners.filter(Boolean).map((id) => {
-        if (!mongoose.Types.ObjectId.isValid(id))
-          throw new ApiError(400, `Invalid owner ID: ${id}`);
-        return new mongoose.Types.ObjectId(id).toString();
-      });
-
-      const setExisting = new Set(existingOwnerIds);
-      const setNew = new Set(newOwnerIds);
-
       if (
-        setExisting.size !== setNew.size ||
-        !existingOwnerIds.every((id) => setNew.has(id)) ||
-        !newOwnerIds.every((id) => setExisting.has(id))
+        JSON.stringify(validatedNewOwnerIds.sort()) !==
+        JSON.stringify(existingOwnerIds.sort())
       ) {
-        ownersChanged = true;
+        updateData.projectOwners = validatedNewOwnerIds.map((id) => ({
+          ownerId: new mongoose.Types.ObjectId(id),
+        }));
+        ownersListChanged = true;
         logs.push({
           actionType: "Owners Update",
           message: `Project owners updated by ${performingUser.userName}`,
@@ -380,82 +451,68 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     }
 
-    if (
-      physicalEducationRange !== undefined &&
-      physicalEducationRange !== existingProject.physicalEducationRange
-    ) {
-      logs.push({
-        actionType: "Physical Education Range Update",
-        message: `Physical Education Range updated by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
+    if (Array.isArray(removeBanners) && removeBanners.length > 0) {
+      const initialBannerCount = updatedProjectBanners.length;
+      updatedProjectBanners = updatedProjectBanners.filter(
+        (banner) => !removeBanners.includes(banner.url)
+      );
+      if (updatedProjectBanners.length < initialBannerCount) {
+        updateData.projectBanner = updatedProjectBanners;
+        logs.push({
+          actionType: "Banner Removal",
+          message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
+          userId: performingUser._id,
+          timestamp: new Date(),
+        });
+        changesSummary.push(
+          `${initialBannerCount - updatedProjectBanners.length} banner(s) removed`
+        );
+        importantFieldsChanged = true;
+      }
+    }
+
+    if (files?.projectBanner?.length > 0) {
+      if (updatedProjectBanners.length + files.projectBanner.length > 10) {
+        throw new ApiError(
+          400,
+          "Cannot upload new banners. Maximum 10 banners allowed in total."
+        );
+      }
+      const uploadPromises = files.projectBanner.map(async (file) => {
+        const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
+        const uploadedImageUrl = await uploadToS3(
+          file.buffer,
+          uniqueFileName,
+          file.mimetype
+        );
+        return uploadedImageUrl
+          ? { url: uploadedImageUrl, uploadDate: new Date() }
+          : null;
       });
-      changesSummary.push("Physical Education Range updated");
-      importantFieldsChanged = true;
+      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);
+      if (newBanners.length > 0) {
+        updatedProjectBanners.push(...newBanners);
+        updateData.projectBanner = updatedProjectBanners;
+        logs.push({
+          actionType: "Banner Addition",
+          message: `${newBanners.length} new banner(s) added by ${performingUser.userName}`,
+          userId: performingUser._id,
+          timestamp: new Date(),
+        });
+        changesSummary.push(`${newBanners.length} new banner(s) added`);
+        importantFieldsChanged = true;
+      }
     }
+
     if (
-      financialEducationRange !== undefined &&
-      financialEducationRange !== existingProject.financialEducationRange
+      updateData.projectBanner === undefined &&
+      JSON.stringify(updatedProjectBanners) !==
+        JSON.stringify(existingProject.projectBanner || [])
     ) {
-      logs.push({
-        actionType: "Financial Education Range Update",
-        message: `Financial Education Range updated by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
-      });
-      changesSummary.push("Financial Education Range updated");
-      importantFieldsChanged = true;
+      updateData.projectBanner = updatedProjectBanners;
     }
 
-    updateData = {
-      projectName: finalProjectName,
-      description:
-        description !== undefined ? description : existingProject.description,
-      location: location !== undefined ? location : existingProject.location,
-      businessAreas:
-        businessAreas !== undefined
-          ? businessAreas
-          : existingProject.businessAreas,
-      comapanyName:
-        comapanyName !== undefined
-          ? comapanyName
-          : existingProject.comapanyName,
-      status: status !== undefined ? status : existingProject.status,
-      deadline: // For DB update, pass the raw value; Mongoose will attempt to cast it.
-        deadline !== undefined
-          ? deadline === "" || deadline === null // Explicitly clearing
-            ? null
-            : deadline // Pass original value from req.body
-          : existingProject.deadline, // Not in request, keep existing
-      physicalEducationRange:
-        physicalEducationRange !== undefined
-          ? physicalEducationRange
-          : existingProject.physicalEducationRange,
-      financialEducationRange:
-        financialEducationRange !== undefined
-          ? financialEducationRange
-          : existingProject.financialEducationRange,
-      projectBanner: updatedProjectBanners,
-      // Ensure all log timestamps are valid Date objects before saving
-      logs: [...(existingProject.logs || []), ...logs].map(log => ({
-        ...log,
-        timestamp: log.timestamp instanceof Date ? log.timestamp : new Date(log.timestamp) // Ensure it's a Date object
-      })),
-    };
-
-    if (membersChanged && Array.isArray(members)) {
-      updateData.members = members
-        .filter(Boolean)
-        .map((id) => new mongoose.Types.ObjectId(id));
-    }
-    if (ownersChanged && Array.isArray(projectOwners)) {
-      updateData.projectOwners = projectOwners
-        .filter(Boolean)
-        .map((id) => ({ ownerId: new mongoose.Types.ObjectId(id) }));
-    }
-
-    if (Object.keys(logs).length === 0 && JSON.stringify(updatedProjectBanners) === JSON.stringify(existingProject.projectBanner || [])) {
-      // Added check for banners if logs are empty
+    if (Object.keys(updateData).length === 0) {
       return res
         .status(200)
         .json(
@@ -467,6 +524,10 @@ const editProjects = asyncHandler(async (req, res) => {
         );
     }
 
+    if (logs.length > 0) {
+      updateData.logs = [...(existingProject.logs || []), ...logs];
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
     let updatedProject;
@@ -476,157 +537,214 @@ const editProjects = asyncHandler(async (req, res) => {
         .findByIdAndUpdate(
           projectId,
           { $set: updateData },
-          { new: true, session, runValidators: true } // Added runValidators
+          { new: true, session, runValidators: true }
         )
-        .populate("members", "email userName _id notificationToken fcmDeviceToken") // Added tokens for push
-        .populate("projectOwners.ownerId", "email userName _id notificationToken fcmDeviceToken"); // Added tokens for push
+        .populate(
+          "projectOwners.ownerId",
+          "email userName _id notificationToken fcmDeviceToken"
+        )
+        .populate(
+          "members",
+          "email userName _id notificationToken fcmDeviceToken"
+        );
 
       if (!updatedProject) {
-        throw new ApiError(500, "Failed to update project after changes.");
+        throw new ApiError(
+          500,
+          "Failed to update project after changes. Project might have been deleted concurrently."
+        );
       }
 
-      // Consolidate notification logic
       const inAppNotificationsToCreate = [];
-      const involvedUserIdsForNotifications = new Set();
+      if (importantFieldsChanged || membersListChanged || ownersListChanged) {
+        const involvedUserIdsForInApp = new Set();
+        (updatedProject.members || []).forEach(
+          (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
+        );
+        (updatedProject.projectOwners || []).forEach(
+          (o) =>
+            o?.ownerId?._id &&
+            involvedUserIdsForInApp.add(o.ownerId._id.toString())
+        );
+        if (membersListChanged)
+          (existingProject.members || []).forEach(
+            (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
+          );
+        if (ownersListChanged)
+          (existingProject.projectOwners || []).forEach(
+            (o) =>
+              o?.ownerId?._id &&
+              involvedUserIdsForInApp.add(o.ownerId._id.toString())
+          );
+        if (performingUser?._id)
+          involvedUserIdsForInApp.add(performingUser._id.toString());
 
-      if (importantFieldsChanged || membersChanged || ownersChanged) {
-          // Collect all users involved or affected by the change for in-app and potentially push
-          (updatedProject.members || []).forEach(m => m?._id && involvedUserIdsForNotifications.add(m._id.toString()));
-          (updatedProject.projectOwners || []).forEach(o => o?.ownerId?._id && involvedUserIdsForNotifications.add(o.ownerId._id.toString()));
-          
-          // Ensure performing user is notified if they are not part of the project lists
-          if (performingUser?._id) {
-            involvedUserIdsForNotifications.add(performingUser._id.toString());
-          }
-
-          const inAppNotificationMessage = `Project "${updatedProject.projectName}" updated by ${performingUser.userName}: ${changesSummary.join(", ")}.`;
-          
-          Array.from(involvedUserIdsForNotifications).forEach(userIdStr => {
-              if (userIdStr) { // Ensure userIdStr is not null/undefined
-                  inAppNotificationsToCreate.push({
-                      title: `Project Update: "${updatedProject.projectName}"`,
-                      type: "Project Update",
-                      description: inAppNotificationMessage,
-                      memberId: new mongoose.Types.ObjectId(userIdStr),
-                      projectId: updatedProject._id,
-                  });
-              }
+        if (changesSummary.length > 0 && involvedUserIdsForInApp.size > 0) {
+          const inAppNotificationMessage = `Project "${updatedProject.projectName}" was updated by ${performingUser.userName}: ${changesSummary.join("; ")}.`;
+          Array.from(involvedUserIdsForInApp).forEach((userIdStr) => {
+            inAppNotificationsToCreate.push({
+              title: `Project Update: ${updatedProject.projectName}`,
+              type: "Project Update",
+              description: inAppNotificationMessage,
+              lengthyDesc: `Details of project update for "${updatedProject.projectName}": ${changesSummary.join("; ")}. Performed by ${performingUser.userName}.`,
+              memberId: new mongoose.Types.ObjectId(userIdStr),
+              projectId: updatedProject._id,
+            });
           });
+        }
       }
-      
+
       if (inAppNotificationsToCreate.length > 0) {
-          await ShowNotification.create(inAppNotificationsToCreate, { session, ordered: true });
+        await ShowNotification.create(inAppNotificationsToCreate, {
+          session,
+          ordered: true,
+        });
       }
 
       await session.commitTransaction();
 
-      // --- PUSH NOTIFICATION & EMAIL LOGIC (after commit) ---
-      if ((importantFieldsChanged || membersChanged || ownersChanged) && changesSummary.length > 0) {
-        const usersForNotifications = [];
-        const emailAddressSet = new Set();
+      if (
+        (importantFieldsChanged || membersListChanged || ownersListChanged) &&
+        changesSummary.length > 0
+      ) {
+        const notificationRecipients = new Map();
+        (updatedProject.members || []).forEach(
+          (user) =>
+            user?._id && notificationRecipients.set(user._id.toString(), user)
+        );
+        (updatedProject.projectOwners || []).forEach(
+          (ownerObj) =>
+            ownerObj?.ownerId?._id &&
+            notificationRecipients.set(
+              ownerObj.ownerId._id.toString(),
+              ownerObj.ownerId
+            )
+        );
+        if (membersListChanged)
+          (existingProject.members || []).forEach(
+            (user) =>
+              user?._id &&
+              !notificationRecipients.has(user._id.toString()) &&
+              notificationRecipients.set(user._id.toString(), user)
+          );
+        if (ownersListChanged)
+          (existingProject.projectOwners || []).forEach(
+            (ownerObj) =>
+              ownerObj?.ownerId?._id &&
+              !notificationRecipients.has(ownerObj.ownerId._id.toString()) &&
+              notificationRecipients.set(
+                ownerObj.ownerId._id.toString(),
+                ownerObj.ownerId
+              )
+          );
 
-        // Re-fetch or use populated users if they have tokens/emails
-        updatedProject.members?.forEach(member => {
-            if (member?._id) usersForNotifications.push(member);
-            if (member?.email) emailAddressSet.add(member.email);
-        });
-        updatedProject.projectOwners?.forEach(ownerObj => {
-            if (ownerObj?.ownerId?._id) usersForNotifications.push(ownerObj.ownerId);
-            if (ownerObj?.ownerId?.email) emailAddressSet.add(ownerObj.ownerId.email);
-        });
-         // Add performing user if not already included and details exist
-        if (performingUser?._id && !usersForNotifications.find(u => u._id.equals(performingUser._id))) {
-            // If performingUser object from req.user doesn't have token/email, you might need to fetch it
-            // For now, assume req.user is sufficiently populated or handle as needed
-            usersForNotifications.push(performingUser); 
+        if (
+          performingUser?._id &&
+          !notificationRecipients.has(performingUser._id.toString())
+        ) {
+          const performerDetails = await User.findById(performingUser._id)
+            .select("email userName notificationToken fcmDeviceToken")
+            .lean();
+          if (performerDetails)
+            notificationRecipients.set(
+              performerDetails._id.toString(),
+              performerDetails
+            );
         }
-        if(performingUser?.email) emailAddressSet.add(performingUser.email);
 
+        const usersToNotify = Array.from(notificationRecipients.values());
+        const fcmTokens = usersToNotify
+          .map((u) => u.fcmDeviceToken || u.notificationToken)
+          .filter(Boolean);
 
-        // PUSH
-        const fcmTokens = usersForNotifications
-            .map(u => u.fcmDeviceToken || u.notificationToken) // Check both fields
-            .filter(Boolean);
-        
         if (fcmTokens.length > 0) {
-            const pushTitle = `Project Update: ${updatedProject.projectName}`;
-            const pushBody = `Project "${updatedProject.projectName}" updated by ${performingUser.userName}: ${changesSummary.join(", ")}.`;
-            try {
-                await sendPushNotification(fcmTokens, pushTitle, pushBody, {
-                    projectId: updatedProject._id.toString(),
-                    type: "PROJECT_UPDATE",
-                    click_action: "FLUTTER_NOTIFICATION_CLICK", // Keep if used by Flutter
-                });
-            } catch (pushError) {
-                console.error("Failed to send project update push notifications:", pushError.message);
-            }
+          const pushTitle = `Project Update: ${updatedProject.projectName}`;
+          const pushBody = `${changesSummary.join("; ")}. By ${performingUser.userName}.`;
+          try {
+            await sendPushNotification(fcmTokens, pushTitle, pushBody, {
+              projectId: updatedProject._id.toString(),
+              type: "PROJECT_UPDATE",
+            });
+          } catch (pushError) {
+            console.error(
+              `Failed to send project update push notifications for project ${updatedProject._id}:`,
+              pushError.message
+            );
+          }
         }
 
-        // EMAIL
-        if (emailAddressSet.size > 0) {
-            const emailBody = {
-                from: process.env.EMAIL_FROM || "noreply@example.com",
-                to: Array.from(emailAddressSet).join(","), // Send one email to all or individual? Current is BCC-like.
-                                                           // For individual: iterate and send. For To/CC: format appropriately.
-                subject: `Project Update: ${updatedProject.projectName}`,
-                html: `
-                    <!DOCTYPE html>
-                    <html lang="en">
-                    <head><meta charset="UTF-8"><title>Project Update Notification</title></head>
-                    <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                      <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                        <tr><td style="padding: 20px; text-align: left;">
-                            <h2 style="color: #333;">Project Update Notification</h2>
-                            <p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p>
-                            <p style="font-size: 16px; color: #555;">Changes:</p>
-                            <ul style="font-size: 16px; color: #555; padding-left: 20px;">
-                              ${changesSummary.map((change) => `<li>${change}</li>`).join("")}
-                            </ul>
-                            <p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p>
-                            <p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification. Please do not reply to this email.</p>
-                        </td></tr>
-                      </table>
-                    </body></html>`,
-            };
-            try {
-                await SendEmailUtil(emailBody);
-            } catch (emailError) {
-                console.error("Failed to send project update notification email:", emailError.message);
+        if (usersToNotify.some((u) => u.email)) {
+          const emailHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`;
+          for (const user of usersToNotify) {
+            if (user.email) {
+              try {
+                await SendEmailUtil({
+                  from: process.env.EMAIL_FROM || "noreply@example.com",
+                  to: user.email,
+                  subject: `Project Update: ${updatedProject.projectName}`,
+                  html: emailHtml,
+                });
+              } catch (emailError) {
+                console.error(
+                  `Failed to send project update email to ${user.email} for project ${updatedProject._id}:`,
+                  emailError.message
+                );
+              }
             }
           }
+        }
       }
-
       res
         .status(200)
         .json(
-          new ApiResponse(200, updatedProject, "Project updated successfully")
+          new ApiResponse(200, updatedProject, "Project updated successfully.")
         );
-    } catch (error) {
+    } catch (errorInTransaction) {
       await session.abortTransaction();
-      // Re-throw to be caught by the outer try-catch for consistent error response
-      throw error; 
+      console.error(
+        "Error during project update transaction (FULL ERROR OBJECT):",
+        errorInTransaction
+      );
+      if (errorInTransaction instanceof ApiError) throw errorInTransaction;
+      throw new ApiError(
+        500,
+        "An error occurred while saving project changes.",
+        errorInTransaction.errors || [],
+        errorInTransaction.stack
+      );
     } finally {
       session.endSession();
     }
   } catch (error) {
-    // Log the full error for server-side debugging
-    console.error("Error in editProjects controller:", error.message, error.stack); 
-    
-    // Send a structured error response to the client
-    const statusCode = error instanceof ApiError ? error.statusCode : 500;
-    const message = error instanceof ApiError ? error.message : "An internal server error occurred during project update.";
-    
-    res.status(statusCode).json(
-      new ApiResponse(statusCode, null, message, error.errors || []) // Assuming ApiResponse can handle errors array
+    console.error(
+      "Error in editProjects controller (FULL ERROR OBJECT):",
+      error
     );
+    const statusCode = error instanceof ApiError ? error.statusCode : 500;
+    const message =
+      error instanceof ApiError
+        ? error.message
+        : "An internal server error occurred during project update.";
+    const errors =
+      error instanceof ApiError
+        ? error.errors
+        : error.errors
+          ? error.errors
+          : [];
+    res
+      .status(statusCode)
+      .json(new ApiResponse(statusCode, null, message, errors));
   }
 });
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
     const { status, page, milestoneUserIds } = req.query;
-    const { isMain, _id: loggedInUserId } = req.user;
-    const assignedBusinessAreas = req.user.assignedBusinessAreas || [];
+    const {
+      isMain,
+      _id: loggedInUserId,
+      assignedBusinessAreas = [],
+    } = req.user;
     const validStatuses = [
       "Ongoing",
       "Pending",
@@ -636,29 +754,30 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "Cancelled",
       "Archived",
     ];
-    const baseFilter = {
-      ...(status && validStatuses.includes(status) ? { status } : {}),
-    };
-    const userBusinessAreas =
-      assignedBusinessAreas.length > 0
-        ? assignedBusinessAreas.map((area) => area.businessArea)
-        : [];
-    let finalFilter = baseFilter;
+    const baseFilter =
+      status && validStatuses.includes(status) ? { status } : {};
+    const userBusinessAreas = assignedBusinessAreas
+      .map((area) => area.businessArea)
+      .filter(Boolean);
+
+    let finalFilter = { ...baseFilter };
     if (!isMain) {
-      finalFilter = {
-        ...baseFilter,
-        $or: [
-          { members: loggedInUserId },
-          { "projectOwners.ownerId": loggedInUserId },
-          ...(userBusinessAreas.length > 0
-            ? [{ businessAreas: { $in: userBusinessAreas } }]
-            : []),
-        ],
-      };
+      const userAccessConditions = [
+        { members: loggedInUserId },
+        { "projectOwners.ownerId": loggedInUserId },
+      ];
+      if (userBusinessAreas.length > 0) {
+        userAccessConditions.push({
+          businessAreas: { $in: userBusinessAreas },
+        });
+      }
+      finalFilter.$or = userAccessConditions;
     }
-    const pageNumber = page ? Number.parseInt(page, 10) : 1;
+
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = 10;
     const skip = (pageNumber - 1) * pageSize;
+
     const totalProjects = await editProject.countDocuments(finalFilter);
     let query = editProject
       .find(finalFilter)
@@ -675,10 +794,10 @@ const getAllProjects = asyncHandler(async (req, res) => {
         },
       ])
       .sort({ createdAt: -1 });
-    if (pageNumber > 0) {
-      query = query.skip(skip).limit(pageSize);
-    }
-    const projects = await query;
+
+    if (pageNumber > 0) query = query.skip(skip).limit(pageSize);
+    const projects = await query.lean();
+
     let filteredProjects = projects;
     if (milestoneUserIds) {
       try {
@@ -687,63 +806,55 @@ const getAllProjects = asyncHandler(async (req, res) => {
           Array.isArray(parsedMilestoneUserIds) &&
           parsedMilestoneUserIds.length > 0
         ) {
-          const userIds = parsedMilestoneUserIds.filter((id) =>
-            mongoose.Types.ObjectId.isValid(id)
+          const validUserIdsForMilestoneFilter = parsedMilestoneUserIds.filter(
+            (id) => mongoose.Types.ObjectId.isValid(id)
           );
-          if (userIds.length > 0) {
+          if (validUserIdsForMilestoneFilter.length > 0) {
             const projectIds = projects.map((project) => project._id);
-            const allMilestones = await AdditionalMilestone.find({
+            const milestonesData = await AdditionalMilestone.find({
               projectId: { $in: projectIds },
-            }).populate({
-              path: "userId",
-              model: "User",
-              select: "userName _id",
-            });
-            const projectMilestonesMap = {};
-            allMilestones.forEach((milestone) => {
-              const projectId = milestone.projectId.toString();
-              if (!projectMilestonesMap[projectId])
-                projectMilestonesMap[projectId] = [];
-              projectMilestonesMap[projectId].push(milestone);
-            });
-            filteredProjects = projects.filter((project) => {
-              const projectId = project._id.toString();
-              const milestones = projectMilestonesMap[projectId] || [];
-              return milestones.some(
-                (milestone) =>
-                  milestone.userId &&
-                  userIds.includes(milestone.userId._id.toString())
-              );
-            });
+              userId: { $in: validUserIdsForMilestoneFilter },
+            })
+              .select("projectId")
+              .lean();
+            const projectsWithMatchingMilestones = new Set(
+              milestonesData.map((m) => m.projectId.toString())
+            );
+            filteredProjects = projects.filter((p) =>
+              projectsWithMatchingMilestones.has(p._id.toString())
+            );
           }
         }
       } catch (parseError) {
-        console.error("Error parsing milestoneUserIds:", parseError);
-        // Potentially throw an ApiError or handle as a bad request
+        console.warn(
+          "Error parsing milestoneUserIds, skipping filter:",
+          parseError.message
+        );
       }
     }
-    const projectsWithDetails = await Promise.all(
-      filteredProjects.map(async (project) => {
-        const isMember = project.members.some((member) =>
-          member._id.equals(loggedInUserId)
-        );
-        const isOwner = project.projectOwners.some(
-          (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
-        );
-        const fromBusinessArea =
-          !isMember &&
-          !isOwner &&
-          (typeof project.businessAreas === "string"
-            ? userBusinessAreas.includes(project.businessAreas)
-            : project.businessAreas?.some((area) =>
-                userBusinessAreas.includes(area)
-              ));
-        return {
-          ...project.toObject(),
-          accessType: { isMember, isOwner, fromBusinessArea },
-        };
-      })
-    );
+
+    const projectsWithDetails = filteredProjects.map((project) => {
+      const isMember = project.members.some((member) =>
+        member._id.equals(loggedInUserId)
+      );
+      const isOwner = project.projectOwners.some(
+        (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
+      );
+      const projectBAs = Array.isArray(project.businessAreas)
+        ? project.businessAreas
+        : project.businessAreas
+          ? [project.businessAreas]
+          : [];
+      const fromBusinessArea =
+        !isMember &&
+        !isOwner &&
+        projectBAs.some((area) => userBusinessAreas.includes(area));
+      return {
+        ...project,
+        accessType: { isMember, isOwner, fromBusinessArea },
+      };
+    });
+
     res
       .status(200)
       .json(
@@ -761,29 +872,44 @@ const getAllProjects = asyncHandler(async (req, res) => {
         )
       );
   } catch (error) {
-    console.error("Error in getAllProjects:", error);
-    throw new ApiError(400, error.message);
+    console.error("Error in getAllProjects (FULL ERROR OBJECT):", error);
+    throw new ApiError(
+      error.statusCode || 500,
+      error.message || "Failed to retrieve projects"
+    );
   }
 });
 
 const getProjectById = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
-    const { isMain, _id: loggedInUserId } = req.user;
-    const project = await editProject.findOne({ _id: projectId }).populate([
-      {
-        path: "members",
-        model: "User",
-        select: "userName avatar role userType",
-        populate: { path: "role", model: "Role", select: "roleName" },
-      },
-      {
-        path: "projectOwners.ownerId",
-        model: "User",
-        select: "userName role email",
-        populate: { path: "role", select: "roleName" },
-      },
-    ]);
+    const {
+      isMain,
+      _id: loggedInUserId,
+      assignedBusinessAreas = [],
+    } = req.user;
+
+    if (!mongoose.Types.ObjectId.isValid(projectId))
+      throw new ApiError(400, "Invalid Project ID format");
+
+    const project = await editProject
+      .findById(projectId)
+      .populate([
+        {
+          path: "members",
+          model: "User",
+          select: "userName avatar role userType",
+          populate: { path: "role", model: "Role", select: "roleName" },
+        },
+        {
+          path: "projectOwners.ownerId",
+          model: "User",
+          select: "userName role email",
+          populate: { path: "role", select: "roleName" },
+        },
+      ])
+      .lean();
+
     if (!project) throw new ApiError(404, "Project not found");
 
     if (!isMain) {
@@ -793,269 +919,255 @@ const getProjectById = asyncHandler(async (req, res) => {
       const isOwner = project.projectOwners.some(
         (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
       );
-
-      const projectBusinessAreasArray = Array.isArray(project.businessAreas)
+      const projectBAs = Array.isArray(project.businessAreas)
         ? project.businessAreas
         : project.businessAreas
           ? [project.businessAreas]
           : [];
-
-      const userAssignedBusinessAreasArray = Array.isArray(
-        req.user.assignedBusinessAreas
-      )
-        ? req.user.assignedBusinessAreas.map((ba) => ba.businessArea)
-        : req.user.businessArea
-          ? [req.user.businessArea]
-          : []; // Assuming req.user.businessArea if assignedBusinessAreas is not present
-
-      const businessAreaMatch = projectBusinessAreasArray.some((pba) =>
-        userAssignedBusinessAreasArray.includes(pba)
-      );
-
+      const userBAs = assignedBusinessAreas
+        .map((ba) => ba.businessArea)
+        .filter(Boolean);
+      const businessAreaMatch = projectBAs.some((pba) => userBAs.includes(pba));
       if (!isMember && !isOwner && !businessAreaMatch) {
         throw new ApiError(
           403,
-          "You don't have permission to access this project"
+          "You don't have permission to access this project."
         );
       }
     }
 
-    const isMember = project.members.some((member) =>
-      member._id.equals(loggedInUserId)
-    );
-    const isOwner = project.projectOwners.some(
-      (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
-    );
-    const fromBusinessArea = !isMember && !isOwner;
-    const milestones = [
-      { name: "Project Details", completed: true },
-      { name: "Filling", completed: false },
-      { name: "Payment", completed: false },
-      { name: "Review", completed: false },
-      { name: "Completed", completed: false },
+    const currentMilestones = [
+      { name: "Project Details", completed: true, key: "details" },
+      { name: "Filling", completed: false, key: "filling" },
+      { name: "Payment", completed: false, key: "payment" },
+      { name: "Review", completed: false, key: "review" },
+      { name: "Completed", completed: false, key: "project_completed" },
     ];
+
     const isFillingComplete =
       project.description &&
       project.location &&
       project.projectName &&
       project.projectBanner?.length > 0 &&
       project.members?.length > 0;
-    if (isFillingComplete) milestones[1].completed = true;
-    const [projectDocuments, projectReports, financeDocuments] =
-      await Promise.all([
-        UserDocument.find({ projName: project.projectName }),
-        Document.find({ projName: project.projectName }),
-        FinanceDocument.find({ projName: project.projectName }),
-      ]);
-    if (financeDocuments.length > 0) milestones[2].completed = true;
-    if (milestones[1].completed && milestones[2].completed)
-      milestones[3].completed = true;
-    if (project.status === "Completed") milestones[4].completed = true;
-    const updatedMembers = project.members.map((member) => ({
-      userId: member._id,
-      _id: member._id,
-      userName: member.userName,
-      avatar: member.avatar,
-      userType: member.userType || "Not Assigned",
-    }));
-    const updatedProjectOwners = project.projectOwners
-      .filter((owner) => owner.ownerId)
-      .map((owner) => ({
-        ownerId: owner.ownerId._id,
-        ownerName: owner.ownerId.userName || "",
-        role: owner.ownerId.role ? owner.ownerId.role.roleName : "No Role",
-        _id: owner.ownerId._id,
-        email: owner.ownerId.email || "",
-      }));
+    if (isFillingComplete)
+      currentMilestones.find((m) => m.key === "filling").completed = true;
+
+    const [
+      projectUserDocs,
+      projectSystemDocs,
+      projectFinanceDocs,
+      projectAdditionalMilestones,
+    ] = await Promise.all([
+      UserDocument.find({ projName: project.projectName }).lean(),
+      Document.find({ projName: project.projectName }).lean(),
+      FinanceDocument.find({ projName: project.projectName })
+        .sort({ uploadedAt: -1 })
+        .lean(),
+      AdditionalMilestone.find({ projectId: project._id })
+        .populate({ path: "userId", model: "User", select: "userName" })
+        .lean(),
+    ]);
+
+    if (projectFinanceDocs.length > 0)
+      currentMilestones.find((m) => m.key === "payment").completed = true;
+    if (
+      currentMilestones.find((m) => m.key === "filling").completed &&
+      currentMilestones.find((m) => m.key === "payment").completed
+    ) {
+      currentMilestones.find((m) => m.key === "review").completed = true;
+    }
+    if (project.status === "Completed")
+      currentMilestones.find((m) => m.key === "project_completed").completed =
+        true;
+
     const responseData = {
-      ...project.toObject(),
-      members: updatedMembers,
-      projectOwners: updatedProjectOwners,
-      documents: projectDocuments.map((doc) => ({
+      ...project,
+      members: project.members.map((member) => ({
+        userId: member._id,
+        _id: member._id,
+        userName: member.userName,
+        avatar: member.avatar,
+        userType: member.userType || "N/A",
+        role: member.role?.roleName || "N/A",
+      })),
+      projectOwners: project.projectOwners
+        .filter((owner) => owner.ownerId)
+        .map((owner) => ({
+          ownerId: owner.ownerId._id,
+          ownerName: owner.ownerId.userName || "",
+          role: owner.ownerId.role?.roleName || "N/A",
+          _id: owner.ownerId._id,
+          email: owner.ownerId.email || "",
+        })),
+      documents: projectUserDocs.map((doc) => ({
         fileName: doc.fileName,
         fileUrl: doc.fileUrl,
         user: doc.user,
+        uploadedAt: doc.uploadedAt || doc.createdAt,
       })),
-      financeDocuments: financeDocuments
-        .map((doc) => ({
-          id: doc._id,
-          fileName: doc.fileName,
-          fileUrl: doc.fileUrl,
-          user: doc.user,
-          financialExecution: doc.financialExecution,
-          physicalExecution: doc.physicalExecution,
-          uploadedAt: doc.uploadedAt,
-          reference: doc.reference,
-        }))
-        .sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)),
-      projectReports: projectReports.map((report) => ({
+      financeDocuments: projectFinanceDocs.map((doc) => ({
+        id: doc._id,
+        fileName: doc.fileName,
+        fileUrl: doc.fileUrl,
+        user: doc.user,
+        financialExecution: doc.financialExecution,
+        physicalExecution: doc.physicalExecution,
+        uploadedAt: doc.uploadedAt,
+        reference: doc.reference,
+      })),
+      projectReports: projectSystemDocs.map((report) => ({
         fileName: report.fileName,
         fileUrl: report.fileUrl,
         user: report.user,
         status: report.status,
-        uploadedAt: report.uploadedAt,
+        uploadedAt: report.uploadedAt || report.createdAt,
       })),
       latestLog:
         project.logs?.sort(
           (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        )[0] || null, // Ensure proper date comparison for logs
-      milestones,
-      additionalMilestones: await AdditionalMilestone.find({
-        projectId: project._id,
-      }).populate({ path: "userId", model: "User", select: "userName" }),
-      ...(isMain ? {} : { fromBusinessArea }),
+        )[0] || null,
+      milestones: currentMilestones,
+      additionalMilestones: projectAdditionalMilestones,
     };
+
     res
       .status(200)
       .json(
         new ApiResponse(200, responseData, "Project retrieved successfully")
       );
   } catch (error) {
-    console.error("Error in getProjectById:", error);
+    console.error("Error in getProjectById (FULL ERROR OBJECT):", error);
     throw new ApiError(
-      error.statusCode || 400,
-      error.message || "Failed to retrieve project"
+      error.statusCode || 500,
+      error.message || "Failed to retrieve project details"
     );
   }
 });
 
 const deleteProject = asyncHandler(async (req, res) => {
+  const { projectId } = req.params;
+  const performingUser = req.user;
+
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new ApiError(400, "Invalid Project ID format.");
+  }
+
   const session = await mongoose.startSession();
   session.startTransaction();
-  let projectToDelete;
-
   try {
-    const { projectId } = req.params;
-    const performingUser = req.user;
-
-    projectToDelete = await editProject
+    const projectToDelete = await editProject
       .findById(projectId)
-      .populate("projectOwners.ownerId", "email userName _id")
-      .populate("members", "email userName _id")
+      .populate(
+        "projectOwners.ownerId",
+        "email userName _id notificationToken fcmDeviceToken"
+      )
+      .populate(
+        "members",
+        "email userName _id notificationToken fcmDeviceToken"
+      )
       .session(session)
       .lean();
 
     if (!projectToDelete) {
-      await session.abortTransaction();
-      session.endSession();
-      throw new ApiError(404, "Project not found");
+      throw new ApiError(404, "Project not found.");
     }
 
     const deletedProjectName = projectToDelete.projectName;
+    const deletedProjectId = projectToDelete._id;
 
-    const pushNotificationUserIds = new Set();
-    projectToDelete.members?.forEach((m) => {
-      if (m?._id) pushNotificationUserIds.add(m._id.toString());
-    });
-    projectToDelete.projectOwners?.forEach((o) => {
-      if (o?.ownerId?._id)
-        pushNotificationUserIds.add(o.ownerId._id.toString());
-    });
-    if (performingUser?._id)
-      pushNotificationUserIds.add(performingUser._id.toString());
+    await editProject.findByIdAndDelete(projectId, { session });
+    // Consider deleting related documents (UserDocument, Document, FinanceDocument, AdditionalMilestone) here if needed
+    // Example: await UserDocument.deleteMany({ projName: deletedProjectName }, { session });
 
-    const notificationRecipientsForInApp = new Set();
-    projectToDelete.members?.forEach((m) => {
-      if (m?._id) notificationRecipientsForInApp.add(m._id.toString());
-    });
-    projectToDelete.projectOwners?.forEach((o) => {
-      if (o?.ownerId?._id)
-        notificationRecipientsForInApp.add(o.ownerId._id.toString());
-    });
-    if (performingUser?._id)
-      notificationRecipientsForInApp.add(performingUser._id.toString());
-
-    const inAppNotificationDescription = `Project "${deletedProjectName}" was deleted by ${performingUser.userName}.`;
-    const notificationPromises = Array.from(notificationRecipientsForInApp).map(
-      (userIdStr) =>
-        ShowNotification.create(
-          [
-            {
-              title: `Project Deleted: ${deletedProjectName}`,
-              type: "Project Deletion",
-              description: inAppNotificationDescription,
-              memberId: new mongoose.Types.ObjectId(userIdStr),
-              projectId: projectToDelete._id, // Keep project ID reference even if project is deleted
-            },
-          ],
-          { session }
+    const notificationRecipients = new Map();
+    (projectToDelete.members || []).forEach(
+      (user) =>
+        user?._id && notificationRecipients.set(user._id.toString(), user)
+    );
+    (projectToDelete.projectOwners || []).forEach(
+      (ownerObj) =>
+        ownerObj?.ownerId?._id &&
+        notificationRecipients.set(
+          ownerObj.ownerId._id.toString(),
+          ownerObj.ownerId
         )
     );
-
-    const deletionResult = await editProject
-      .findByIdAndDelete(projectId)
-      .session(session);
-    if (!deletionResult) {
-      await session.abortTransaction();
-      session.endSession();
-      throw new ApiError(
-        404,
-        "Project not found or already deleted during operation."
-      );
+    if (
+      performingUser?._id &&
+      !notificationRecipients.has(performingUser._id.toString())
+    ) {
+      const performerDetails = await User.findById(performingUser._id)
+        .select("email userName notificationToken fcmDeviceToken")
+        .lean();
+      if (performerDetails)
+        notificationRecipients.set(
+          performerDetails._id.toString(),
+          performerDetails
+        );
     }
+    const usersToNotify = Array.from(notificationRecipients.values());
 
-    if (notificationPromises.length > 0) {
-      await Promise.all(notificationPromises);
+    if (usersToNotify.length > 0) {
+      const inAppNotificationsToCreate = usersToNotify.map((user) => ({
+        title: `Project Deleted: ${deletedProjectName}`,
+        type: "Project Deletion",
+        description: `Project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
+        memberId: user._id,
+        projectId: deletedProjectId, // Reference the ID of the deleted project
+      }));
+      if (inAppNotificationsToCreate.length > 0) {
+        await ShowNotification.create(inAppNotificationsToCreate, {
+          session,
+          ordered: true,
+        });
+      }
     }
 
     await session.commitTransaction();
 
-    // --- PUSH NOTIFICATION LOGIC (after commit) ---
-    if (pushNotificationUserIds.size > 0) {
-      try {
-        const usersForPush = await User.find({
-          _id: {
-            $in: Array.from(pushNotificationUserIds).map(
-              (id) => new mongoose.Types.ObjectId(id)
-            ),
-          },
-          fcmDeviceToken: { $ne: null, $exists: true, $ne: "" },
-        })
-          .select("fcmDeviceToken")
-          .lean();
-
-        const fcmTokens = usersForPush
-          .map((u) => u.fcmDeviceToken)
-          .filter(Boolean);
-
-        if (fcmTokens.length > 0) {
-          const pushTitle = `Project Deleted: ${deletedProjectName}`;
-          const pushBody = `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`;
+    if (usersToNotify.length > 0) {
+      const fcmTokens = usersToNotify
+        .map((u) => u.fcmDeviceToken || u.notificationToken)
+        .filter(Boolean);
+      if (fcmTokens.length > 0) {
+        const pushTitle = `Project Deleted: ${deletedProjectName}`;
+        const pushBody = `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`;
+        try {
           await sendPushNotification(fcmTokens, pushTitle, pushBody, {
-            deletedProjectId: projectToDelete._id.toString(),
+            deletedProjectId: deletedProjectId.toString(),
             type: "PROJECT_DELETED",
-            click_action: "FLUTTER_NOTIFICATION_CLICK",
           });
+        } catch (pushError) {
+          console.error(
+            `Failed to send project deletion push notifications for project ${deletedProjectId}:`,
+            pushError.message
+          );
         }
-      } catch (pushError) {
-        console.error(
-          "Failed to send project deletion push notifications:",
-          pushError
-        );
       }
+      // Email notifications can be added here similarly if needed
     }
-    // --- END PUSH NOTIFICATION LOGIC ---
 
     res
       .status(200)
       .json(
         new ApiResponse(
           200,
-          {
-            deletedProjectId: projectToDelete._id,
-            projectName: deletedProjectName,
-          },
-          "Project deleted successfully"
+          { deletedProjectId, projectName: deletedProjectName },
+          "Project deleted successfully."
         )
       );
   } catch (error) {
     await session.abortTransaction();
-    console.error("Error deleting project:", error);
+    console.error("Error deleting project (FULL ERROR OBJECT):", error);
     const statusCode = error instanceof ApiError ? error.statusCode : 500;
-    res.status(statusCode).json({
-      message: error.message || "Internal Server Error",
-      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
-    });
+    const message =
+      error instanceof ApiError
+        ? error.message
+        : "An error occurred while deleting the project.";
+    res
+      .status(statusCode)
+      .json(new ApiResponse(statusCode, null, message, error.errors || []));
   } finally {
     session.endSession();
   }
