@@ -165,7 +165,8 @@ const uploadFile = async (req, res) => {
             memberId: userId,
             projectId: project._id,
           }));
-          await ShowNotification.create(inAppNotificationObjects, { session });
+          // ***** FIX HERE *****
+          await ShowNotification.create(inAppNotificationObjects, { session, ordered: true });
         }
 
         // Send Push Notifications
@@ -183,45 +184,41 @@ const uploadFile = async (req, res) => {
           );
         }
 
-        // Send Emails to Project Owners (as per original logic)
-        // usersForPush contains all relevant users (members and owners) with their emails if you want to expand.
-        // The original code specifically targeted project.projectOwners for email.
-        // We use the 'project' object returned by getDocumentNotificationRecipients which has owners populated.
-        const emailPromises = project.projectOwners
-            .filter(owner => owner.ownerId?.email) // owner.ownerId is the populated user object
-            .map(owner => {
-                const emailBody = {
-                    from: process.env.EMAIL_USER,
-                    to: owner.ownerId.email,
-                    subject: `New File Uploaded for Project: ${project.projectName}`,
-                    html: `
-                        <!DOCTYPE html>
-                        <html lang="en">
-                        <head><meta charset="UTF-8"><title>New Document Notification</title></head>
-                        <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
-                        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
-                            <tr><td style="padding: 20px; text-align: center;">
-                            <h2 style="color: #333;">New Document Available</h2>
-                            <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName || 'Project Owner'}</strong>,</p>
-                            <p style="font-size: 16px; color: #555;">A new document titled <strong>"${document.fileName}"</strong> has been uploaded to project <strong>"${project.projectName}"</strong> by ${performingUserName}.</p>
-                            <p style="font-size: 16px; color: #555;">Click the button below to view the document:</p>
-                            <a href="${process.env.DOCUMENT_BASE_URL}/${document.fileName}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">View Document</a>
-                            <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p>
-                            <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
-                            </td></tr>
-                        </table></body></html>
-                    `,
-                };
-                return SendEmailUtil(emailBody).catch(e => console.error(`Email send error to ${owner.ownerId.email}:`, e));
-            });
-        await Promise.all(emailPromises);
+        // Send Emails to Project Owners
+        if (project.projectOwners && project.projectOwners.length > 0) {
+          const emailPromises = project.projectOwners
+              .filter(owner => owner.ownerId?.email) // owner.ownerId is the populated user object
+              .map(owner => {
+                  const emailBody = {
+                      from: process.env.EMAIL_USER,
+                      to: owner.ownerId.email,
+                      subject: `New File Uploaded for Project: ${project.projectName}`,
+                      html: `
+                          <!DOCTYPE html>
+                          <html lang="en">
+                          <head><meta charset="UTF-8"><title>New Document Notification</title></head>
+                          <body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;">
+                          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+                              <tr><td style="padding: 20px; text-align: center;">
+                              <h2 style="color: #333;">New Document Available</h2>
+                              <p style="font-size: 16px; color: #555;">Dear <strong>${owner.ownerId.userName || 'Project Owner'}</strong>,</p>
+                              <p style="font-size: 16px; color: #555;">A new document titled <strong>"${document.fileName}"</strong> has been uploaded to project <strong>"${project.projectName}"</strong> by ${performingUserName}.</p>
+                              <p style="font-size: 16px; color: #555;">Click the button below to view the document:</p>
+                              <a href="${process.env.DOCUMENT_BASE_URL}/${document.fileName}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">View Document</a>
+                              <p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p>
+                              <p style="font-size: 14px; color: #999;">Best regards,<br><strong>Your Team</strong></p>
+                              </td></tr>
+                          </table></body></html>
+                      `,
+                  };
+                  return SendEmailUtil(emailBody).catch(e => console.error(`Email send error to ${owner.ownerId.email}:`, e));
+              });
+          await Promise.all(emailPromises);
+        }
       } else {
           console.warn(`[UploadFile] Project "${req.body.projName}" not found or no recipients, skipping notifications.`);
       }
     }
-    // The second email block from the original code seems redundant if the above handles owner emails.
-    // If it had a different purpose, it might need to be re-evaluated.
-    // For now, assuming the above notification block is comprehensive for uploads.
 
     await session.commitTransaction();
     res.status(201).json({ message: "File uploaded successfully!", document });
