@@ -39,7 +39,7 @@ bower_components
 build/Release
 
 # Firebase service account key - DO NOT PUSH
-utils/construction-app-9c584-29c3df5d7f34.json
+utils/construct-flow-50bcd638645c.json
 
 # Dependency directories
 node_modules/
@@ -98,11 +98,6 @@ dist
 
 # FuseBox cache
 .fusebox/
-
-# Environment variable files
-.env
-.env.local
-.env.*.local
 
 # DynamoDB Local files
 .dynamodb/

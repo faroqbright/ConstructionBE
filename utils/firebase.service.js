@@ -1,28 +1,24 @@
 import admin from 'firebase-admin';
-import dotenv from 'dotenv';
+import { readFile } from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const serviceAccountPath = path.join(__dirname, 'construct-flow-50bcd638645c.json');
 
 let initialized = false;
 
 async function initializeFirebaseAdmin() {
   if (!initialized) {
     try {
-      const serviceAccountString = process.env.FIREBASE_SERVICE_ACCOUNT;
-
-      if (!serviceAccountString) {
-        throw new Error('FIREBASE_SERVICE_ACCOUNT environment variable is missing.');
-      }
-
+      const serviceAccountString = await readFile(serviceAccountPath, 'utf8');
       const serviceAccount = JSON.parse(serviceAccountString);
-
-      // Fix escaped newlines in private_key
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });
-
       console.log('Firebase Admin SDK initialized successfully.');
       initialized = true;
     } catch (error) {
@@ -33,7 +29,6 @@ async function initializeFirebaseAdmin() {
 
 initializeFirebaseAdmin();
 
-// Export your existing notification function below
 export const sendNotification = async (tokens, title, body, data = {}) => {
   if (!initialized) {
     console.error('Firebase Admin SDK not initialized. Cannot send notification.');
@@ -41,29 +36,54 @@ export const sendNotification = async (tokens, title, body, data = {}) => {
   }
 
   try {
-    const validTokens = (tokens || []).filter(token => token && typeof token === 'string' && token.trim() !== '');
-    if (validTokens.length === 0) return;
+    if (!tokens || tokens.length === 0) {
+      console.log('No tokens provided for notification');
+      return;
+    }
 
-    const results = await Promise.allSettled(validTokens.map(async token => {
-      const message = {
-        notification: { title, body },
-        data: { ...data, click_action: 'FLUTTER_NOTIFICATION_CLICK' },
-        token,
-      };
-      return await admin.messaging().send(message);
-    }));
+    const validTokens = tokens.filter(token => token && typeof token === 'string' && token.trim() !== '');
 
-    const successCount = results.filter(r => r.status === 'fulfilled').length;
-    const failedTokens = results
-      .map((r, i) => r.status === 'rejected' ? validTokens[i] : null)
-      .filter(Boolean);
-    const failureCount = failedTokens.length;
+    if (validTokens.length === 0) {
+      console.log('No valid tokens available for notification');
+      return;
+    }
 
-    console.log(`Notification send complete: ${successCount} successes, ${failureCount} failures.`);
-    if (failureCount) console.log('Failed tokens:', failedTokens);
+    let successCount = 0;
+    let failureCount = 0;
+    const failedTokens = [];
+
+    for (const token of validTokens) {
+      try {
+        const message = {
+          notification: {
+            title,
+            body,
+          },
+          data: {
+            ...data,
+            click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          },
+          token,
+        };
+
+        const response = await admin.messaging().send(message);
+        successCount++;
+      } catch (err) {
+        if (err.errorInfo) {
+          console.error('Error Info:', JSON.stringify(err.errorInfo, null, 2));
+        }
+        failedTokens.push(token);
+        failureCount++;
+      }
+    }
+
+    if (failedTokens.length > 0) {
+      console.log('List of tokens that failed:', failedTokens);
+      // Optional: Clean up database here if needed
+    }
 
     return { successCount, failureCount, failedTokens };
   } catch (error) {
     console.error('Error sending notification via Firebase:', error);
   }
-};
+}; 
