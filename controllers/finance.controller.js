@@ -9,6 +9,7 @@ import { sendNotification as sendPushNotification } from "../utils/firebase.serv
 // --- ADDED FOR S3 (assuming path) ---
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 
+
 // Helper function to get FCM tokens from User model
 const getFcmTokensForUser = async (userId) => {
   try {
@@ -38,18 +39,14 @@ const sendPushNotificationsToUsers = async (userIds, title, body, data) => {
       return;
     }
 
-    const validUserIds = userIds.filter((id) =>
-      mongoose.Types.ObjectId.isValid(id)
-    );
+    const validUserIds = userIds.filter(id => mongoose.Types.ObjectId.isValid(id));
     if (validUserIds.length === 0) {
-      console.warn("No valid user IDs for push notifications after filtering.");
-      return;
+        console.warn("No valid user IDs for push notifications after filtering.");
+        return;
     }
 
     // Get all tokens for all users
-    const tokenPromises = validUserIds.map((userId) =>
-      getFcmTokensForUser(userId)
-    );
+    const tokenPromises = validUserIds.map((userId) => getFcmTokensForUser(userId));
     const tokenArrays = await Promise.all(tokenPromises);
     const fcmTokens = tokenArrays.flat().filter(Boolean); // .flat() and filter out null/undefined
 
@@ -58,15 +55,14 @@ const sendPushNotificationsToUsers = async (userIds, title, body, data) => {
       return;
     }
 
-    console.log(
-      `Attempting to send push notification to ${fcmTokens.length} devices.`
-    );
+    console.log(`Attempting to send push notification to ${fcmTokens.length} devices.`);
     await sendPushNotification(fcmTokens, title, body, data);
     console.log(`Push notification sent for: ${title}`);
   } catch (error) {
     console.error("Error in sendPushNotificationsToUsers:", error);
   }
 };
+
 
 export const uploadFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
@@ -80,14 +76,7 @@ export const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const {
-      projName,
-      user,
-      financialExecution,
-      physicalExecution,
-      fileName,
-      reference,
-    } = req.body;
+    const { projName, user, financialExecution, physicalExecution, fileName, reference } = req.body;
 
     if (!fileName) {
       await session.abortTransaction();
@@ -95,21 +84,13 @@ export const uploadFinanceDocument = async (req, res) => {
       return res.status(400).json({ message: "Filename is required" });
     }
 
-    if (
-      financialExecution < 0 ||
-      financialExecution > 100 ||
-      physicalExecution < 0 ||
-      physicalExecution > 100
-    ) {
+    if (financialExecution < 0 || financialExecution > 100 || physicalExecution < 0 || physicalExecution > 100) {
       await session.abortTransaction();
       session.endSession();
-      return res
-        .status(400)
-        .json({ message: "Execution values must be between 0 and 100" });
+      return res.status(400).json({ message: "Execution values must be between 0 and 100" });
     }
 
-    const project = await editProject
-      .findOne({ projectName: projName })
+    const project = await editProject.findOne({ projectName: projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
@@ -138,10 +119,7 @@ export const uploadFinanceDocument = async (req, res) => {
           await SendEmailUtil(emailBody);
           console.log(`Email sent to ${ownerUser.email}`);
         } catch (error) {
-          console.error(
-            `Failed to send email to ${ownerUser.email}:`,
-            error.message
-          );
+          console.error(`Failed to send email to ${ownerUser.email}:`, error.message);
         }
       }
     }
@@ -153,9 +131,9 @@ export const uploadFinanceDocument = async (req, res) => {
       req.file.mimetype
     );
     if (!fileUrl) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(500).json({ message: "File upload to S3 failed" });
+        await session.abortTransaction();
+        session.endSession();
+        return res.status(500).json({ message: "File upload to S3 failed" });
     }
     // --- END MODIFICATION ---
 
@@ -168,45 +146,33 @@ export const uploadFinanceDocument = async (req, res) => {
       physicalExecution,
       reference,
       uploadedAt: new Date(),
-      uploadedBy: performingUserId, // Optionally track who uploaded
+      uploadedBy: performingUserId // Optionally track who uploaded
     });
 
     await financeDocument.save({ session });
 
     // In-app notification recipients
     const inAppNotificationRecipientIds = [
-      ...(project.members || []).map((m) => m._id),
-      ...(project.projectOwners || [])
-        .map((o) => o.ownerId?._id)
-        .filter(Boolean),
-      performingUserId, // Include the uploader for in-app
-    ]
-      .filter(Boolean)
-      .filter(
-        (v, i, a) => a.findIndex((t) => t.toString() === v.toString()) === i
-      );
+      ...(project.members || []).map(m => m._id),
+      ...(project.projectOwners || []).map(o => o.ownerId?._id).filter(Boolean),
+      performingUserId // Include the uploader for in-app
+    ].filter(Boolean).filter((v, i, a) => a.findIndex(t => t.toString() === v.toString()) === i);
 
-    const notificationPromises = inAppNotificationRecipientIds.map(
-      (userId) =>
-        ShowNotification.create(
-          [
-            {
-              // ShowNotification.create expects an array
-              title: `New Finance Document Uploaded to the "${finalFileName}"`, // Original title
-              type: "Document Upload",
-              description: `A New finance document "${finalFileName}" was uploaded for project "${projName}" by ${req.user?.userName || "System"}`, // Added uploader
-              lengthyDesc: `We would like to inform you that a New finance document "${finalFileName}" was uploaded for project "${projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
+
+    const notificationPromises = inAppNotificationRecipientIds.map(userId =>
+      ShowNotification.create([{ // ShowNotification.create expects an array
+        title: `New Finance Document Uploaded to the "${finalFileName}"`, // Original title
+        type: "Document Upload",
+        description: `A New finance document "${finalFileName}" was uploaded for project "${projName}" by ${req.user?.userName || 'System'}`, // Added uploader
+        lengthyDesc: `We would like to inform you that a New finance document "${finalFileName}" was uploaded for project "${projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
 //
 Best regards,
 //
 [Soapro Team]
 `,
-              memberId: userId,
-              projectId: project._id,
-            },
-          ],
-          { session }
-        ) // Pass session here
+        memberId: userId,
+        projectId: project._id,
+      }], { session }) // Pass session here
     );
 
     await Promise.all(notificationPromises);
@@ -215,15 +181,15 @@ Best regards,
     // --- PUSH NOTIFICATION LOGIC (after commit) ---
     const pushNotificationRecipientIds = [...inAppNotificationRecipientIds]; // Can be the same or different
     await sendPushNotificationsToUsers(
-      pushNotificationRecipientIds,
-      "New Finance Document Uploaded",
-      `File "${finalFileName}" for project "${projName}" was uploaded by ${req.user?.userName || "System"}.`,
-      {
-        type: "FINANCE_DOCUMENT_UPLOADED",
-        projectId: project._id.toString(),
-        documentId: financeDocument._id.toString(),
-        documentName: finalFileName,
-      }
+        pushNotificationRecipientIds,
+        "New Finance Document Uploaded",
+        `File "${finalFileName}" for project "${projName}" was uploaded by ${req.user?.userName || 'System'}.`,
+        {
+          type: "FINANCE_DOCUMENT_UPLOADED",
+          projectId: project._id.toString(),
+          documentId: financeDocument._id.toString(),
+          documentName: finalFileName,
+        }
     );
     // --- END PUSH NOTIFICATION LOGIC ---
 
@@ -231,63 +197,58 @@ Best regards,
       message: "File uploaded successfully!",
       financeDocument,
     });
+
   } catch (error) {
     await session.abortTransaction(); // Ensure abort on error
     console.error("Error uploading file:", error.message, error.stack);
     res.status(500).json({
       message: "Error uploading file",
-      error: error.message,
+      error: error.message
     });
   } finally {
-    if (session.inTransaction()) {
-      // End session only if it's still active
-      await session.abortTransaction(); // Abort if not committed
+    if (session.inTransaction()) { // End session only if it's still active
+        await session.abortTransaction(); // Abort if not committed
     }
     session.endSession();
   }
 };
+
 
 export const getFinanceDocuments = async (req, res) => {
   try {
     const { isMain, _id: loggedInUserId } = req.user;
 
     const assignedProjects = await editProject.find({
-      ...(!isMain
-        ? {
-            $or: [
-              { members: loggedInUserId },
-              { "projectOwners.ownerId": loggedInUserId },
-            ],
-          }
-        : {}),
+      ...(!isMain ? { $or: [
+        { members: loggedInUserId },
+        { "projectOwners.ownerId": loggedInUserId }
+      ] } : {}),
     });
 
     const projectNames = assignedProjects.map((proj) => proj.projectName);
 
-    if (projectNames.length === 0 && !isMain) {
-      // If not admin and no projects, return empty
+    if (projectNames.length === 0 && !isMain) { // If not admin and no projects, return empty
       return res.status(200).json([]); // Return empty array for consistency
     }
-    if (projectNames.length === 0 && isMain) {
-      // If admin and no projects at all, return empty
-      return res.status(200).json([]);
+    if (projectNames.length === 0 && isMain) { // If admin and no projects at all, return empty
+        return res.status(200).json([]);
     }
 
+
     const financeDocuments = await FinanceDocument.find(
-      isMain && projectNames.length === 0
-        ? {}
-        : { projName: { $in: projectNames } } // If admin and no specific project names, fetch all
-    ).sort({ uploadedAt: -1 });
+        isMain && projectNames.length === 0 ? {} : { projName: { $in: projectNames } } // If admin and no specific project names, fetch all
+        ).sort({ uploadedAt: -1 });
 
     res.status(200).json(financeDocuments);
   } catch (error) {
     console.error("Error fetching finance documents:", error.message);
     res.status(500).json({
       message: "Failed to fetch finance documents",
-      error: error.message,
+      error: error.message
     });
   }
 };
+
 
 export const updateFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
@@ -296,11 +257,10 @@ export const updateFinanceDocument = async (req, res) => {
 
   try {
     const { id } = req.params;
-    const updates = {}; // Initialize as an empty object
-    let changesMade = false; // Flag to track if any substantive changes occurred
+    const updates = {};
+    let changesMade = false;
 
-    const existingDocument =
-      await FinanceDocument.findById(id).session(session);
+    const existingDocument = await FinanceDocument.findById(id).session(session);
     if (!existingDocument) {
       await session.abortTransaction();
       session.endSession();
@@ -308,11 +268,7 @@ export const updateFinanceDocument = async (req, res) => {
     }
 
     // --- MODIFIED SECTION for financialExecution ---
-    if (
-      req.body.financialExecution !== undefined &&
-      req.body.financialExecution !== null &&
-      req.body.financialExecution !== ""
-    ) {
+    if (Object.prototype.hasOwnProperty.call(req.body, 'financialExecution')) {
       const finExec = parseFloat(req.body.financialExecution);
       if (isNaN(finExec) || finExec < 0 || finExec > 100) {
         await session.abortTransaction();
@@ -321,7 +277,6 @@ export const updateFinanceDocument = async (req, res) => {
           message: "Financial Execution must be a number between 0 and 100",
         });
       }
-      // Only update if the new value is different from the existing one
       if (existingDocument.financialExecution !== finExec) {
         updates.financialExecution = finExec;
         changesMade = true;
@@ -330,11 +285,7 @@ export const updateFinanceDocument = async (req, res) => {
     // --- END MODIFIED SECTION ---
 
     // --- MODIFIED SECTION for physicalExecution ---
-    if (
-      req.body.physicalExecution !== undefined &&
-      req.body.physicalExecution !== null &&
-      req.body.physicalExecution !== ""
-    ) {
+    if (Object.prototype.hasOwnProperty.call(req.body, 'physicalExecution')) {
       const phyExec = parseFloat(req.body.physicalExecution);
       if (isNaN(phyExec) || phyExec < 0 || phyExec > 100) {
         await session.abortTransaction();
@@ -343,7 +294,6 @@ export const updateFinanceDocument = async (req, res) => {
           message: "Physical Execution must be a number between 0 and 100",
         });
       }
-      // Only update if the new value is different from the existing one
       if (existingDocument.physicalExecution !== phyExec) {
         updates.physicalExecution = phyExec;
         changesMade = true;
@@ -361,20 +311,17 @@ export const updateFinanceDocument = async (req, res) => {
         changesMade = true;
       }
     }
+
     if (req.body.reference && typeof req.body.reference === "string") {
-      // Allow empty string for reference if needed
       if (existingDocument.reference !== req.body.reference) {
-        // Compare with existing
         updates.reference = req.body.reference;
         changesMade = true;
       }
     }
 
-    // If substantive changes were made, always update the timestamp
     if (changesMade) {
       updates.uploadedAt = new Date();
     } else {
-      // No changes other than potentially the timestamp (which we won't apply if no other changes)
       await session.abortTransaction();
       session.endSession();
       return res.status(200).json({
@@ -386,13 +333,12 @@ export const updateFinanceDocument = async (req, res) => {
     const updatedFinanceDocument = await FinanceDocument.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, runValidators: true, session } // Added runValidators
+      { new: true, runValidators: true, session }
     );
 
     if (!updatedFinanceDocument) {
       await session.abortTransaction();
       session.endSession();
-      // This should not happen if findById worked initially and no intervening delete
       throw new ApiError(500, "Failed to update document after finding it.");
     }
 
@@ -402,22 +348,20 @@ export const updateFinanceDocument = async (req, res) => {
       .populate("members", "email userName")
       .session(session);
 
-    // In-app Notification
     const inAppNotificationData = {
       title: "Finance Document Updated",
       type: "Document Update",
       description: `Document "${updatedFinanceDocument.fileName}" for project "${project?.projectName || existingDocument.projName}" was updated by ${req.user?.userName || "System"}.`,
-      memberId: performingUserId, // Or iterate through project members/owners if they should be notified directly
+      memberId: performingUserId,
       projectId: project?._id,
     };
-    // Make sure memberId is valid before creating notification
+
     if (mongoose.Types.ObjectId.isValid(performingUserId)) {
       await ShowNotification.create([inAppNotificationData], { session });
     }
 
     await session.commitTransaction();
 
-    // Push Notification Logic (moved outside transaction, after commit)
     const pushNotificationRecipientIds = [];
     if (project) {
       project.projectOwners?.forEach((o) => {
@@ -427,13 +371,14 @@ export const updateFinanceDocument = async (req, res) => {
         if (m?._id) pushNotificationRecipientIds.push(m._id);
       });
     }
-    // Optionally notify the performing user as well, if not already part of project owners/members
+
     if (
       performingUserId &&
       !pushNotificationRecipientIds.some((id) => id.equals(performingUserId))
     ) {
       pushNotificationRecipientIds.push(performingUserId);
     }
+
     const uniquePushRecipients = [
       ...new Set(pushNotificationRecipientIds.map((id) => id.toString())),
     ];
@@ -450,21 +395,17 @@ export const updateFinanceDocument = async (req, res) => {
       }
     );
 
-    // Email notifications
     const ownerEmails =
-      project?.projectOwners
-        ?.map((owner) => owner.ownerId?.email)
-        .filter(Boolean) || [];
+      project?.projectOwners?.map((owner) => owner.ownerId?.email).filter(Boolean) || [];
     const memberEmails =
       project?.members?.map((member) => member?.email).filter(Boolean) || [];
-    // Also include the performing user's email if they have one and aren't already included
+
     let performingUserEmail = null;
     if (performingUserId) {
-      const pUser = await User.findById(performingUserId)
-        .select("email")
-        .lean();
+      const pUser = await User.findById(performingUserId).select("email").lean();
       performingUserEmail = pUser?.email;
     }
+
     const allEmailRecipients = [
       ...new Set([
         ...ownerEmails,
@@ -500,15 +441,15 @@ export const updateFinanceDocument = async (req, res) => {
     });
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
-    console.error("Error updating document:", error); // Log the full error
+    console.error("Error updating document:", error);
     res.status(error.statusCode || 500).json({
       message: error.message || "Error updating document",
-      // error: error.message // Redundant if message is set
     });
   } finally {
     session.endSession();
   }
 };
+
 
 export const deleteFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
@@ -516,41 +457,35 @@ export const deleteFinanceDocument = async (req, res) => {
   const performingUserId = req.user?._id;
 
   try {
-    const financeDocument = await FinanceDocument.findById(
-      req.params.id
-    ).session(session);
+    const financeDocument = await FinanceDocument.findById(req.params.id).session(session);
     if (!financeDocument) {
       await session.abortTransaction();
       session.endSession();
       return res.status(404).json({ message: "Document not found" });
     }
 
-    const project = await editProject
-      .findOne({ projectName: financeDocument.projName })
+    const project = await editProject.findOne({ projectName: financeDocument.projName })
       .populate("projectOwners.ownerId", "email userName")
       .populate("members", "email userName")
       .session(session);
 
     // --- S3 Deletion (use deleteFromS3) ---
-    if (financeDocument.fileUrl) {
-      // Check if fileUrl exists
-      try {
-        // Assuming fileUrl is the full S3 URL. Extract the key.
-        // Example: https://bucket-name.s3.amazonaws.com/file-key
-        const urlParts = financeDocument.fileUrl.split("/");
-        const fileKey = urlParts.slice(3).join("/"); // Get everything after bucket name
-        if (fileKey) {
-          await deleteFromS3(fileKey);
-          console.log(`Deleted ${fileKey} from S3.`);
-        } else {
-          console.warn(
-            `Could not extract file key from URL: ${financeDocument.fileUrl} for S3 deletion.`
-          );
+    if (financeDocument.fileUrl) { // Check if fileUrl exists
+        try {
+            // Assuming fileUrl is the full S3 URL. Extract the key.
+            // Example: https://bucket-name.s3.amazonaws.com/file-key
+            const urlParts = financeDocument.fileUrl.split('/');
+            const fileKey = urlParts.slice(3).join('/'); // Get everything after bucket name
+            if (fileKey) {
+                await deleteFromS3(fileKey);
+                console.log(`Deleted ${fileKey} from S3.`);
+            } else {
+                console.warn(`Could not extract file key from URL: ${financeDocument.fileUrl} for S3 deletion.`);
+            }
+        } catch (s3Error) {
+            console.error("Error deleting file from S3:", s3Error.message);
+            // Decide if this should be a critical error. For now, we'll proceed with DB deletion.
         }
-      } catch (s3Error) {
-        console.error("Error deleting file from S3:", s3Error.message);
-        // Decide if this should be a critical error. For now, we'll proceed with DB deletion.
-      }
     }
     // --- END S3 Deletion ---
 
@@ -559,109 +494,74 @@ export const deleteFinanceDocument = async (req, res) => {
     // In-app notification recipients
     const inAppNotificationRecipientIds = [];
     if (project) {
-      project.projectOwners?.forEach((o) => {
-        if (o.ownerId?._id) inAppNotificationRecipientIds.push(o.ownerId._id);
-      });
-      project.members?.forEach((m) => {
-        if (m?._id) inAppNotificationRecipientIds.push(m._id);
-      });
+        project.projectOwners?.forEach(o => { if(o.ownerId?._id) inAppNotificationRecipientIds.push(o.ownerId._id); });
+        project.members?.forEach(m => { if(m?._id) inAppNotificationRecipientIds.push(m._id); });
     }
     if (performingUserId) inAppNotificationRecipientIds.push(performingUserId);
-    const uniqueInAppRecipients = [
-      ...new Set(inAppNotificationRecipientIds.map((id) => id.toString())),
-    ];
+    const uniqueInAppRecipients = [...new Set(inAppNotificationRecipientIds.map(id => id.toString()))];
 
-    const notificationPromises = uniqueInAppRecipients.map(
-      (userIdStr) =>
-        ShowNotification.create(
-          [
-            {
-              // ShowNotification.create expects an array
-              title: `New Finance Document Deleted "${financeDocument.fileName}"`, // Original title
-              type: "Document Deletion",
-              description: `A new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}" by ${req.user?.userName || "System"}`,
-              lengthyDesc: `We would like to inform you that a new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
+
+    const notificationPromises = uniqueInAppRecipients.map(userIdStr =>
+      ShowNotification.create([{ // ShowNotification.create expects an array
+        title: `New Finance Document Deleted "${financeDocument.fileName}"`, // Original title
+        type: "Document Deletion",
+        description: `A new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}" by ${req.user?.userName || 'System'}`,
+        lengthyDesc: `We would like to inform you that a new Document "${financeDocument.fileName}" was deleted from project"${financeDocument.projName}"To view or download the document, please access the project's section on the platform.Should you have any questions or require assistance, our team remains at your disposal.
 //
 Best regards,
 //
 [Soapro Team]
 `,
-              memberId: new mongoose.Types.ObjectId(userIdStr),
-              projectId: project?._id,
-            },
-          ],
-          { session }
-        ) // Pass session here
+        memberId: new mongoose.Types.ObjectId(userIdStr),
+        projectId: project?._id,
+      }], { session }) // Pass session here
     );
     if (notificationPromises.length > 0) {
-      await Promise.all(notificationPromises);
+        await Promise.all(notificationPromises);
     }
 
     await session.commitTransaction(); // Commit before sending external notifications
 
     // Push Notification (using the same recipients as in-app for consistency here)
     await sendPushNotificationsToUsers(
-      uniqueInAppRecipients, // Send to the same people who got in-app
-      "Finance Document Deleted",
-      `Document "${financeDocument.fileName}" from project "${project?.projectName || financeDocument.projName}" was deleted by ${req.user?.userName || "System"}.`,
-      {
-        type: "FINANCE_DOCUMENT_DELETED",
-        projectId: project?._id.toString() || "",
-        documentName: financeDocument.fileName,
-        deletedDocumentId: financeDocument._id.toString(),
-      }
+        uniqueInAppRecipients, // Send to the same people who got in-app
+        "Finance Document Deleted",
+        `Document "${financeDocument.fileName}" from project "${project?.projectName || financeDocument.projName}" was deleted by ${req.user?.userName || 'System'}.`,
+        {
+          type: "FINANCE_DOCUMENT_DELETED",
+          projectId: project?._id.toString() || "",
+          documentName: financeDocument.fileName,
+          deletedDocumentId: financeDocument._id.toString()
+        }
     );
 
     // Email notifications (as per your provided code)
     if (project) {
-      for (const owner of project.projectOwners) {
-        if (owner.ownerId?.email) {
-          const emailBody = {
-            from: process.env.EMAIL_USER,
-            to: owner.ownerId.email,
-            subject: `Finance Document Deleted for Project: ${project.projectName}`,
-            html: `<p>Dear ${owner.ownerId.userName || "Owner"}, document "${financeDocument.fileName}" deleted by ${req.user?.userName || "System"}.</p>`,
-          };
-          try {
-            await SendEmailUtil(emailBody);
-          } catch (e) {
-            console.error(
-              `Email error to owner ${owner.ownerId.email}:`,
-              e.message
-            );
-          }
+        for (const owner of project.projectOwners) {
+            if (owner.ownerId?.email) {
+                const emailBody = { from: process.env.EMAIL_USER, to: owner.ownerId.email, subject: `Finance Document Deleted for Project: ${project.projectName}`, html: `<p>Dear ${owner.ownerId.userName || "Owner"}, document "${financeDocument.fileName}" deleted by ${req.user?.userName || 'System'}.</p>` };
+                try { await SendEmailUtil(emailBody); } catch (e) { console.error(`Email error to owner ${owner.ownerId.email}:`, e.message); }
+            }
         }
-      }
-      for (const member of project.members) {
-        if (member?.email) {
-          const emailBody = {
-            from: process.env.EMAIL_USER,
-            to: member.email,
-            subject: `Finance Document Deleted for Project: ${project.projectName}`,
-            html: `<p>Dear ${member.userName || "Member"}, document "${financeDocument.fileName}" deleted by ${req.user?.userName || "System"}.</p>`,
-          };
-          try {
-            await SendEmailUtil(emailBody);
-          } catch (e) {
-            console.error(`Email error to member ${member.email}:`, e.message);
-          }
+        for (const member of project.members) {
+            if (member?.email) {
+                const emailBody = { from: process.env.EMAIL_USER, to: member.email, subject: `Finance Document Deleted for Project: ${project.projectName}`, html: `<p>Dear ${member.userName || "Member"}, document "${financeDocument.fileName}" deleted by ${req.user?.userName || 'System'}.</p>` };
+                try { await SendEmailUtil(emailBody); } catch (e) { console.error(`Email error to member ${member.email}:`, e.message); }
+            }
         }
-      }
     }
 
-    res
-      .status(200)
-      .json({ message: "Document deleted and notifications sent!" });
+    res.status(200).json({ message: "Document deleted and notifications sent!" });
+
   } catch (error) {
     if (session.inTransaction()) await session.abortTransaction();
     console.error("Error deleting document:", error.message, error.stack);
-    res
-      .status(500)
-      .json({ message: "Error deleting document", error: error.message });
+    res.status(500).json({ message: "Error deleting document", error: error.message });
   } finally {
     session.endSession();
   }
 };
+
 
 // export {
 //   uploadFinanceDocument,
