@@ -25,7 +25,7 @@ const createClient = asyncHandler(async (req, res) => {
 
     const emailPresent = await User.findOne({ email: body.email });
     if (emailPresent) {
-      throw new ApiError(400, "Email already exists.");
+      throw new ApiError(400, "Email already exists");
     }
 
     const createdBy = await User.findById(req.user._id);
@@ -55,7 +55,7 @@ const editClient = asyncHandler(async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) {
-      throw new ApiError(404, "User not found.");
+      throw new ApiError(404, "User not found");
     }
 
     if (body.userType && !ALLOWED_USER_TYPES.includes(body.userType)) {
@@ -72,7 +72,7 @@ const editClient = asyncHandler(async (req, res) => {
     if (body.email && body.email !== user.email) {
       const emailPresent = await User.findOne({ email: body.email });
       if (emailPresent) {
-        throw new ApiError(400, "Email already exists.");
+        throw new ApiError(400, "Email already exists");
       }
     }
 
@@ -99,10 +99,10 @@ const getClientById = asyncHandler(async (req, res) => {
   const user = await User.findOne({ _id: req.params.id });
 
   if (!user) {
-    throw new ApiError(404, "User not found.");
+    throw new ApiError(404, "User not found");
   }
 
-  res.status(200).json(new ApiResponse(200, user, "User found."));
+  res.status(200).json(new ApiResponse(200, user, "User found"));
 });
 
 const getAllClients = asyncHandler(async (req, res) => {
@@ -122,7 +122,7 @@ const deleteClientById = asyncHandler(async (req, res) => {
   const user = await User.findOneAndDelete({ _id: req.params.id });
 
   if (!user) {
-    throw new ApiError(404, "User not found.");
+    throw new ApiError(404, "User not found");
   }
 
   res.status(200).json(new ApiResponse(200, {}, "User deleted successfully"));

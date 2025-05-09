@@ -112,7 +112,7 @@ export const createOrUpdateBusinessArea = async (req, res) => {
 
     res.status(isNew ? 201 : 200).json({
       success: true,
-      message: `Business Area ${actionVerb} successfully`,
+      message: `Business Area added successfully`,
       data: businessAreaData,
     });
   } catch (error) {
