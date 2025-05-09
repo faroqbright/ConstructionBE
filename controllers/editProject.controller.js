@@ -1,23 +1,24 @@
-import mongoose from "mongoose";
-import { v4 as uuidv4 } from "uuid";
 import {
   parse as parseDateFns,
   isValid as isValidDateFns,
   format as formatDateFns,
 } from "date-fns"; // Import from date-fns
-import { editProject } from "../models/project.model.js";
-import { User } from "../models/user.model.js";
+import mongoose from "mongoose";
+import { v4 as uuidv4 } from "uuid";
+import { editProject } from "../models/project.model.js"; // Your project model
+import { User } from "../models/user.model.js"; // Your User model
+import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadToS3 } from "../utils/cloudinary.js";
+import { uploadToS3 } from "../utils/cloudinary.js"; // Your S3 uploader
 import { SendEmailUtil } from "../utils/emailsender.js";
 import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
+// --- ADDED FOR PUSH NOTIFICATIONS ---
 import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
-// Removed other model imports not directly used in editProjects for brevity, ensure they are present if needed by other functions in the file.
 
 const toSafeISODateString = (
   dateInput,
