@@ -13,6 +13,9 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { uploadToS3 } from "../utils/cloudinary.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
+import UserDocument from "../models/userdocumentModel.js";
+import Document from "../models/documentModel.js";
+import FinanceDocument from "../models/finance.model.js";
 import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
 // Removed other model imports not directly used in editProjects for brevity, ensure they are present if needed by other functions in the file.
 
