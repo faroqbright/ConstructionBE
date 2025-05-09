@@ -1,48 +1,24 @@
-import {
-  parse as parseDateFns,
-  isValid as isValidDateFns,
-  format as formatDateFns,
-} from "date-fns"; // Import from date-fns
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
-import { editProject } from "../models/project.model.js"; // Your project model
-import { User } from "../models/user.model.js"; // Your User model
-import { AdditionalMilestone } from "../models/additionalMilestone.js";
+// No date-fns needed for this specific deadline string storage approach
+// import { parse as parseDateFns, isValid as isValidDateFns, format as formatDateFns } from 'date-fns';
+import { editProject } from "../models/project.model.js";
+import { User } from "../models/user.model.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadToS3 } from "../utils/cloudinary.js"; // Your S3 uploader
+import { uploadToS3 } from "../utils/cloudinary.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
+import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
+import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
-// --- ADDED FOR PUSH NOTIFICATIONS ---
-import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
 
-const toSafeISODateString = (
-  dateInput,
-  placeholderIfNullOrUndefined = null
-) => {
-  if (dateInput === null || dateInput === undefined) {
-    return placeholderIfNullOrUndefined;
-  }
-  if (dateInput === "") {
-    return null;
-  }
-  // Check if it's already a Date object and valid
-  if (dateInput instanceof Date && isValidDateFns(dateInput)) {
-    return formatDateFns(dateInput, "yyyy-MM-dd");
-  }
-  // Try to parse if it's a string
-  const date = new Date(dateInput); // General parsing for ISO or YYYY-MM-DD
-  if (date instanceof Date && isValidDateFns(date)) {
-    return formatDateFns(date, "yyyy-MM-dd");
-  }
-  return typeof dateInput === "string"
-    ? `Invalid Date Input: ${dateInput}`
-    : "Invalid Date Input";
-};
+// toSafeISODateString is no longer strictly needed for comparing the deadline string if it's stored as a string.
+// However, if you display it or use it in logs where a consistent format is desired, you might adapt it or use a different helper.
+// For now, we'll compare strings directly.
 
 const editProjects = asyncHandler(async (req, res) => {
   try {
@@ -62,7 +38,7 @@ const editProjects = asyncHandler(async (req, res) => {
       comapanyName: newCompanyNameInput,
       members: newMemberIdsInput,
       status: newStatusInput,
-      deadline: newDeadlineInput, // THIS IS THE FIELD WE ARE FOCUSING ON
+      deadline: newDeadlineInput, // This will be the string "18/04/2025 - 26/04/2025"
       physicalEducationRange: newPhysicalEducationRangeInput,
       financialEducationRange: newFinancialEducationRangeInput,
       removeBanners = [],
@@ -137,82 +113,42 @@ const editProjects = asyncHandler(async (req, res) => {
       importantFieldsChanged = true;
     }
 
-    // --- MODIFIED DEADLINE HANDLING ---
+    // --- MODIFIED DEADLINE HANDLING (for String schema type) ---
     if (newDeadlineInput !== undefined) {
-      let newDeadlineForDb = null;
-      if (newDeadlineInput === "" || newDeadlineInput === null) {
-        newDeadlineForDb = null; // Clear the deadline
-      } else if (typeof newDeadlineInput === "string") {
-        if (newDeadlineInput.includes(" - ")) {
-          // Date Range "DD/MM/YYYY - DD/MM/YYYY"
-          const dates = newDeadlineInput.split(" - ");
-          const startDateString = dates[0]; // e.g., "18/04/2025"
-
-          // Parse DD/MM/YYYY using date-fns
-          const parsedStartDate = parseDateFns(
-            startDateString,
-            "dd/MM/yyyy",
-            new Date()
-          );
-
-          if (!isValidDateFns(parsedStartDate)) {
-            throw new ApiError(
-              400,
-              `Invalid start date format in range for deadline: '${startDateString}'. Please use DD/MM/YYYY format.`
-            );
-          }
-          newDeadlineForDb = parsedStartDate; // Storing the start date of the range
-        } else {
-          // Assume it's a single date string, try to parse (e.g. YYYY-MM-DD or ISO)
-          const parsedDate = parseDateFns(
-            newDeadlineInput,
-            "yyyy-MM-dd",
-            new Date()
-          ); // Try YYYY-MM-DD first
-          if (isValidDateFns(parsedDate)) {
-            newDeadlineForDb = parsedDate;
-          } else {
-            // Try general ISO parsing as a fallback
-            const generalParsedDate = new Date(newDeadlineInput);
-            if (isValidDateFns(generalParsedDate)) {
-              newDeadlineForDb = generalParsedDate;
-            } else {
-              throw new ApiError(
-                400,
-                `Invalid date format for deadline: '${newDeadlineInput}'. Please use YYYY-MM-DD, a full ISO date string, a 'DD/MM/YYYY - DD/MM/YYYY' range, or null/empty to clear.`
-              );
-            }
-          }
-        }
-      } else {
-        // If newDeadlineInput is not a string (e.g. already a Date object, though unlikely from req.body)
-        const dateObj = new Date(newDeadlineInput);
-        if (isValidDateFns(dateObj)) {
-          newDeadlineForDb = dateObj;
-        } else {
-          throw new ApiError(
-            400,
-            `Unsupported deadline input type or invalid date.`
-          );
-        }
+      // Check if 'deadline' key was present in req.body
+      // newDeadlineInput can be the string "18/04/2025 - 26/04/2025", an empty string, or null.
+      // No parsing into Date object is needed if schema is String.
+      // Optional: Add validation for the format "DD/MM/YYYY - DD/MM/YYYY" if you want to enforce it.
+      // For example:
+      if (
+        newDeadlineInput &&
+        typeof newDeadlineInput === "string" &&
+        !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput) &&
+        newDeadlineInput !== ""
+      ) {
+        // This regex is basic, adjust if other single date formats are also allowed as strings.
+        // For now, this allows an empty string or the specific range format.
+        // If only the range or empty/null is allowed:
+        // if (newDeadlineInput && typeof newDeadlineInput === 'string' && !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput)) {
+        //   throw new ApiError(400, `Deadline string format is invalid. Expected 'DD/MM/YYYY - DD/MM/YYYY' or empty/null. Received: '${newDeadlineInput}'`);
+        // }
       }
 
-      const existingDeadlineFormatted = toSafeISODateString(
-        existingProject.deadline
-      );
-      const newDeadlineFormatted = toSafeISODateString(newDeadlineForDb);
-
-      if (newDeadlineFormatted !== existingDeadlineFormatted) {
-        updateData.deadline = newDeadlineForDb; // newDeadlineForDb is now a Date object or null
+      if (newDeadlineInput !== existingProject.deadline) {
+        // Simple string comparison
+        updateData.deadline =
+          newDeadlineInput === "" || newDeadlineInput === null
+            ? null
+            : newDeadlineInput;
+        const oldDeadlineDisplay = existingProject.deadline || "N/A";
+        const newDeadlineDisplay = updateData.deadline || "cleared";
         logs.push({
           actionType: "Deadline Change",
-          message: `Deadline updated from "${existingDeadlineFormatted || "N/A"}" to "${newDeadlineFormatted || "cleared"}" by ${performingUser.userName}`,
+          message: `Deadline updated from "${oldDeadlineDisplay}" to "${newDeadlineDisplay}" by ${performingUser.userName}`,
           userId: performingUser._id,
           timestamp: new Date(),
         });
-        changesSummary.push(
-          `Deadline updated to "${newDeadlineFormatted || "cleared"}"`
-        );
+        changesSummary.push(`Deadline updated to "${newDeadlineDisplay}"`);
         importantFieldsChanged = true;
       }
     }
@@ -607,10 +543,6 @@ const editProjects = asyncHandler(async (req, res) => {
   }
 });
 
-// Export editProjects along with your other controller functions
-// Ensure other functions (createProject, getAllProjects, etc.) are also using robust error handling and validation.
-// The following are placeholders from your previous code, ensure they are complete and robust as well.
-
 const createProject = asyncHandler(async (req, res) => {
   try {
     const {
@@ -621,7 +553,7 @@ const createProject = asyncHandler(async (req, res) => {
       status,
       businessAreas,
       comapanyName,
-      deadline,
+      deadline: newDeadlineInput, // Renamed for clarity
       physicalEducationRange,
       financialEducationRange,
       daysLeft,
@@ -634,57 +566,26 @@ const createProject = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Project name already taken.");
     }
 
+    // --- MODIFIED DEADLINE HANDLING (for String schema type) ---
     let validatedDeadline = null;
-    if (deadline !== undefined) {
-      // Check if deadline key was present
-      if (deadline === "" || deadline === null) {
+    if (newDeadlineInput !== undefined) {
+      if (newDeadlineInput === "" || newDeadlineInput === null) {
         validatedDeadline = null;
-      } else if (typeof deadline === "string") {
-        if (deadline.includes(" - ")) {
-          // Date Range "DD/MM/YYYY - DD/MM/YYYY"
-          const dates = deadline.split(" - ");
-          const startDateString = dates[0];
-          const parsedStartDate = parseDateFns(
-            startDateString,
-            "dd/MM/yyyy",
-            new Date()
-          );
-          if (!isValidDateFns(parsedStartDate)) {
-            throw new ApiError(
-              400,
-              `Invalid start date format in range for deadline: '${startDateString}'. Please use DD/MM/YYYY format.`
-            );
-          }
-          validatedDeadline = parsedStartDate;
-        } else {
-          // Assume it's a single date string
-          const parsedDate = parseDateFns(deadline, "yyyy-MM-dd", new Date());
-          if (isValidDateFns(parsedDate)) {
-            validatedDeadline = parsedDate;
-          } else {
-            const generalParsedDate = new Date(deadline);
-            if (isValidDateFns(generalParsedDate)) {
-              validatedDeadline = generalParsedDate;
-            } else {
-              throw new ApiError(
-                400,
-                `Invalid date format for deadline: '${deadline}'. Please use YYYY-MM-DD, a full ISO date string, a 'DD/MM/YYYY - DD/MM/YYYY' range, or null/empty to clear.`
-              );
-            }
-          }
-        }
+      } else if (typeof newDeadlineInput === "string") {
+        // Optional: Add validation for the format "DD/MM/YYYY - DD/MM/YYYY"
+        // if (newDeadlineInput && !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput) && newDeadlineInput !== "") {
+        //    throw new ApiError(400, `Deadline string format is invalid for creation. Expected 'DD/MM/YYYY - DD/MM/YYYY' or empty/null. Received: '${newDeadlineInput}'`);
+        // }
+        validatedDeadline = newDeadlineInput;
       } else {
-        const dateObj = new Date(deadline);
-        if (isValidDateFns(dateObj)) {
-          validatedDeadline = dateObj;
-        } else {
-          throw new ApiError(
-            400,
-            `Unsupported deadline input type or invalid date.`
-          );
-        }
+        // If it's not a string, and not undefined/null/empty, it's an unexpected type
+        throw new ApiError(
+          400,
+          `Deadline must be a string (e.g., 'DD/MM/YYYY - DD/MM/YYYY'), null, or empty. Received type: ${typeof newDeadlineInput}`
+        );
       }
     }
+    // --- END MODIFIED DEADLINE HANDLING ---
 
     const validatedProjectOwners = [];
     if (Array.isArray(projectOwners)) {
@@ -701,13 +602,10 @@ const createProject = asyncHandler(async (req, res) => {
           ownerId.ownerId &&
           mongoose.Types.ObjectId.isValid(ownerId.ownerId)
         ) {
-          // If already {ownerId: "..."}
           validatedProjectOwners.push({
             ownerId: new mongoose.Types.ObjectId(ownerId.ownerId),
           });
         } else {
-          // Optionally throw error for invalid ownerId format here, or skip.
-          // For now, skipping invalid ones.
           console.warn(
             `Skipping invalid project owner ID format: ${JSON.stringify(ownerId)} during project creation.`
           );
@@ -743,7 +641,6 @@ const createProject = asyncHandler(async (req, res) => {
           return null;
         }
       };
-
       const batchSize = 3;
       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
         const batch = files.projectBanner.slice(i, i + batchSize);
@@ -764,10 +661,10 @@ const createProject = asyncHandler(async (req, res) => {
       comapanyName,
       location,
       status: status || "Pending",
-      deadline: validatedDeadline,
+      deadline: validatedDeadline, // Storing the string directly (or null)
       physicalEducationRange,
       financialEducationRange,
-      daysLeft: daysLeft || null, // Ensure daysLeft is null if not provided or handled
+      daysLeft: daysLeft || null,
       projectBanner: projectBanners,
       createdBy: performingUser?._id,
       logs: [
@@ -789,7 +686,6 @@ const createProject = asyncHandler(async (req, res) => {
       if (performingUser?._id) {
         recipientUserIds.add(performingUser._id.toString());
       }
-
       if (recipientUserIds.size > 0) {
         try {
           const usersForPush = await User.find({
@@ -805,11 +701,9 @@ const createProject = asyncHandler(async (req, res) => {
           })
             .select("fcmDeviceToken notificationToken")
             .lean();
-
           const fcmTokens = usersForPush
             .map((u) => u.fcmDeviceToken || u.notificationToken)
             .filter(Boolean);
-
           if (fcmTokens.length > 0) {
             const pushTitle = `New Project Created: ${project.projectName}`;
             const pushBody = `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`;
@@ -826,7 +720,6 @@ const createProject = asyncHandler(async (req, res) => {
         }
       }
     }
-
     res
       .status(201)
       .json(new ApiResponse(201, project, "Project created successfully"));
@@ -855,7 +748,7 @@ const createProject = asyncHandler(async (req, res) => {
 
 const getAllProjects = asyncHandler(async (req, res) => {
   try {
-    const { status, page, milestoneUserIds, search } = req.query; // Added search
+    const { status, page, milestoneUserIds, search } = req.query;
     const {
       isMain,
       _id: loggedInUserId,
@@ -876,22 +769,20 @@ const getAllProjects = asyncHandler(async (req, res) => {
       baseFilter.status = status;
     }
     if (search) {
-      // Add search criteria
-      const searchRegex = new RegExp(search, "i"); // Case-insensitive search
+      const searchRegex = new RegExp(search, "i");
       baseFilter.$or = [
         { projectName: searchRegex },
         { description: searchRegex },
         { location: searchRegex },
         { comapanyName: searchRegex },
-        // Add other fields you want to search by
       ];
     }
 
     const userBusinessAreas = assignedBusinessAreas
       .map((area) => area.businessArea)
       .filter(Boolean);
-
     let finalFilter = { ...baseFilter };
+
     if (!isMain) {
       const userAccessConditions = [
         { members: loggedInUserId },
@@ -902,7 +793,6 @@ const getAllProjects = asyncHandler(async (req, res) => {
           businessAreas: { $in: userBusinessAreas },
         });
       }
-      // If baseFilter already has an $or (from search), combine them with $and
       if (finalFilter.$or && userAccessConditions.length > 0) {
         finalFilter = {
           $and: [{ $or: finalFilter.$or }, { $or: userAccessConditions }],
@@ -1118,10 +1008,13 @@ const getProjectById = asyncHandler(async (req, res) => {
     if (projectFinanceDocs.length > 0)
       (currentMilestones.find((m) => m.key === "payment") || {}).completed =
         true;
-    if (
-      (currentMilestones.find((m) => m.key === "filling") || {}).completed &&
-      (currentMilestones.find((m) => m.key === "payment") || {}).completed
-    ) {
+    const fillingMilestone = currentMilestones.find(
+      (m) => m.key === "filling"
+    ) || { completed: false };
+    const paymentMilestone = currentMilestones.find(
+      (m) => m.key === "payment"
+    ) || { completed: false };
+    if (fillingMilestone.completed && paymentMilestone.completed) {
       (currentMilestones.find((m) => m.key === "review") || {}).completed =
         true;
     }
@@ -1219,7 +1112,6 @@ const deleteProject = asyncHandler(async (req, res) => {
     const deletedProjectId = projectToDelete._id;
 
     await editProject.findByIdAndDelete(projectId, { session });
-    // Cascading deletes for related documents
     await UserDocument.deleteMany(
       { projName: deletedProjectName },
       { session }
@@ -1247,19 +1139,34 @@ const deleteProject = asyncHandler(async (req, res) => {
           ownerObj.ownerId
         )
     );
-    if (
-      performingUser?._id &&
-      !notificationRecipients.has(performingUser._id.toString())
-    ) {
-      const performerDetails = await User.findById(performingUser._id)
-        .select("email userName notificationToken fcmDeviceToken")
-        .lean(); // Fetch outside session or before delete
-      if (performerDetails)
-        notificationRecipients.set(
-          performerDetails._id.toString(),
-          performerDetails
+
+    let performerDetailsForNotification = null;
+    if (performingUser?._id) {
+      if (!notificationRecipients.has(performingUser._id.toString())) {
+        // Fetch outside session or before delete for notification context if needed and not populated.
+        // Assuming req.user has enough details or fetch if absolutely necessary.
+        // For simplicity, if performingUser is already in members/owners, their populated data will be used.
+        // If not, and if `req.user` doesn't have token/email, you might need a separate fetch
+        // but for delete, the user object from `req.user` might suffice.
+        performerDetailsForNotification = await User.findById(
+          performingUser._id
+        )
+          .select("email userName _id notificationToken fcmDeviceToken")
+          .lean();
+        if (performerDetailsForNotification) {
+          notificationRecipients.set(
+            performerDetailsForNotification._id.toString(),
+            performerDetailsForNotification
+          );
+        }
+      } else {
+        // Performing user is already in the list (e.g. an owner deleting their own project)
+        performerDetailsForNotification = notificationRecipients.get(
+          performingUser._id.toString()
         );
+      }
     }
+
     const usersToNotify = Array.from(notificationRecipients.values());
 
     if (usersToNotify.length > 0) {
