@@ -31,6 +31,7 @@ import reviewsRouter from './routes/review.routes.js'
 import { ApiError } from "./utils/ApiError.js"
 import notificationStatusRouter from "./routes/notificationStatus.routes.js"
 import notificationRouter from "./routes/showNotification.js"
+import languageRouter from "./routes/languagePreference.routes.js"
 
 
 
@@ -46,6 +47,7 @@ app.use('/api/v1/userdocuments', userdocumentRoutes);
 app.use('/api/v1/companies', companiesRoutes);
 app.use('/api/v1/finance', financeRoutes);
 app.use("/api/v1/additional", additionalMilestoneRouter);
+app.use("/api/v1/language", languageRouter);
 app.use("/api/v1/businessArea", businessAreaRouter),
 app.use("/api/v1/reviews", reviewsRouter)
 app.use("/api/v1/notificationStatus", notificationStatusRouter)

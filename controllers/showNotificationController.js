@@ -225,10 +225,49 @@ const clearAllNotifications = asyncHandler (async (req, res) => {
     )
   );
 })
+
+
+/**
+ * @description Get all notifications for a specific user by their ID
+ * @route GET /api/v1/notifications/user/:userId
+ * @access Private (Requires authenticated user - ideally checks if the requester is the user or an admin)
+ */
+const getAllNotificationsForUser = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+
+  // 1. Validate userId format
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw new ApiError(400, "Invalid User ID format in URL parameter.");
+  }
+
+  // 2. Fetch notifications for the given userId (assuming userId maps to 'memberId' in your schema)
+  //    Sort by newest first. Using .lean() for performance if you don't need Mongoose model instances.
+  const userNotifications = await ShowNotification.find({ memberId: userId })
+    .sort({ createdAt: -1 })
+    .lean(); // Use .lean() if you don't need Mongoose documents
+
+  // 3. Optional: If no notifications are found, you might want to return an empty array
+  //    or a specific message, but an empty array is standard for "no results".
+  //    The current setup will correctly return an empty array.
+
+  // 4. Respond with the notifications
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        userNotifications,
+        `Notifications fetched successfully for user ${userId}`
+      )
+    );
+});
+
+// --- Export all controller functions ---
 export {
   createNotification,
   getNotifications,
-  getNotificationById, 
-  updateNotificationStatus, 
-  clearAllNotifications
+  getNotificationById,
+  updateNotificationStatus,
+  clearAllNotifications,
+  getAllNotificationsForUser, // Add the new function here
 };
