@@ -32,6 +32,7 @@ import { ApiError } from "./utils/ApiError.js"
 import notificationStatusRouter from "./routes/notificationStatus.routes.js"
 import notificationRouter from "./routes/showNotification.js"
 import languageRouter from "./routes/languagePreference.routes.js"
+import notificationSettingRouter from "./routes/notificationSetting.routes.js";
 
 
 
@@ -52,6 +53,8 @@ app.use("/api/v1/businessArea", businessAreaRouter),
 app.use("/api/v1/reviews", reviewsRouter)
 app.use("/api/v1/notificationStatus", notificationStatusRouter)
 app.use("/api/v1/shownotifications", notificationRouter);
+app.use("/api/v1/settings", notificationSettingRouter);
+
 
 app.use((err, req, res, next) => {
     if (err instanceof ApiError) {
