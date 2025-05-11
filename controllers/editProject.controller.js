@@ -1057,7 +1057,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         { projectName: searchRegex },
         { description: searchRegex },
         { location: searchRegex },
-        { comapanyName: searchRegex },
+        { comapanyName: searchRegex }, // Assuming this is 'companyName' in your model
       ];
     }
 
@@ -1076,14 +1076,20 @@ const getAllProjects = asyncHandler(async (req, res) => {
           businessAreas: { $in: userBusinessAreas },
         });
       }
-      if (finalFilter.$or && userAccessConditions.length > 0) {
-        finalFilter = {
-          $and: [{ $or: finalFilter.$or }, { $or: userAccessConditions }],
-        };
-      } else if (userAccessConditions.length > 0) {
-        finalFilter.$or = userAccessConditions;
+      // Corrected logic for combining baseFilter.$or and userAccessConditions
+      if (baseFilter.$or && userAccessConditions.length > 0) {
+          finalFilter = {
+              $and: [baseFilter, { $or: userAccessConditions }], // if baseFilter.$or exists, it's part of baseFilter
+          };
+      } else if (baseFilter.$or) { // Only baseFilter.$or exists
+          finalFilter = baseFilter;
+      } else if (userAccessConditions.length > 0) { // Only userAccessConditions exist
+          finalFilter.$or = userAccessConditions;
+      } else { // Neither exists, finalFilter remains baseFilter (which might be empty)
+          finalFilter = baseFilter;
       }
     }
+
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = 10;
@@ -1107,7 +1113,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       .sort({ createdAt: -1 });
 
     if (pageNumber > 0) query = query.skip(skip).limit(pageSize);
-    const projects = await query.lean();
+    const projects = await query.lean(); // .lean() is important for performance and manual attachment
 
     let filteredProjectsByMilestone = projects;
     if (milestoneUserIds) {
@@ -1121,9 +1127,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
             (id) => mongoose.Types.ObjectId.isValid(id)
           );
           if (validUserIdsForMilestoneFilter.length > 0) {
-            const projectIds = projects.map((project) => project._id);
+            const projectIdsForMilestoneFilter = projects.map((project) => project._id); // Use current page's projects
             const milestonesData = await AdditionalMilestone.find({
-              projectId: { $in: projectIds },
+              projectId: { $in: projectIdsForMilestoneFilter },
               userId: { $in: validUserIdsForMilestoneFilter },
             })
               .select("projectId")
@@ -1144,6 +1150,50 @@ const getAllProjects = asyncHandler(async (req, res) => {
       }
     }
 
+    // ---- START: New logic to fetch related documents ----
+    const projectIds = filteredProjectsByMilestone.map(p => p._id);
+    const projectNames = filteredProjectsByMilestone.map(p => p.projectName).filter(Boolean); // Filter out any null/undefined names
+
+    let allUserDocs = [], allSystemDocs = [], allFinanceDocs = [], allAdditionalMilestones = [];
+
+    if (projectNames.length > 0) {
+        [
+            allUserDocs,
+            allSystemDocs, // Assuming Document model stores project reports
+            allFinanceDocs,
+        ] = await Promise.all([
+            UserDocument.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(),
+            Document.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(), // System docs
+            FinanceDocument.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(),
+        ]);
+    }
+
+    if (projectIds.length > 0) {
+        allAdditionalMilestones = await AdditionalMilestone.find({ projectId: { $in: projectIds } })
+            .populate({ path: "userId", model: "User", select: "userName" })
+            .sort({ createdAt: -1 })
+            .lean();
+    }
+
+    // Helper to group documents by project identifier
+    const groupDocsBy = (docs, keyField) => {
+        return docs.reduce((acc, doc) => {
+            const key = doc[keyField]?.toString(); // Use .toString() for ObjectIds
+            if (key) {
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(doc);
+            }
+            return acc;
+        }, {});
+    };
+
+    const userDocsMap = groupDocsBy(allUserDocs, 'projName');
+    const systemDocsMap = groupDocsBy(allSystemDocs, 'projName');
+    const financeDocsMap = groupDocsBy(allFinanceDocs, 'projName');
+    const additionalMilestonesMap = groupDocsBy(allAdditionalMilestones, 'projectId');
+    // ---- END: New logic to fetch related documents ----
+
+
     const projectsWithDetails = filteredProjectsByMilestone.map((project) => {
       const isMember =
         project.members?.some((member) => member._id.equals(loggedInUserId)) ||
@@ -1161,9 +1211,21 @@ const getAllProjects = asyncHandler(async (req, res) => {
         !isMember &&
         !isOwner &&
         projectBAs.some((area) => userBusinessAreas.includes(area));
+
+      // Attach the fetched documents
+      const projectUserDocs = userDocsMap[project.projectName] || [];
+      const projectSystemDocs = systemDocsMap[project.projectName] || [];
+      const projectFinanceDocs = financeDocsMap[project.projectName] || [];
+      const projectAdditionalMilestones = additionalMilestonesMap[project._id.toString()] || [];
+
       return {
         ...project,
         accessType: { isMember, isOwner, fromBusinessArea },
+        // Match structure from getProjectById for consistency
+        documents: projectUserDocs.map(doc => ({ ...doc, id: doc._id, uploadedAt: doc.uploadedAt || doc.createdAt })),
+        financeDocuments: projectFinanceDocs.map(doc => ({ ...doc, id: doc._id })),
+        projectReports: projectSystemDocs.map(report => ({ ...report, id: report._id, uploadedAt: report.uploadedAt || report.createdAt })),
+        additionalMilestones: projectAdditionalMilestones, // Already populated and sorted
       };
     });
 
@@ -1183,6 +1245,10 @@ const getAllProjects = asyncHandler(async (req, res) => {
     );
   } catch (error) {
     console.error("Error in getAllProjects (FULL ERROR OBJECT):", error);
+    // Ensure ApiError is properly instantiated and thrown for asyncHandler to catch
+    if (error instanceof ApiError) {
+        throw error;
+    }
     throw new ApiError(
       error.statusCode || 500,
       error.message || "Failed to retrieve projects"
