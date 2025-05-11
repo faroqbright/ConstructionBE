@@ -268,171 +268,17 @@ async function sendFinanceDocumentEmail(
   await Promise.all(emailPromises);
 }
 
-// Upload Finance Document with localized notifications
-export const uploadFinanceDocument = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  const performingUser = req.user;
-
-  try {
-    if (!req.file) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    const {
-      projName,
-      user,
-      financialExecution,
-      physicalExecution,
-      fileName,
-      reference,
-    } = req.body;
-
-    // Validation checks...
-    const project = await editProject
-      .findOne({ projectName: projName })
-      .populate("projectOwners.ownerId", "email userName _id")
-      .populate("members", "email userName _id")
-      .session(session);
-
-    if (!project) {
-      await session.abortTransaction();
-      session.endSession();
-      return res.status(404).json({ message: "Project not found" });
-    }
-
-    const finalFileName = fileName.includes(".")
-      ? fileName
-      : `${fileName}.${req.file.mimetype.split("/")[1]}`;
-    const fileUrl = await uploadToS3(
-      req.file.buffer,
-      finalFileName,
-      req.file.mimetype
-    );
-
-    const financeDocument = new FinanceDocument({
-      projName,
-      fileName: finalFileName,
-      fileUrl,
-      user,
-      financialExecution,
-      physicalExecution,
-      reference,
-      uploadedAt: new Date(),
-      uploadedBy: performingUser._id,
-    });
-
-    await financeDocument.save({ session });
-
-    // Prepare recipients for notifications
-    const recipients = [
-      ...project.projectOwners.map((owner) => ({
-        _id: owner.ownerId._id,
-        email: owner.ownerId.email,
-        userName: owner.ownerId.userName,
-      })),
-      ...project.members.map((member) => ({
-        _id: member._id,
-        email: member.email,
-        userName: member.userName,
-      })),
-      {
-        _id: performingUser._id,
-        email: performingUser.email,
-        userName: performingUser.userName,
-      },
-    ].filter(
-      (v, i, a) =>
-        a.findIndex((t) => t._id.toString() === v._id.toString()) === i
-    );
-
-    // Create localized in-app notifications
-    const notificationPromises = recipients.map(async (recipient) => {
-      const userLanguage = await getUserLanguage(recipient._id);
-      const isPortuguese = userLanguage === "portuguese";
-
-      return {
-        title: isPortuguese
-          ? `Novo Documento Financeiro Enviado: "${finalFileName}"`
-          : `New Finance Document Uploaded: "${finalFileName}"`,
-        type: "Document Upload",
-        description: isPortuguese
-          ? `Um novo documento financeiro "${finalFileName}" foi enviado para o projeto "${projName}" por ${performingUser.userName}`
-          : `A new finance document "${finalFileName}" was uploaded for project "${projName}" by ${performingUser.userName}`,
-        lengthyDesc: isPortuguese
-          ? `Informamos que um novo documento financeiro "${finalFileName}" foi enviado para o projeto "${projName}". Para visualizar ou baixar o documento, acesse a seção do projeto na plataforma. Em caso de dúvidas, nossa equipe está à disposição.//
-          Atenciosamente,//
-          [Equipe Soapro]`
-          : `We would like to inform you that a new finance document "${finalFileName}" was uploaded for project "${projName}". To view or download the document, please access the project section on the platform. Should you have any questions, our team remains at your disposal.//
-          Best regards,//
-          [Soapro Team]`,
-        memberId: recipient._id,
-        projectId: project._id,
-      };
-    });
-
-    const notifications = await Promise.all(notificationPromises);
-    await ShowNotification.create(notifications, { session });
-
-    await session.commitTransaction();
-
-    // Send localized push notifications
-    await sendPushNotificationsToUsers(
-      recipients.map((r) => r._id),
-      {
-        portuguese: `Novo Documento Financeiro: ${finalFileName}`,
-        english: `New Finance Document: ${finalFileName}`,
-      },
-      {
-        portuguese: `Documento "${finalFileName}" enviado para o projeto "${projName}" por ${performingUser.userName}`,
-        english: `Document "${finalFileName}" uploaded to project "${projName}" by ${performingUser.userName}`,
-      },
-      {
-        type: "FINANCE_DOCUMENT_UPLOADED",
-        projectId: project._id.toString(),
-        documentId: financeDocument._id.toString(),
-        documentName: finalFileName,
-      }
-    );
-
-    // Send localized emails
-    await sendFinanceDocumentEmail(
-      recipients,
-      { fileName: finalFileName },
-      project,
-      performingUser,
-      "upload"
-    );
-
-    res.status(201).json({
-      message: "File uploaded successfully!",
-      financeDocument,
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    console.error("Error uploading file:", error);
-    res.status(500).json({
-      message: "Error uploading file",
-      error: error.message,
-    });
-  } finally {
-    session.endSession();
-  }
-};
-
-// Update Finance Document with localized notifications
 export const updateFinanceDocument = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-  const performingUser = req.user;
+  const performingUser = req.user; // User object from authentication middleware
 
   try {
     const { id } = req.params;
     const updates = {};
-    const existingDocument =
-      await FinanceDocument.findById(id).session(session);
+    let changesMade = false;
+
+    const existingDocument = await FinanceDocument.findById(id).session(session);
 
     if (!existingDocument) {
       await session.abortTransaction();
@@ -440,19 +286,110 @@ export const updateFinanceDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
-    // Update logic...
+    // Get current values to preserve them if not explicitly updated
+    let newFinancialExecution = existingDocument.financialExecution;
+    let newPhysicalExecution = existingDocument.physicalExecution;
 
-    const project = await editProject
-      .findOne({ projectName: existingDocument.projName })
-      .populate("projectOwners.ownerId", "email userName _id")
-      .populate("members", "email userName _id")
-      .session(session);
+    // Update financial execution if provided
+    if (Object.prototype.hasOwnProperty.call(req.body, "financialExecution")) {
+      const finExecValue = req.body.financialExecution;
+      // Ensure it's not an empty string before parsing, or handle as needed
+      if (finExecValue === null || finExecValue === undefined || String(finExecValue).trim() === "") {
+        // Decide how to handle: treat as no change, or set to null/0, or error
+        // For now, let's assume if it's empty string, it might mean "clear" or "no change"
+        // If it must be a number, validate stricter. Assuming it should be a number if provided.
+      } else {
+        const finExec = Number.parseFloat(finExecValue);
+        if (isNaN(finExec) || finExec < 0 || finExec > 100) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            message: "Financial Execution must be a number between 0 and 100",
+          });
+        }
+        if (existingDocument.financialExecution !== finExec) {
+          newFinancialExecution = finExec;
+          changesMade = true;
+        }
+      }
+    }
+
+    // Update physical execution if provided
+    if (Object.prototype.hasOwnProperty.call(req.body, "physicalExecution")) {
+       const phyExecValue = req.body.physicalExecution;
+       if (phyExecValue === null || phyExecValue === undefined || String(phyExecValue).trim() === "") {
+        // Similar handling as financialExecution
+       } else {
+        const phyExec = Number.parseFloat(phyExecValue);
+        if (isNaN(phyExec) || phyExec < 0 || phyExec > 100) {
+          await session.abortTransaction();
+          session.endSession();
+          return res.status(400).json({
+            message: "Physical Execution must be a number between 0 and 100",
+          });
+        }
+        if (existingDocument.physicalExecution !== phyExec) {
+          newPhysicalExecution = phyExec;
+          changesMade = true;
+        }
+      }
+    }
+
+    // Always include both execution values in updates if they are part of the model.
+    // The `changesMade` flag will determine if the overall update proceeds.
+    updates.financialExecution = newFinancialExecution;
+    updates.physicalExecution = newPhysicalExecution;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "fileName")) {
+      const newFileName = typeof req.body.fileName === "string" ? req.body.fileName.trim() : "";
+      if (newFileName && existingDocument.fileName !== newFileName) {
+        updates.fileName = newFileName;
+        changesMade = true;
+      } else if (!newFileName && existingDocument.fileName) {
+        // Handle if an empty fileName is sent to clear it (if allowed by schema)
+        // Or treat as an error: return res.status(400).json({ message: "Filename cannot be empty" });
+        // For now, assuming non-empty fileName is expected if provided for change.
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "reference")) {
+      const newReference = typeof req.body.reference === "string" ? req.body.reference : null; // Allow clearing reference
+      if (existingDocument.reference !== newReference) {
+        updates.reference = newReference; // This will set to null if req.body.reference is null/undefined and different
+        changesMade = true;
+      }
+    }
+
+    if (changesMade) {
+      updates.uploadedAt = new Date(); // Or use `updatedAt` if you have a separate field
+    } else {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(200).json({
+        message: "No substantive changes detected. Document not updated.",
+        document: existingDocument,
+      });
+    }
 
     const updatedDocument = await FinanceDocument.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, session }
+      { new: true, runValidators: true, session }
     );
+
+    if (!updatedDocument) {
+      await session.abortTransaction();
+      session.endSession();
+      // If you have ApiError: throw new ApiError(500, "Failed to update document after finding it.");
+      console.error("Failed to update document after finding it, though it was found initially.");
+      return res.status(500).json({ message: "Failed to update document. It may have been deleted concurrently." });
+    }
+
+    const project = await editProject
+      .findOne({ projectName: updatedDocument.projName }) // Use updatedDocument.projName
+      .populate("projectOwners.ownerId", "email userName _id")
+      .populate("members", "email userName _id")
+      .session(session);
 
     // Prepare recipients
     const recipients = [
@@ -478,57 +415,55 @@ export const updateFinanceDocument = async (req, res) => {
 
     // Create localized in-app notifications
     const notificationPromises = recipients.map(async (recipient) => {
-      const userLanguage = await getUserLanguage(recipient._id);
+      const userLanguage = await getUserLanguage(recipient._id); // Ensure getUserLanguage is defined
       const isPortuguese = userLanguage === "portuguese";
 
       return {
         title: isPortuguese
-          ? `Documento Financeiro Atualizado: "${existingDocument.fileName}"`
-          : `Finance Document Updated: "${existingDocument.fileName}"`,
+          ? `Documento Financeiro Atualizado: "${updatedDocument.fileName}"`
+          : `Finance Document Updated: "${updatedDocument.fileName}"`,
         type: "Document Update",
         description: isPortuguese
-          ? `O documento financeiro "${existingDocument.fileName}" no projeto "${project?.projectName}" foi atualizado por ${performingUser.userName}`
-          : `The finance document "${existingDocument.fileName}" in project "${project?.projectName}" was updated by ${performingUser.userName}`,
+          ? `O documento financeiro "${updatedDocument.fileName}" no projeto "${project?.projectName || updatedDocument.projName}" foi atualizado por ${performingUser.userName}`
+          : `The finance document "${updatedDocument.fileName}" in project "${project?.projectName || updatedDocument.projName}" was updated by ${performingUser.userName}`,
         lengthyDesc: isPortuguese
-          ? `Informamos que o documento financeiro "${existingDocument.fileName}" foi atualizado no projeto "${project?.projectName}". Para visualizar as alterações, acesse a plataforma.//
-          Atenciosamente,//
-          [Equipe Soapro]`
-          : `We would like to inform you that the finance document "${existingDocument.fileName}" was updated in project "${project?.projectName}". Please check the platform for changes.//
-          Best regards,//
-          [Soapro Team]`,
+          ? `Informamos que o documento financeiro "${updatedDocument.fileName}" foi atualizado no projeto "${project?.projectName || updatedDocument.projName}". Para visualizar as alterações, acesse a plataforma.\n\nAtenciosamente,\n[Equipe Soapro]`
+          : `We would like to inform you that the finance document "${updatedDocument.fileName}" was updated in project "${project?.projectName || updatedDocument.projName}". Please check the platform for changes.\n\nBest regards,\n[Soapro Team]`,
         memberId: recipient._id,
         projectId: project?._id,
       };
     });
 
-    const notifications = await Promise.all(notificationPromises);
-    await ShowNotification.create(notifications, { session });
+    const notificationsData = await Promise.all(notificationPromises);
+    if (notificationsData.length > 0) {
+      await ShowNotification.create(notificationsData, { session });
+    }
 
     await session.commitTransaction();
 
-    // Send localized push notifications
-    await sendPushNotificationsToUsers(
+    // Send localized push notifications (after commit)
+    await sendPushNotificationsToUsers( // Ensure sendPushNotificationsToUsers is defined
       recipients.map((r) => r._id),
       {
-        portuguese: `Documento Atualizado: ${existingDocument.fileName}`,
-        english: `Document Updated: ${existingDocument.fileName}`,
+        portuguese: `Documento Atualizado: ${updatedDocument.fileName}`,
+        english: `Document Updated: ${updatedDocument.fileName}`,
       },
       {
-        portuguese: `Documento "${existingDocument.fileName}" atualizado no projeto "${project?.projectName}" por ${performingUser.userName}`,
-        english: `Document "${existingDocument.fileName}" updated in project "${project?.projectName}" by ${performingUser.userName}`,
+        portuguese: `Documento "${updatedDocument.fileName}" atualizado no projeto "${project?.projectName || updatedDocument.projName}" por ${performingUser.userName}`,
+        english: `Document "${updatedDocument.fileName}" updated in project "${project?.projectName || updatedDocument.projName}" by ${performingUser.userName}`,
       },
       {
         type: "FINANCE_DOCUMENT_UPDATED",
-        projectId: project?._id.toString(),
+        projectId: project?._id.toString() || "",
         documentId: updatedDocument._id.toString(),
-        documentName: existingDocument.fileName,
+        documentName: updatedDocument.fileName, // Use the potentially updated name
       }
     );
 
-    // Send localized emails
-    await sendFinanceDocumentEmail(
+    // Send localized emails (after commit)
+    await sendFinanceDocumentEmail( // Ensure sendFinanceDocumentEmail is defined
       recipients,
-      { fileName: existingDocument.fileName },
+      { fileName: updatedDocument.fileName }, // Pass updated file name
       project,
       performingUser,
       "update"
@@ -538,15 +473,29 @@ export const updateFinanceDocument = async (req, res) => {
       message: "Document updated successfully!",
       document: updatedDocument,
     });
+
   } catch (error) {
-    await session.abortTransaction();
-    console.error("Error updating document:", error);
-    res.status(500).json({
-      message: "Error updating document",
-      error: error.message,
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
+    console.error("Error updating document:", error.message, error.stack);
+    res.status(error.statusCode || 500).json({
+      message: error.message || "Error updating document",
     });
   } finally {
-    session.endSession();
+    // session.endSession() is called automatically by commitTransaction or abortTransaction
+    // Mongoose documentation states: "Once a transaction is committed or aborted, the session must be discarded."
+    // Explicitly calling session.endSession() after commit/abort might be redundant or lead to errors if session is already ended.
+    // However, if your specific Mongoose version/setup requires it, you can keep it.
+    // For safety and standard practice, it's often removed here if commit/abort is guaranteed.
+    // Let's keep it as per your original code's pattern:
+    if (session && session.endSession) { // Check if session still exists and has method
+        try {
+            session.endSession();
+        } catch (e) {
+            console.warn("Attempted to end session that might already be closed:", e.message);
+        }
+    }
   }
 };
 
