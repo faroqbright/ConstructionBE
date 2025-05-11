@@ -216,6 +216,7 @@ const editProjects = asyncHandler(async (req, res) => {
     let importantFieldsChanged = false;
     let membersListChanged = false;
     let ownersListChanged = false;
+    let statusChangedToCompleted = false;
 
     let finalProjectName = existingProject.projectName;
     if (
@@ -258,6 +259,11 @@ const editProjects = asyncHandler(async (req, res) => {
       });
       changesSummary.push(`Status updated to "${newStatusInput}"`);
       importantFieldsChanged = true;
+
+      // Check if status was changed to "Completed"
+      if (newStatusInput === "Completed") {
+        statusChangedToCompleted = true;
+      }
     }
 
     if (newDeadlineInput !== undefined) {
@@ -562,6 +568,126 @@ const editProjects = asyncHandler(async (req, res) => {
           session,
           ordered: true,
         });
+      }
+
+      // Additional notification for completed status
+      if (statusChangedToCompleted) {
+        const involvedUserIdsForReview = new Set();
+        (updatedProject.members || []).forEach(
+          (m) => m?._id && involvedUserIdsForReview.add(m._id.toString())
+        );
+        (updatedProject.projectOwners || []).forEach(
+          (o) =>
+            o?.ownerId?._id &&
+            involvedUserIdsForReview.add(o.ownerId._id.toString())
+        );
+
+        if (involvedUserIdsForReview.size > 0) {
+          const reviewNotificationsToCreate = [];
+
+          // Get language preferences for all users in one query
+          const userIds = Array.from(involvedUserIdsForReview);
+          const languagePreferences = await LanguagePreference.find({
+            userId: { $in: userIds },
+          }).lean();
+
+          // Create a map of userId to language preference
+          const userLanguageMap = {};
+          languagePreferences.forEach((pref) => {
+            userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+          });
+
+          Array.from(involvedUserIdsForReview).forEach((userIdStr) => {
+            const userLanguage = userLanguageMap[userIdStr] || "portuguese";
+
+            reviewNotificationsToCreate.push({
+              title:
+                userLanguage === "portuguese"
+                  ? `Projeto Concluído: ${updatedProject.projectName}`
+                  : `Project Completed: ${updatedProject.projectName}`,
+              type: "Review Request",
+              description:
+                userLanguage === "portuguese"
+                  ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
+                  : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
+              lengthyDesc:
+                userLanguage === "portuguese"
+                  ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
+                  : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
+              memberId: new mongoose.Types.ObjectId(userIdStr),
+              projectId: updatedProject._id,
+            });
+          });
+
+          await ShowNotification.create(reviewNotificationsToCreate, {
+            session,
+            ordered: true,
+          });
+
+          // Send push notifications for review request
+          const usersToNotifyForReview = await User.find({
+            _id: { $in: userIds },
+            $or: [
+              { fcmDeviceToken: { $exists: true } },
+              { notificationToken: { $exists: true } },
+            ],
+          }).lean();
+
+          // Group by language
+          const reviewTokensByLanguage = {
+            portuguese: [],
+            english: [],
+          };
+
+          usersToNotifyForReview.forEach((user) => {
+            const token = user.fcmDeviceToken || user.notificationToken;
+            if (token) {
+              const language =
+                userLanguageMap[user._id.toString()] || "portuguese";
+              reviewTokensByLanguage[language].push(token);
+            }
+          });
+
+          // Send Portuguese review notifications
+          if (reviewTokensByLanguage.portuguese.length > 0) {
+            try {
+              await sendPushNotification(
+                reviewTokensByLanguage.portuguese,
+                `Por favor, avalie o projeto ${updatedProject.projectName}`,
+                `O projeto foi concluído. Sua avaliação é importante para nós!`,
+                {
+                  projectId: updatedProject._id.toString(),
+                  type: "REVIEW_REQUEST",
+                }
+              );
+            } catch (pushError) {
+              console.error(
+                `Failed to send Portuguese review push notifications for project ${updatedProject._id}:`,
+                pushError.message
+              );
+            }
+          }
+
+          // Send English review notifications
+          if (reviewTokensByLanguage.english.length > 0) {
+            try {
+              await sendPushNotification(
+                reviewTokensByLanguage.english,
+                `Please review project ${updatedProject.projectName}`,
+                `The project has been completed. Your feedback is important to us!`,
+                {
+                  projectId: updatedProject._id.toString(),
+                  type: "REVIEW_REQUEST",
+                }
+              );
+            } catch (pushError) {
+              console.error(
+                `Failed to send English review push notifications for project ${updatedProject._id}:`,
+                pushError.message
+              );
+            }
+          }
+        }
       }
 
       await session.commitTransaction();
@@ -1078,18 +1204,20 @@ const getAllProjects = asyncHandler(async (req, res) => {
       }
       // Corrected logic for combining baseFilter.$or and userAccessConditions
       if (baseFilter.$or && userAccessConditions.length > 0) {
-          finalFilter = {
-              $and: [baseFilter, { $or: userAccessConditions }], // if baseFilter.$or exists, it's part of baseFilter
-          };
-      } else if (baseFilter.$or) { // Only baseFilter.$or exists
-          finalFilter = baseFilter;
-      } else if (userAccessConditions.length > 0) { // Only userAccessConditions exist
-          finalFilter.$or = userAccessConditions;
-      } else { // Neither exists, finalFilter remains baseFilter (which might be empty)
-          finalFilter = baseFilter;
+        finalFilter = {
+          $and: [baseFilter, { $or: userAccessConditions }], // if baseFilter.$or exists, it's part of baseFilter
+        };
+      } else if (baseFilter.$or) {
+        // Only baseFilter.$or exists
+        finalFilter = baseFilter;
+      } else if (userAccessConditions.length > 0) {
+        // Only userAccessConditions exist
+        finalFilter.$or = userAccessConditions;
+      } else {
+        // Neither exists, finalFilter remains baseFilter (which might be empty)
+        finalFilter = baseFilter;
       }
     }
-
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = 10;
@@ -1127,7 +1255,9 @@ const getAllProjects = asyncHandler(async (req, res) => {
             (id) => mongoose.Types.ObjectId.isValid(id)
           );
           if (validUserIdsForMilestoneFilter.length > 0) {
-            const projectIdsForMilestoneFilter = projects.map((project) => project._id); // Use current page's projects
+            const projectIdsForMilestoneFilter = projects.map(
+              (project) => project._id
+            ); // Use current page's projects
             const milestonesData = await AdditionalMilestone.find({
               projectId: { $in: projectIdsForMilestoneFilter },
               userId: { $in: validUserIdsForMilestoneFilter },
@@ -1151,48 +1281,63 @@ const getAllProjects = asyncHandler(async (req, res) => {
     }
 
     // ---- START: New logic to fetch related documents ----
-    const projectIds = filteredProjectsByMilestone.map(p => p._id);
-    const projectNames = filteredProjectsByMilestone.map(p => p.projectName).filter(Boolean); // Filter out any null/undefined names
+    const projectIds = filteredProjectsByMilestone.map((p) => p._id);
+    const projectNames = filteredProjectsByMilestone
+      .map((p) => p.projectName)
+      .filter(Boolean); // Filter out any null/undefined names
 
-    let allUserDocs = [], allSystemDocs = [], allFinanceDocs = [], allAdditionalMilestones = [];
+    let allUserDocs = [],
+      allSystemDocs = [],
+      allFinanceDocs = [],
+      allAdditionalMilestones = [];
 
     if (projectNames.length > 0) {
-        [
-            allUserDocs,
-            allSystemDocs, // Assuming Document model stores project reports
-            allFinanceDocs,
-        ] = await Promise.all([
-            UserDocument.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(),
-            Document.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(), // System docs
-            FinanceDocument.find({ projName: { $in: projectNames } }).sort({ uploadedAt: -1 }).lean(),
-        ]);
+      [
+        allUserDocs,
+        allSystemDocs, // Assuming Document model stores project reports
+        allFinanceDocs,
+      ] = await Promise.all([
+        UserDocument.find({ projName: { $in: projectNames } })
+          .sort({ uploadedAt: -1 })
+          .lean(),
+        Document.find({ projName: { $in: projectNames } })
+          .sort({ uploadedAt: -1 })
+          .lean(), // System docs
+        FinanceDocument.find({ projName: { $in: projectNames } })
+          .sort({ uploadedAt: -1 })
+          .lean(),
+      ]);
     }
 
     if (projectIds.length > 0) {
-        allAdditionalMilestones = await AdditionalMilestone.find({ projectId: { $in: projectIds } })
-            .populate({ path: "userId", model: "User", select: "userName" })
-            .sort({ createdAt: -1 })
-            .lean();
+      allAdditionalMilestones = await AdditionalMilestone.find({
+        projectId: { $in: projectIds },
+      })
+        .populate({ path: "userId", model: "User", select: "userName" })
+        .sort({ createdAt: -1 })
+        .lean();
     }
 
     // Helper to group documents by project identifier
     const groupDocsBy = (docs, keyField) => {
-        return docs.reduce((acc, doc) => {
-            const key = doc[keyField]?.toString(); // Use .toString() for ObjectIds
-            if (key) {
-                if (!acc[key]) acc[key] = [];
-                acc[key].push(doc);
-            }
-            return acc;
-        }, {});
+      return docs.reduce((acc, doc) => {
+        const key = doc[keyField]?.toString(); // Use .toString() for ObjectIds
+        if (key) {
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(doc);
+        }
+        return acc;
+      }, {});
     };
 
-    const userDocsMap = groupDocsBy(allUserDocs, 'projName');
-    const systemDocsMap = groupDocsBy(allSystemDocs, 'projName');
-    const financeDocsMap = groupDocsBy(allFinanceDocs, 'projName');
-    const additionalMilestonesMap = groupDocsBy(allAdditionalMilestones, 'projectId');
+    const userDocsMap = groupDocsBy(allUserDocs, "projName");
+    const systemDocsMap = groupDocsBy(allSystemDocs, "projName");
+    const financeDocsMap = groupDocsBy(allFinanceDocs, "projName");
+    const additionalMilestonesMap = groupDocsBy(
+      allAdditionalMilestones,
+      "projectId"
+    );
     // ---- END: New logic to fetch related documents ----
-
 
     const projectsWithDetails = filteredProjectsByMilestone.map((project) => {
       const isMember =
@@ -1216,15 +1361,27 @@ const getAllProjects = asyncHandler(async (req, res) => {
       const projectUserDocs = userDocsMap[project.projectName] || [];
       const projectSystemDocs = systemDocsMap[project.projectName] || [];
       const projectFinanceDocs = financeDocsMap[project.projectName] || [];
-      const projectAdditionalMilestones = additionalMilestonesMap[project._id.toString()] || [];
+      const projectAdditionalMilestones =
+        additionalMilestonesMap[project._id.toString()] || [];
 
       return {
         ...project,
         accessType: { isMember, isOwner, fromBusinessArea },
         // Match structure from getProjectById for consistency
-        documents: projectUserDocs.map(doc => ({ ...doc, id: doc._id, uploadedAt: doc.uploadedAt || doc.createdAt })),
-        financeDocuments: projectFinanceDocs.map(doc => ({ ...doc, id: doc._id })),
-        projectReports: projectSystemDocs.map(report => ({ ...report, id: report._id, uploadedAt: report.uploadedAt || report.createdAt })),
+        documents: projectUserDocs.map((doc) => ({
+          ...doc,
+          id: doc._id,
+          uploadedAt: doc.uploadedAt || doc.createdAt,
+        })),
+        financeDocuments: projectFinanceDocs.map((doc) => ({
+          ...doc,
+          id: doc._id,
+        })),
+        projectReports: projectSystemDocs.map((report) => ({
+          ...report,
+          id: report._id,
+          uploadedAt: report.uploadedAt || report.createdAt,
+        })),
         additionalMilestones: projectAdditionalMilestones, // Already populated and sorted
       };
     });
@@ -1247,7 +1404,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
     console.error("Error in getAllProjects (FULL ERROR OBJECT):", error);
     // Ensure ApiError is properly instantiated and thrown for asyncHandler to catch
     if (error instanceof ApiError) {
-        throw error;
+      throw error;
     }
     throw new ApiError(
       error.statusCode || 500,
