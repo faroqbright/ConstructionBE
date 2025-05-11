@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
-// No date-fns needed for this specific deadline string storage approach
-// import { parse as parseDateFns, isValid as isValidDateFns, format as formatDateFns } from 'date-fns';
 import { editProject } from "../models/project.model.js";
 import { User } from "../models/user.model.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
@@ -15,11 +13,160 @@ import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
+import { LanguagePreference } from "../models/languagePreferenceSchema.js";
 
-// toSafeISODateString is no longer strictly needed for comparing the deadline string if it's stored as a string.
-// However, if you display it or use it in logs where a consistent format is desired, you might adapt it or use a different helper.
-// For now, we'll compare strings directly.
+// Helper function to send document notification emails based on language preference
+async function sendDocumentNotificationEmail(user, documentInfo) {
+  try {
+    // Get user's language preference
+    const languagePref = await LanguagePreference.findOne({
+      userId: user._id,
+    }).lean();
+    const userLanguage = languagePref?.languageSelected || "portuguese";
 
+    // Email templates
+    const templates = {
+      portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Notificação de Novo Documento</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">Novo Documento Disponível</h2><p style="font-size: 16px; color: #555;">Olá <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">Foi adicionado um novo documento chamado <strong>”${documentInfo.fileName}”</strong> ao projecto <strong>”${documentInfo.projectName}”</strong>.</p><p style="font-size: 16px; color: #555;">Clique no botão abaixo para aceder ao documento:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Documento</a><p style="font-size: 14px; color: #999; margin-top: 30px;">Se tiver alguma dúvida ou necessitar de assistência, a nossa equipa está disponível para o apoiar.</p><p style="font-size: 14px; color: #999;">Com os melhores cumprimentos,<br><strong>Equipa Soapro</strong></p></td></tr></table></body></html>`,
+      english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Document Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">New Document Available</h2><p style="font-size: 16px; color: #555;">Dear <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">A new document titled <strong>"${documentInfo.fileName}"</strong> has been uploaded to the project <strong>"${documentInfo.projectName}"</strong>.</p><p style="font-size: 16px; color: #555;">Click the button below to view the document:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">View Document</a><p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p><p style="font-size: 14px; color: #999;">Best regards,<br><strong>Soapro Team</strong></p></td></tr></table></body></html>`,
+    };
+
+    await SendEmailUtil({
+      from: process.env.EMAIL_FROM || "noreply@example.com",
+      to: user.email,
+      subject:
+        userLanguage === "portuguese"
+          ? `Novo Documento: ${documentInfo.fileName}`
+          : `New Document: ${documentInfo.fileName}`,
+      html: templates[userLanguage],
+    });
+  } catch (error) {
+    console.error(
+      `Failed to send document notification email to ${user.email}:`,
+      error
+    );
+  }
+}
+
+// Helper function to get language preferences for multiple users
+async function getUserLanguagePreferences(userIds) {
+  try {
+    const languagePreferences = await LanguagePreference.find({
+      userId: { $in: userIds },
+    }).lean();
+
+    const userLanguageMap = {};
+    languagePreferences.forEach((pref) => {
+      userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+    });
+
+    return userLanguageMap;
+  } catch (error) {
+    console.error("Error fetching language preferences:", error);
+    return {};
+  }
+}
+
+// Helper function to send project notification emails
+async function sendProjectNotificationEmail(
+  user,
+  projectInfo,
+  performingUser,
+  changesSummary,
+  type
+) {
+  try {
+    // Get user's language preference
+    const languagePref = await LanguagePreference.findOne({
+      userId: user._id,
+    }).lean();
+    const userLanguage = languagePref?.languageSelected || "portuguese";
+
+    // Email templates for different notification types
+    const templates = {
+      update: {
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
+      },
+      deletion: {
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Eliminação de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Deleted</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Deletion Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been deleted by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">All documents and data associated with this project have been removed from the system.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
+      },
+      creation: {
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Project Created</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">New Project Notification</h2><p style="font-size: 16px; color: #555;">A new project <strong>${projectInfo.projectName}</strong> has been created by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Please log in to view the project details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
+      },
+    };
+
+    await SendEmailUtil({
+      from: process.env.EMAIL_FROM || "noreply@example.com",
+      to: user.email,
+      subject:
+        userLanguage === "portuguese"
+          ? type === "update"
+            ? `Atualização de Projeto: ${projectInfo.projectName}`
+            : type === "deletion"
+              ? `Projeto Eliminado: ${projectInfo.projectName}`
+              : `Novo Projeto: ${projectInfo.projectName}`
+          : type === "update"
+            ? `Project Update: ${projectInfo.projectName}`
+            : type === "deletion"
+              ? `Project Deleted: ${projectInfo.projectName}`
+              : `New Project: ${projectInfo.projectName}`,
+      html: templates[type][userLanguage],
+    });
+  } catch (emailError) {
+    console.error(
+      `Failed to send project ${type} email to ${user.email}:`,
+      emailError.message
+    );
+  }
+}
+
+// Helper function to send push notifications with language support
+async function sendLanguageSpecificPushNotifications(users, title, body, data) {
+  try {
+    // Get language preferences for all users
+    const userIds = users.map((user) => user._id.toString());
+    const userLanguageMap = await getUserLanguagePreferences(userIds);
+
+    // Group tokens by language
+    const tokensByLanguage = {
+      portuguese: [],
+      english: [],
+    };
+
+    users.forEach((user) => {
+      const userId = user._id.toString();
+      const token = user.fcmDeviceToken || user.notificationToken;
+      if (token) {
+        const language = userLanguageMap[userId] || "portuguese";
+        tokensByLanguage[language].push(token);
+      }
+    });
+
+    // Send Portuguese notifications
+    if (tokensByLanguage.portuguese.length > 0) {
+      await sendPushNotification(
+        tokensByLanguage.portuguese,
+        title.portuguese,
+        body.portuguese,
+        data
+      );
+    }
+
+    // Send English notifications
+    if (tokensByLanguage.english.length > 0) {
+      await sendPushNotification(
+        tokensByLanguage.english,
+        title.english,
+        body.english,
+        data
+      );
+    }
+  } catch (error) {
+    console.error("Error sending language-specific push notifications:", error);
+  }
+}
 const editProjects = asyncHandler(async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -38,7 +185,7 @@ const editProjects = asyncHandler(async (req, res) => {
       comapanyName: newCompanyNameInput,
       members: newMemberIdsInput,
       status: newStatusInput,
-      deadline: newDeadlineInput, // This will be the string "18/04/2025 - 26/04/2025"
+      deadline: newDeadlineInput,
       physicalEducationRange: newPhysicalEducationRangeInput,
       financialEducationRange: newFinancialEducationRangeInput,
       removeBanners = [],
@@ -113,29 +260,8 @@ const editProjects = asyncHandler(async (req, res) => {
       importantFieldsChanged = true;
     }
 
-    // --- MODIFIED DEADLINE HANDLING (for String schema type) ---
     if (newDeadlineInput !== undefined) {
-      // Check if 'deadline' key was present in req.body
-      // newDeadlineInput can be the string "18/04/2025 - 26/04/2025", an empty string, or null.
-      // No parsing into Date object is needed if schema is String.
-      // Optional: Add validation for the format "DD/MM/YYYY - DD/MM/YYYY" if you want to enforce it.
-      // For example:
-      if (
-        newDeadlineInput &&
-        typeof newDeadlineInput === "string" &&
-        !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput) &&
-        newDeadlineInput !== ""
-      ) {
-        // This regex is basic, adjust if other single date formats are also allowed as strings.
-        // For now, this allows an empty string or the specific range format.
-        // If only the range or empty/null is allowed:
-        // if (newDeadlineInput && typeof newDeadlineInput === 'string' && !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput)) {
-        //   throw new ApiError(400, `Deadline string format is invalid. Expected 'DD/MM/YYYY - DD/MM/YYYY' or empty/null. Received: '${newDeadlineInput}'`);
-        // }
-      }
-
       if (newDeadlineInput !== existingProject.deadline) {
-        // Simple string comparison
         updateData.deadline =
           newDeadlineInput === "" || newDeadlineInput === null
             ? null
@@ -152,7 +278,6 @@ const editProjects = asyncHandler(async (req, res) => {
         importantFieldsChanged = true;
       }
     }
-    // --- END MODIFIED DEADLINE HANDLING ---
 
     const simpleFieldUpdates = [
       {
@@ -401,7 +526,39 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       if (inAppNotificationsToCreate.length > 0) {
-        await ShowNotification.create(inAppNotificationsToCreate, {
+        // Get language preferences for all users in one query
+        const userIds = inAppNotificationsToCreate.map((notif) =>
+          notif.memberId.toString()
+        );
+        const languagePreferences = await LanguagePreference.find({
+          userId: { $in: userIds },
+        }).lean();
+
+        // Create a map of userId to language preference
+        const userLanguageMap = {};
+        languagePreferences.forEach((pref) => {
+          userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+        });
+
+        // Update notifications based on language preference
+        const notificationsWithLanguage = inAppNotificationsToCreate.map(
+          (notif) => {
+            const userId = notif.memberId.toString();
+            const userLanguage = userLanguageMap[userId] || "portuguese";
+
+            if (userLanguage === "portuguese") {
+              return {
+                ...notif,
+                title: `Atualização de Projeto: ${updatedProject.projectName}`,
+                description: `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
+                lengthyDesc: `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
+              };
+            }
+            return notif;
+          }
+        );
+
+        await ShowNotification.create(notificationsWithLanguage, {
           session,
           ordered: true,
         });
@@ -464,30 +621,111 @@ const editProjects = asyncHandler(async (req, res) => {
           .filter(Boolean);
 
         if (fcmTokens.length > 0) {
-          const pushTitle = `Project Update: ${updatedProject.projectName}`;
-          const pushBody = `${changesSummary.join("; ")}. By ${performingUser.userName}.`;
-          try {
-            await sendPushNotification(fcmTokens, pushTitle, pushBody, {
-              projectId: updatedProject._id.toString(),
-              type: "PROJECT_UPDATE",
-            });
-          } catch (pushError) {
-            console.error(
-              `Failed to send project update push notifications for project ${updatedProject._id}:`,
-              pushError.message
-            );
+          // Get language preferences for all users in one query
+          const userIds = usersToNotify.map((user) => user._id.toString());
+          const languagePreferences = await LanguagePreference.find({
+            userId: { $in: userIds },
+          }).lean();
+
+          // Create a map of userId to language preference
+          const userLanguageMap = {};
+          languagePreferences.forEach((pref) => {
+            userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+          });
+
+          // Group tokens by language for more efficient sending
+          const tokensByLanguage = {
+            portuguese: [],
+            english: [],
+          };
+
+          usersToNotify.forEach((user) => {
+            const userId = user._id.toString();
+            const token = user.fcmDeviceToken || user.notificationToken;
+            if (token) {
+              const language = userLanguageMap[userId] || "portuguese";
+              tokensByLanguage[language].push(token);
+            }
+          });
+
+          // Send Portuguese notifications
+          if (tokensByLanguage.portuguese.length > 0) {
+            const pushTitle = `Atualização de Projeto: ${updatedProject.projectName}`;
+            const pushBody = `${changesSummary.join("; ")}. Por ${performingUser.userName}.`;
+            try {
+              await sendPushNotification(
+                tokensByLanguage.portuguese,
+                pushTitle,
+                pushBody,
+                {
+                  projectId: updatedProject._id.toString(),
+                  type: "PROJECT_UPDATE",
+                }
+              );
+            } catch (pushError) {
+              console.error(
+                `Failed to send Portuguese push notifications for project ${updatedProject._id}:`,
+                pushError.message
+              );
+            }
+          }
+
+          // Send English notifications
+          if (tokensByLanguage.english.length > 0) {
+            const pushTitle = `Project Update: ${updatedProject.projectName}`;
+            const pushBody = `${changesSummary.join("; ")}. By ${performingUser.userName}.`;
+            try {
+              await sendPushNotification(
+                tokensByLanguage.english,
+                pushTitle,
+                pushBody,
+                {
+                  projectId: updatedProject._id.toString(),
+                  type: "PROJECT_UPDATE",
+                }
+              );
+            } catch (pushError) {
+              console.error(
+                `Failed to send English push notifications for project ${updatedProject._id}:`,
+                pushError.message
+              );
+            }
           }
         }
 
         if (usersToNotify.some((u) => u.email)) {
-          const emailHtml = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`;
+          // Get language preferences for all users in one query
+          const userIds = usersToNotify.map((user) => user._id.toString());
+          const languagePreferences = await LanguagePreference.find({
+            userId: { $in: userIds },
+          }).lean();
+
+          // Create a map of userId to language preference
+          const userLanguageMap = {};
+          languagePreferences.forEach((pref) => {
+            userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+          });
+
+          // Email templates
+          const emailTemplates = {
+            portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+            english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
+          };
+
           for (const user of usersToNotify) {
             if (user.email) {
               try {
+                const userLanguage =
+                  userLanguageMap[user._id.toString()] || "portuguese";
+                const emailHtml = emailTemplates[userLanguage];
+
                 await SendEmailUtil({
                   from: process.env.EMAIL_FROM || "noreply@example.com",
                   to: user.email,
-                  subject: `Project Update: ${updatedProject.projectName}`,
+                  subject:
+                    userLanguage === "portuguese"
+                      ? `Atualização de Projeto: ${updatedProject.projectName}`
+                      : `Project Update: ${updatedProject.projectName}`,
                   html: emailHtml,
                 });
               } catch (emailError) {
@@ -553,7 +791,7 @@ const createProject = asyncHandler(async (req, res) => {
       status,
       businessAreas,
       comapanyName,
-      deadline: newDeadlineInput, // Renamed for clarity
+      deadline: newDeadlineInput,
       physicalEducationRange,
       financialEducationRange,
       daysLeft,
@@ -566,26 +804,19 @@ const createProject = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Project name already taken.");
     }
 
-    // --- MODIFIED DEADLINE HANDLING (for String schema type) ---
     let validatedDeadline = null;
     if (newDeadlineInput !== undefined) {
       if (newDeadlineInput === "" || newDeadlineInput === null) {
         validatedDeadline = null;
       } else if (typeof newDeadlineInput === "string") {
-        // Optional: Add validation for the format "DD/MM/YYYY - DD/MM/YYYY"
-        // if (newDeadlineInput && !/^\d{2}\/\d{2}\/\d{4} - \d{2}\/\d{2}\/\d{4}$/.test(newDeadlineInput) && newDeadlineInput !== "") {
-        //    throw new ApiError(400, `Deadline string format is invalid for creation. Expected 'DD/MM/YYYY - DD/MM/YYYY' or empty/null. Received: '${newDeadlineInput}'`);
-        // }
         validatedDeadline = newDeadlineInput;
       } else {
-        // If it's not a string, and not undefined/null/empty, it's an unexpected type
         throw new ApiError(
           400,
           `Deadline must be a string (e.g., 'DD/MM/YYYY - DD/MM/YYYY'), null, or empty. Received type: ${typeof newDeadlineInput}`
         );
       }
     }
-    // --- END MODIFIED DEADLINE HANDLING ---
 
     const validatedProjectOwners = [];
     if (Array.isArray(projectOwners)) {
@@ -661,7 +892,7 @@ const createProject = asyncHandler(async (req, res) => {
       comapanyName,
       location,
       status: status || "Pending",
-      deadline: validatedDeadline, // Storing the string directly (or null)
+      deadline: validatedDeadline,
       physicalEducationRange,
       financialEducationRange,
       daysLeft: daysLeft || null,
@@ -686,36 +917,88 @@ const createProject = asyncHandler(async (req, res) => {
       if (performingUser?._id) {
         recipientUserIds.add(performingUser._id.toString());
       }
+
       if (recipientUserIds.size > 0) {
         try {
-          const usersForPush = await User.find({
+          const usersForNotification = await User.find({
             _id: {
               $in: Array.from(recipientUserIds).map(
                 (id) => new mongoose.Types.ObjectId(id)
               ),
             },
-            $or: [
-              { fcmDeviceToken: { $ne: null, $exists: true, $ne: "" } },
-              { notificationToken: { $ne: null, $exists: true, $ne: "" } },
-            ],
           })
-            .select("fcmDeviceToken notificationToken")
+            .select("email userName _id notificationToken fcmDeviceToken")
             .lean();
-          const fcmTokens = usersForPush
-            .map((u) => u.fcmDeviceToken || u.notificationToken)
-            .filter(Boolean);
-          if (fcmTokens.length > 0) {
-            const pushTitle = `New Project Created: ${project.projectName}`;
-            const pushBody = `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`;
-            await sendPushNotification(fcmTokens, pushTitle, pushBody, {
-              projectId: project._id.toString(),
-              type: "PROJECT_CREATED",
-            });
+
+          // Get language preferences
+          const userLanguageMap = await getUserLanguagePreferences(
+            Array.from(recipientUserIds)
+          );
+
+          // Create in-app notifications with language support
+          const inAppNotificationsToCreate = usersForNotification.map(
+            (user) => {
+              const userLanguage =
+                userLanguageMap[user._id.toString()] || "portuguese";
+              const isPortuguese = userLanguage === "portuguese";
+
+              return {
+                title: isPortuguese
+                  ? `Novo Projeto Criado: ${project.projectName}`
+                  : `New Project Created: ${project.projectName}`,
+                type: "Project Creation",
+                description: isPortuguese
+                  ? `Um novo projeto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`
+                  : `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`,
+                lengthyDesc: isPortuguese
+                  ? `Detalhes do novo projeto "${project.projectName}" criado por ${performingUser?.userName || "sistema"}.`
+                  : `Details of new project "${project.projectName}" created by ${performingUser?.userName || "system"}.`,
+                memberId: user._id,
+                projectId: project._id,
+              };
+            }
+          );
+
+          await ShowNotification.create(inAppNotificationsToCreate);
+
+          // Send push notifications with language support
+          const usersWithTokens = usersForNotification.filter(
+            (u) => u.fcmDeviceToken || u.notificationToken
+          );
+
+          if (usersWithTokens.length > 0) {
+            await sendLanguageSpecificPushNotifications(
+              usersWithTokens,
+              {
+                portuguese: `Novo Projeto Criado: ${project.projectName}`,
+                english: `New Project Created: ${project.projectName}`,
+              },
+              {
+                portuguese: `Um novo projeto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`,
+                english: `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`,
+              },
+              {
+                projectId: project._id.toString(),
+                type: "PROJECT_CREATED",
+              }
+            );
           }
-        } catch (pushError) {
+
+          // Send emails with language support
+          const usersWithEmails = usersForNotification.filter((u) => u.email);
+          for (const user of usersWithEmails) {
+            await sendProjectNotificationEmail(
+              user,
+              { projectName: project.projectName },
+              performingUser,
+              [],
+              "creation"
+            );
+          }
+        } catch (error) {
           console.error(
-            "Failed to send project creation push notifications:",
-            pushError.message
+            "Failed to send project creation notifications:",
+            error.message
           );
         }
       }
@@ -884,22 +1167,20 @@ const getAllProjects = asyncHandler(async (req, res) => {
       };
     });
 
-    res
-      .status(200)
-      .json(
-        new ApiResponse(
-          200,
-          {
-            projects: projectsWithDetails,
-            pagination: {
-              currentPage: pageNumber,
-              totalPages: Math.ceil(totalProjects / pageSize),
-              totalProjects,
-            },
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          projects: projectsWithDetails,
+          pagination: {
+            currentPage: pageNumber,
+            totalPages: Math.ceil(totalProjects / pageSize),
+            totalProjects,
           },
-          "Projects retrieved successfully"
-        )
-      );
+        },
+        "Projects retrieved successfully"
+      )
+    );
   } catch (error) {
     console.error("Error in getAllProjects (FULL ERROR OBJECT):", error);
     throw new ApiError(
@@ -1143,11 +1424,6 @@ const deleteProject = asyncHandler(async (req, res) => {
     let performerDetailsForNotification = null;
     if (performingUser?._id) {
       if (!notificationRecipients.has(performingUser._id.toString())) {
-        // Fetch outside session or before delete for notification context if needed and not populated.
-        // Assuming req.user has enough details or fetch if absolutely necessary.
-        // For simplicity, if performingUser is already in members/owners, their populated data will be used.
-        // If not, and if `req.user` doesn't have token/email, you might need a separate fetch
-        // but for delete, the user object from `req.user` might suffice.
         performerDetailsForNotification = await User.findById(
           performingUser._id
         )
@@ -1160,7 +1436,6 @@ const deleteProject = asyncHandler(async (req, res) => {
           );
         }
       } else {
-        // Performing user is already in the list (e.g. an owner deleting their own project)
         performerDetailsForNotification = notificationRecipients.get(
           performingUser._id.toString()
         );
@@ -1170,41 +1445,74 @@ const deleteProject = asyncHandler(async (req, res) => {
     const usersToNotify = Array.from(notificationRecipients.values());
 
     if (usersToNotify.length > 0) {
-      const inAppNotificationsToCreate = usersToNotify.map((user) => ({
-        title: `Project Deleted: ${deletedProjectName}`,
-        type: "Project Deletion",
-        description: `Project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
-        memberId: user._id,
-        projectId: deletedProjectId,
-      }));
-      if (inAppNotificationsToCreate.length > 0) {
-        await ShowNotification.create(inAppNotificationsToCreate, {
-          session,
-          ordered: true,
-        });
-      }
+      // Get language preferences for all users
+      const userIds = usersToNotify.map((user) => user._id.toString());
+      const userLanguageMap = await getUserLanguagePreferences(userIds);
+
+      // Create in-app notifications with language support
+      const inAppNotificationsToCreate = usersToNotify.map((user) => {
+        const userLanguage =
+          userLanguageMap[user._id.toString()] || "portuguese";
+        const isPortuguese = userLanguage === "portuguese";
+
+        return {
+          title: isPortuguese
+            ? `Projeto Eliminado: ${deletedProjectName}`
+            : `Project Deleted: ${deletedProjectName}`,
+          type: "Project Deletion",
+          description: isPortuguese
+            ? `O projeto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`
+            : `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
+          lengthyDesc: isPortuguese
+            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. Ação realizada por ${performingUser.userName}.`
+            : `All documents and data associated with project "${deletedProjectName}" have been removed from the system. Action performed by ${performingUser.userName}.`,
+          memberId: user._id,
+          projectId: deletedProjectId,
+        };
+      });
+
+      await ShowNotification.create(inAppNotificationsToCreate, {
+        session,
+        ordered: true,
+      });
     }
 
     await session.commitTransaction();
 
     if (usersToNotify.length > 0) {
-      const fcmTokens = usersToNotify
-        .map((u) => u.fcmDeviceToken || u.notificationToken)
-        .filter(Boolean);
-      if (fcmTokens.length > 0) {
-        const pushTitle = `Project Deleted: ${deletedProjectName}`;
-        const pushBody = `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`;
-        try {
-          await sendPushNotification(fcmTokens, pushTitle, pushBody, {
+      // Send push notifications with language support
+      const usersWithTokens = usersToNotify.filter(
+        (u) => u.fcmDeviceToken || u.notificationToken
+      );
+
+      if (usersWithTokens.length > 0) {
+        await sendLanguageSpecificPushNotifications(
+          usersWithTokens,
+          {
+            portuguese: `Projeto Eliminado: ${deletedProjectName}`,
+            english: `Project Deleted: ${deletedProjectName}`,
+          },
+          {
+            portuguese: `O projeto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`,
+            english: `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
+          },
+          {
             deletedProjectId: deletedProjectId.toString(),
             type: "PROJECT_DELETED",
-          });
-        } catch (pushError) {
-          console.error(
-            `Failed to send project deletion push notifications for project ${deletedProjectId}:`,
-            pushError.message
-          );
-        }
+          }
+        );
+      }
+
+      // Send emails with language support
+      const usersWithEmails = usersToNotify.filter((u) => u.email);
+      for (const user of usersWithEmails) {
+        await sendProjectNotificationEmail(
+          user,
+          { projectName: deletedProjectName },
+          performingUser,
+          [],
+          "deletion"
+        );
       }
     }
 
