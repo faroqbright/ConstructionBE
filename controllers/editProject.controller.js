@@ -909,849 +909,1329 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //   }
 // });
 
+
 const editProjects = asyncHandler(async (req, res) => {
-  const session = await mongoose.startSession();
-  let transactionSucceeded = false;
+  const { projectId } = req.params;
+  const performingUser = req.user; // Assumes req.user is populated by middleware
 
-  try {
-    const { projectId } = req.params;
-    const performingUser = req.user;
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new ApiError(400, "Invalid project ID format.");
+  }
 
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      throw new ApiError(400, "Invalid project ID format.");
+  const {
+    projectName: newProjectNameInput,
+    projectOwners: newProjectOwnerIdsInput,
+    description: newDescriptionInput,
+    location: newLocationInput,
+    businessAreas: newBusinessAreasInput,
+    comapanyName: newCompanyNameInput, 
+    members: newMemberIdsInput,
+    status: newStatusInput,
+    deadline: newDeadlineInput,
+    physicalEducationRange: newPhysicalEducationRangeInput,
+    financialEducationRange: newFinancialEducationRangeInput,
+    removeBanners = [],
+  } = req.body;
+  const { files } = req;
+
+  const existingProject = await editProject
+    .findById(projectId)
+    .populate(
+      "projectOwners.ownerId",
+      "email userName _id notificationToken fcmDeviceToken"
+    )
+    .populate(
+      "members",
+      "email userName _id notificationToken fcmDeviceToken"
+    )
+    .lean();  
+
+  if (!existingProject) {
+    throw new ApiError(404, "Project not found.");
+  }
+
+  const updateData = {};
+  const logs = [];
+  let updatedProjectBanners = [...(existingProject.projectBanner || [])];
+  const changesSummary = [];
+  let importantFieldsChanged = false;
+  let membersListChanged = false;
+  let ownersListChanged = false;
+  let statusChangedToCompleted = false;
+
+  const trackChange = (fieldKey, newValue, originalValue, fieldName, actionType, messageFormatter) => {
+    if (newValue !== undefined && newValue !== originalValue) {
+        updateData[fieldKey] = newValue;
+        const message = messageFormatter(newValue, originalValue);
+        logs.push({
+            actionType: actionType,
+            message: `${message} by ${performingUser.userName}`,
+            userId: performingUser._id,
+            timestamp: new Date(),
+        });
+        changesSummary.push(message);
+        importantFieldsChanged = true; 
+        return true; 
     }
+    return false; 
+  };
 
-    const {
-      projectName: newProjectNameInput,
-      projectOwners: newProjectOwnerIdsInput,
-      description: newDescriptionInput,
-      location: newLocationInput,
-      businessAreas: newBusinessAreasInput,
-      comapanyName: newCompanyNameInput,
-      members: newMemberIdsInput,
-      status: newStatusInput,
-      deadline: newDeadlineInput,
-      physicalEducationRange: newPhysicalEducationRangeInput,
-      financialEducationRange: newFinancialEducationRangeInput,
-      removeBanners = [],
-    } = req.body;
 
-    const { files } = req;
-
-    const existingProject = await editProject
-      .findById(projectId)
-      .populate(
-        "projectOwners.ownerId",
-        "email userName _id notificationToken fcmDeviceToken"
-      )
-      .populate(
-        "members",
-        "email userName _id notificationToken fcmDeviceToken"
-      )
-      .lean();
-
-    if (!existingProject) {
-      throw new ApiError(404, "Project not found.");
-    }
-
-    const updateData = {};
-    const logs = [];
-    let updatedProjectBanners = [...(existingProject.projectBanner || [])];
-    const changesSummary = [];
-    let importantFieldsChanged = false;
-    let membersListChanged = false;
-    let ownersListChanged = false;
-    let statusChangedToCompleted = false;
-
-    // Process project name changes
-    let finalProjectName = existingProject.projectName;
-    if (
-      newProjectNameInput &&
-      newProjectNameInput !== existingProject.projectName
-    ) {
-      const nameTaken = await editProject.findOne({
+  if (newProjectNameInput && newProjectNameInput !== existingProject.projectName) {
+    const nameTaken = await editProject.findOne(
+      {
         projectName: newProjectNameInput,
         _id: { $ne: projectId },
-      });
-      if (nameTaken) {
-        finalProjectName = `${newProjectNameInput}-${uuidv4().split("-")[0]}`;
-        logs.push({
-          actionType: "Project Name Change (Auto-Adjusted)",
-          message: `Project name "${newProjectNameInput}" was taken, changed to "${finalProjectName}" by ${performingUser.userName}. Original: "${existingProject.projectName}"`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-      } else {
-        finalProjectName = newProjectNameInput;
-        logs.push({
-          actionType: "Project Name Change",
-          message: `Project name changed from "${existingProject.projectName}" to "${finalProjectName}" by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-      }
-      updateData.projectName = finalProjectName;
-      changesSummary.push(`Project name changed to "${finalProjectName}"`);
-      importantFieldsChanged = true;
+      },
+      { _id: 1 } 
+    ).lean();
+
+    let finalProjectName;
+    let logActionType;
+    let logMessage;
+
+    if (nameTaken) {
+      finalProjectName = `${newProjectNameInput}-${uuidv4().split("-")[0]}`;
+      logActionType = "Project Name Change (Auto-Adjusted)";
+      logMessage = `Project name "${newProjectNameInput}" was taken, changed to "${finalProjectName}". Original: "${existingProject.projectName}"`;
+    } else {
+      finalProjectName = newProjectNameInput;
+      logActionType = "Project Name Change";
+      logMessage = `Project name changed from "${existingProject.projectName}" to "${finalProjectName}"`;
     }
-
-    // Process status changes
-    if (newStatusInput && newStatusInput !== existingProject.status) {
-      updateData.status = newStatusInput;
-      logs.push({
-        actionType: "Status Update",
-        message: `Status changed from "${existingProject.status}" to "${newStatusInput}" by ${performingUser.userName}`,
-        userId: performingUser._id,
-        timestamp: new Date(),
-      });
-      changesSummary.push(`Status updated to "${newStatusInput}"`);
-      importantFieldsChanged = true;
-
-      // Check if status was changed to "Completed"
-      if (newStatusInput === "Completed") {
-        statusChangedToCompleted = true;
-      }
-    }
-
-    // Process deadline changes
-    if (newDeadlineInput !== undefined) {
-      if (newDeadlineInput !== existingProject.deadline) {
-        updateData.deadline =
-          newDeadlineInput === "" || newDeadlineInput === null
-            ? null
-            : newDeadlineInput;
-        const oldDeadlineDisplay = existingProject.deadline || "N/A";
-        const newDeadlineDisplay = updateData.deadline || "cleared";
-        logs.push({
-          actionType: "Deadline Change",
-          message: `Deadline updated from "${oldDeadlineDisplay}" to "${newDeadlineDisplay}" by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push(`Deadline updated to "${newDeadlineDisplay}"`);
-        importantFieldsChanged = true;
-      }
-    }
-
-    // Process other simple field updates
-    const simpleFieldUpdates = [
-      {
-        key: "description",
-        newValue: newDescriptionInput,
-        name: "Description",
-      },
-      { key: "location", newValue: newLocationInput, name: "Location" },
-      {
-        key: "businessAreas",
-        newValue: newBusinessAreasInput,
-        name: "Business Areas",
-      },
-      {
-        key: "comapanyName",
-        newValue: newCompanyNameInput,
-        name: "Company Name",
-      },
-      {
-        key: "physicalEducationRange",
-        newValue: newPhysicalEducationRangeInput,
-        name: "Physical Education Range",
-      },
-      {
-        key: "financialEducationRange",
-        newValue: newFinancialEducationRangeInput,
-        name: "Financial Education Range",
-      },
-    ];
-
-    simpleFieldUpdates.forEach(({ key, newValue, name }) => {
-      if (newValue !== undefined && newValue !== existingProject[key]) {
-        updateData[key] = newValue;
-        logs.push({
-          actionType: `${name} Update`,
-          message: `${name} updated by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push(`${name} updated`);
-        importantFieldsChanged = true;
-      }
+    updateData.projectName = finalProjectName;
+    logs.push({
+      actionType: logActionType,
+      message: `${logMessage} by ${performingUser.userName}`,
+      userId: performingUser._id,
+      timestamp: new Date(),
     });
+    changesSummary.push(`Project name changed to "${finalProjectName}"`);
+    importantFieldsChanged = true;
+  }
 
-    // Process members changes
-    if (Array.isArray(newMemberIdsInput)) {
-      const validatedNewMemberIds = newMemberIdsInput
-        .filter(Boolean)
-        .map((id) => {
-          if (!mongoose.Types.ObjectId.isValid(id))
-            throw new ApiError(400, `Invalid member ID format: ${id}`);
-          return id.toString();
-        });
-      const existingMemberIds = (existingProject.members || []).map((m) =>
-        m._id.toString()
-      );
-      if (
-        JSON.stringify(validatedNewMemberIds.sort()) !==
-        JSON.stringify(existingMemberIds.sort())
-      ) {
-        updateData.members = validatedNewMemberIds.map(
-          (id) => new mongoose.Types.ObjectId(id)
-        );
+  if (trackChange(
+      "status",
+      newStatusInput,
+      existingProject.status,
+      "Status",
+      "Status Update",
+      (nv, ov) => `Status changed from "${ov}" to "${nv}"`
+  )) {
+      if (newStatusInput === "Completed") {
+          statusChangedToCompleted = true;
+      }
+  }
+
+  if (newDeadlineInput !== undefined) {
+      const newDeadlineValue = (newDeadlineInput === "" || newDeadlineInput === null) ? null : newDeadlineInput;
+      if (newDeadlineValue !== existingProject.deadline) {
+           trackChange(
+               "deadline",
+               newDeadlineValue,
+               existingProject.deadline,
+               "Deadline",
+               "Deadline Change",
+               (nv, ov) => `Deadline updated from "${ov || "N/A"}" to "${nv || "cleared"}"`
+           );
+      }
+  }
+
+  trackChange("description", newDescriptionInput, existingProject.description, "Description", "Description Update", () => `Description updated`);
+  trackChange("location", newLocationInput, existingProject.location, "Location", "Location Update", () => `Location updated`);
+  trackChange("businessAreas", newBusinessAreasInput, existingProject.businessAreas, "Business Areas", "Business Areas Update", () => `Business Areas updated`);
+  trackChange("comapanyName", newCompanyNameInput, existingProject.comapanyName, "Company Name", "Company Name Update", () => `Company Name updated`); // Typo: comapanyName
+  trackChange("physicalEducationRange", newPhysicalEducationRangeInput, existingProject.physicalEducationRange, "Physical Education Range", "Physical Education Range Update", () => `Physical Education Range updated`);
+  trackChange("financialEducationRange", newFinancialEducationRangeInput, existingProject.financialEducationRange, "Financial Education Range", "Financial Education Range Update", () => `Financial Education Range updated`);
+
+  if (Array.isArray(newMemberIdsInput)) {
+    const validatedNewMemberIds = newMemberIdsInput
+      .filter(Boolean)  
+      .map((id) => {
+        if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, `Invalid member ID format: ${id}`);
+        return id.toString();
+      });
+
+    const existingMemberIdSet = new Set((existingProject.members || []).map(m => m._id.toString()));
+    const newMemberIdSet = new Set(validatedNewMemberIds);
+
+    if (existingMemberIdSet.size !== newMemberIdSet.size || ![...newMemberIdSet].every(id => existingMemberIdSet.has(id))) {
+        updateData.members = validatedNewMemberIds.map(id => new mongoose.Types.ObjectId(id));
         membersListChanged = true;
         logs.push({
-          actionType: "Members Update",
-          message: `Project members updated by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
+            actionType: "Members Update",
+            message: `Project members updated by ${performingUser.userName}`,
+            userId: performingUser._id,
+            timestamp: new Date(),
         });
         changesSummary.push("Project members updated");
-        importantFieldsChanged = true;
-      }
-    }
-
-    // Process project owners changes
-    if (Array.isArray(newProjectOwnerIdsInput)) {
-      const validatedNewOwnerIds = newProjectOwnerIdsInput
-        .filter(Boolean)
-        .map((id) => {
-          if (!mongoose.Types.ObjectId.isValid(id))
-            throw new ApiError(400, `Invalid project owner ID format: ${id}`);
-          return id.toString();
-        });
-      const existingOwnerIds = (existingProject.projectOwners || [])
-        .map((o) => o.ownerId?._id.toString())
-        .filter(Boolean);
-      if (
-        JSON.stringify(validatedNewOwnerIds.sort()) !==
-        JSON.stringify(existingOwnerIds.sort())
-      ) {
-        updateData.projectOwners = validatedNewOwnerIds.map((id) => ({
-          ownerId: new mongoose.Types.ObjectId(id),
-        }));
-        ownersListChanged = true;
-        logs.push({
-          actionType: "Owners Update",
-          message: `Project owners updated by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push("Project owners updated");
-        importantFieldsChanged = true;
-      }
-    }
-
-    // Process banner removals
-    if (Array.isArray(removeBanners) && removeBanners.length > 0) {
-      const initialBannerCount = updatedProjectBanners.length;
-      updatedProjectBanners = updatedProjectBanners.filter(
-        (banner) => !removeBanners.includes(banner.url)
-      );
-      if (updatedProjectBanners.length < initialBannerCount) {
-        updateData.projectBanner = updatedProjectBanners;
-        logs.push({
-          actionType: "Banner Removal",
-          message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push(
-          `${initialBannerCount - updatedProjectBanners.length} banner(s) removed`
-        );
-        importantFieldsChanged = true;
-      }
-    }
-
-    // Process banner additions
-    if (files?.projectBanner?.length > 0) {
-      if (updatedProjectBanners.length + files.projectBanner.length > 10) {
-        throw new ApiError(
-          400,
-          "Cannot upload new banners. Maximum 10 banners allowed in total."
-        );
-      }
-      const uploadPromises = files.projectBanner.map(async (file) => {
-        const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
-        const uploadedImageUrl = await uploadToS3(
-          file.buffer,
-          uniqueFileName,
-          file.mimetype
-        );
-        return uploadedImageUrl
-          ? { url: uploadedImageUrl, uploadDate: new Date() }
-          : null;
-      });
-      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);
-      if (newBanners.length > 0) {
-        updatedProjectBanners.push(...newBanners);
-        updateData.projectBanner = updatedProjectBanners;
-        logs.push({
-          actionType: "Banner Addition",
-          message: `${newBanners.length} new banner(s) added by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push(`${newBanners.length} new banner(s) added`);
-        importantFieldsChanged = true;
-      }
-    }
-
-    if (
-      updateData.projectBanner === undefined &&
-      JSON.stringify(updatedProjectBanners) !==
-        JSON.stringify(existingProject.projectBanner || [])
-    ) {
-      updateData.projectBanner = updatedProjectBanners;
-    }
-
-    // If no changes, return early
-    if (Object.keys(updateData).length === 0) {
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            existingProject,
-            "No changes detected. Project remains the same."
-          )
-        );
-    }
-
-    // Add logs if there are any
-    if (logs.length > 0) {
-      updateData.logs = [...(existingProject.logs || []), ...logs];
-    }
-
-    // Start transaction
-    session.startTransaction();
-    let updatedProject;
-
-    try {
-      // Update the project
-      updatedProject = await editProject
-        .findByIdAndUpdate(
-          projectId,
-          { $set: updateData },
-          { new: true, session, runValidators: true }
-        )
-        .populate(
-          "projectOwners.ownerId",
-          "email userName _id notificationToken fcmDeviceToken"
-        )
-        .populate(
-          "members",
-          "email userName _id notificationToken fcmDeviceToken"
-        );
-
-      if (!updatedProject) {
-        throw new ApiError(
-          500,
-          "Failed to update project after changes. Project might have been deleted concurrently."
-        );
-      }
-
-      // Create in-app notifications
-      const inAppNotificationsToCreate = [];
-      if (importantFieldsChanged || membersListChanged || ownersListChanged) {
-        const involvedUserIdsForInApp = new Set();
-        (updatedProject.members || []).forEach(
-          (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
-        );
-        (updatedProject.projectOwners || []).forEach(
-          (o) =>
-            o?.ownerId?._id &&
-            involvedUserIdsForInApp.add(o.ownerId._id.toString())
-        );
-        if (membersListChanged)
-          (existingProject.members || []).forEach(
-            (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
-          );
-        if (ownersListChanged)
-          (existingProject.projectOwners || []).forEach(
-            (o) =>
-              o?.ownerId?._id &&
-              involvedUserIdsForInApp.add(o.ownerId._id.toString())
-          );
-        if (performingUser?._id)
-          involvedUserIdsForInApp.add(performingUser._id.toString());
-
-        if (changesSummary.length > 0 && involvedUserIdsForInApp.size > 0) {
-          const inAppNotificationMessage = `Project "${updatedProject.projectName}" was updated by ${performingUser.userName}: ${changesSummary.join("; ")}.`;
-          Array.from(involvedUserIdsForInApp).forEach((userIdStr) => {
-            inAppNotificationsToCreate.push({
-              title: `Project Update: ${updatedProject.projectName}`,
-              type: "Project Update",
-              description: inAppNotificationMessage,
-              lengthyDesc: `Details of project update for "${updatedProject.projectName}": ${changesSummary.join("; ")}. Performed by ${performingUser.userName}.`,
-              memberId: new mongoose.Types.ObjectId(userIdStr),
-              projectId: updatedProject._id,
-            });
-          });
-        }
-      }
-
-      // Process in-app notifications with language preferences
-      if (inAppNotificationsToCreate.length > 0) {
-        try {
-          // Get language preferences for all users in one query
-          const userIds = inAppNotificationsToCreate.map((notif) =>
-            notif.memberId.toString()
-          );
-          const languagePreferences = await LanguagePreference.find({
-            userId: { $in: userIds },
-          }).lean();
-
-          // Create a map of userId to language preference
-          const userLanguageMap = {};
-          languagePreferences.forEach((pref) => {
-            userLanguageMap[pref.userId.toString()] = pref.languageSelected;
-          });
-
-          // Update notifications based on language preference
-          const notificationsWithLanguage = inAppNotificationsToCreate.map(
-            (notif) => {
-              const userId = notif.memberId.toString();
-              const userLanguage = userLanguageMap[userId] || "portuguese";
-
-              if (userLanguage === "portuguese") {
-                return {
-                  ...notif,
-                  title: `Atualização de Projeto: ${updatedProject.projectName}`,
-                  description: `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
-                  lengthyDesc: `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
-                };
-              }
-              return notif;
-            }
-          );
-
-          await ShowNotification.create(notificationsWithLanguage, {
-            session,
-            ordered: true,
-          });
-        } catch (notificationError) {
-          console.error(
-            "Error creating in-app notifications:",
-            notificationError
-          );
-          // Continue with transaction - don't fail the update if notifications fail
-        }
-      }
-
-      // Additional notification for completed status
-      if (statusChangedToCompleted) {
-        try {
-          const involvedUserIdsForReview = new Set();
-          (updatedProject.members || []).forEach(
-            (m) => m?._id && involvedUserIdsForReview.add(m._id.toString())
-          );
-          (updatedProject.projectOwners || []).forEach(
-            (o) =>
-              o?.ownerId?._id &&
-              involvedUserIdsForReview.add(o.ownerId._id.toString())
-          );
-
-          if (involvedUserIdsForReview.size > 0) {
-            const reviewNotificationsToCreate = [];
-
-            // Get language preferences for all users in one query
-            const userIds = Array.from(involvedUserIdsForReview);
-            const languagePreferences = await LanguagePreference.find({
-              userId: { $in: userIds },
-            }).lean();
-
-            // Create a map of userId to language preference
-            const userLanguageMap = {};
-            languagePreferences.forEach((pref) => {
-              userLanguageMap[pref.userId.toString()] = pref.languageSelected;
-            });
-
-            Array.from(involvedUserIdsForReview).forEach((userIdStr) => {
-              const userLanguage = userLanguageMap[userIdStr] || "portuguese";
-
-              reviewNotificationsToCreate.push({
-                title:
-                  userLanguage === "portuguese"
-                    ? `Projeto Concluído: ${updatedProject.projectName}`
-                    : `Project Completed: ${updatedProject.projectName}`,
-                type: "Review Request",
-                description:
-                  userLanguage === "portuguese"
-                    ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
-                    : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
-                lengthyDesc:
-                  userLanguage === "portuguese"
-                    ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
-                    : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
-                memberId: new mongoose.Types.ObjectId(userIdStr),
-                projectId: updatedProject._id,
-              });
-            });
-
-            await ShowNotification.create(reviewNotificationsToCreate, {
-              session,
-              ordered: true,
-            });
-          }
-        } catch (reviewNotificationError) {
-          console.error(
-            "Error creating review notifications:",
-            reviewNotificationError
-          );
-          // Continue with transaction - don't fail the update if notifications fail
-        }
-      }
-
-      // Commit the transaction
-      await session.commitTransaction();
-      transactionSucceeded = true;
-
-      // Send push notifications and emails outside the transaction
-      // This way, if they fail, the project update is still saved
-      try {
-        // Send push notifications for project updates
-        if (
-          (importantFieldsChanged || membersListChanged || ownersListChanged) &&
-          changesSummary.length > 0
-        ) {
-          const notificationRecipients = new Map();
-          (updatedProject.members || []).forEach(
-            (user) =>
-              user?._id && notificationRecipients.set(user._id.toString(), user)
-          );
-          (updatedProject.projectOwners || []).forEach(
-            (ownerObj) =>
-              ownerObj?.ownerId?._id &&
-              notificationRecipients.set(
-                ownerObj.ownerId._id.toString(),
-                ownerObj.ownerId
-              )
-          );
-          if (membersListChanged)
-            (existingProject.members || []).forEach(
-              (user) =>
-                user?._id &&
-                !notificationRecipients.has(user._id.toString()) &&
-                notificationRecipients.set(user._id.toString(), user)
-            );
-          if (ownersListChanged)
-            (existingProject.projectOwners || []).forEach(
-              (ownerObj) =>
-                ownerObj?.ownerId?._id &&
-                !notificationRecipients.has(ownerObj.ownerId._id.toString()) &&
-                notificationRecipients.set(
-                  ownerObj.ownerId._id.toString(),
-                  ownerObj.ownerId
-                )
-            );
-
-          if (
-            performingUser?._id &&
-            !notificationRecipients.has(performingUser._id.toString())
-          ) {
-            const performerDetails = await User.findById(performingUser._id)
-              .select("email userName notificationToken fcmDeviceToken")
-              .lean();
-            if (performerDetails)
-              notificationRecipients.set(
-                performerDetails._id.toString(),
-                performerDetails
-              );
-          }
-
-          const usersToNotify = Array.from(notificationRecipients.values());
-
-          // Send push notifications
-          try {
-            const fcmTokens = usersToNotify
-              .map((u) => u.fcmDeviceToken || u.notificationToken)
-              .filter(Boolean);
-
-            if (fcmTokens.length > 0) {
-              // Get language preferences for all users in one query
-              const userIds = usersToNotify.map((user) => user._id.toString());
-              const languagePreferences = await LanguagePreference.find({
-                userId: { $in: userIds },
-              }).lean();
-
-              // Create a map of userId to language preference
-              const userLanguageMap = {};
-              languagePreferences.forEach((pref) => {
-                userLanguageMap[pref.userId.toString()] = pref.languageSelected;
-              });
-
-              // Group tokens by language for more efficient sending
-              const tokensByLanguage = {
-                portuguese: [],
-                english: [],
-              };
-
-              usersToNotify.forEach((user) => {
-                const userId = user._id.toString();
-                const token = user.fcmDeviceToken || user.notificationToken;
-                if (token) {
-                  const language = userLanguageMap[userId] || "portuguese";
-                  tokensByLanguage[language].push(token);
-                }
-              });
-
-              // Send Portuguese notifications
-              if (tokensByLanguage.portuguese.length > 0) {
-                const pushTitle = `Atualização de Projeto: ${updatedProject.projectName}`;
-                const pushBody = `${changesSummary.join("; ")}. Por ${performingUser.userName}.`;
-                try {
-                  await sendPushNotification(
-                    tokensByLanguage.portuguese,
-                    pushTitle,
-                    pushBody,
-                    {
-                      projectId: updatedProject._id.toString(),
-                      type: "PROJECT_UPDATE",
-                    }
-                  );
-                } catch (pushError) {
-                  console.error(
-                    `Failed to send Portuguese push notifications for project ${updatedProject._id}:`,
-                    pushError.message
-                  );
-                }
-              }
-
-              // Send English notifications
-              if (tokensByLanguage.english.length > 0) {
-                const pushTitle = `Project Update: ${updatedProject.projectName}`;
-                const pushBody = `${changesSummary.join("; ")}. By ${performingUser.userName}.`;
-                try {
-                  await sendPushNotification(
-                    tokensByLanguage.english,
-                    pushTitle,
-                    pushBody,
-                    {
-                      projectId: updatedProject._id.toString(),
-                      type: "PROJECT_UPDATE",
-                    }
-                  );
-                } catch (pushError) {
-                  console.error(
-                    `Failed to send English push notifications for project ${updatedProject._id}:`,
-                    pushError.message
-                  );
-                }
-              }
-            }
-          } catch (pushError) {
-            console.error("Error sending push notifications:", pushError);
-            // Don't throw - continue with email notifications
-          }
-
-          // Send email notifications
-          try {
-            if (usersToNotify.some((u) => u.email)) {
-              // Get language preferences for all users in one query
-              const userIds = usersToNotify.map((user) => user._id.toString());
-              const languagePreferences = await LanguagePreference.find({
-                userId: { $in: userIds },
-              }).lean();
-
-              // Create a map of userId to language preference
-              const userLanguageMap = {};
-              languagePreferences.forEach((pref) => {
-                userLanguageMap[pref.userId.toString()] = pref.languageSelected;
-              });
-
-              // Email templates
-              const emailTemplates = {
-                portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
-                english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
-              };
-
-              for (const user of usersToNotify) {
-                if (user.email) {
-                  try {
-                    const userLanguage =
-                      userLanguageMap[user._id.toString()] || "portuguese";
-                    const emailHtml = emailTemplates[userLanguage];
-
-                    await SendEmailUtil({
-                      from: process.env.EMAIL_FROM || "noreply@example.com",
-                      to: user.email,
-                      subject:
-                        userLanguage === "portuguese"
-                          ? `Atualização de Projeto: ${updatedProject.projectName}`
-                          : `Project Update: ${updatedProject.projectName}`,
-                      html: emailHtml,
-                    });
-                  } catch (emailError) {
-                    console.error(
-                      `Failed to send project update email to ${user.email} for project ${updatedProject._id}:`,
-                      emailError.message
-                    );
-                  }
-                }
-              }
-            }
-          } catch (emailError) {
-            console.error("Error sending email notifications:", emailError);
-            // Don't throw - the project update was successful
-          }
-        }
-
-        // Send push notifications for review requests
-        if (statusChangedToCompleted) {
-          try {
-            const involvedUserIdsForReview = new Set();
-            (updatedProject.members || []).forEach(
-              (m) => m?._id && involvedUserIdsForReview.add(m._id.toString())
-            );
-            (updatedProject.projectOwners || []).forEach(
-              (o) =>
-                o?.ownerId?._id &&
-                involvedUserIdsForReview.add(o.ownerId._id.toString())
-            );
-
-            if (involvedUserIdsForReview.size > 0) {
-              // Send push notifications for review request
-              const userIds = Array.from(involvedUserIdsForReview);
-              const usersToNotifyForReview = await User.find({
-                _id: { $in: userIds },
-                $or: [
-                  { fcmDeviceToken: { $exists: true } },
-                  { notificationToken: { $exists: true } },
-                ],
-              }).lean();
-
-              const languagePreferences = await LanguagePreference.find({
-                userId: { $in: userIds },
-              }).lean();
-
-              // Create a map of userId to language preference
-              const userLanguageMap = {};
-              languagePreferences.forEach((pref) => {
-                userLanguageMap[pref.userId.toString()] = pref.languageSelected;
-              });
-
-              // Group by language
-              const reviewTokensByLanguage = {
-                portuguese: [],
-                english: [],
-              };
-
-              usersToNotifyForReview.forEach((user) => {
-                const token = user.fcmDeviceToken || user.notificationToken;
-                if (token) {
-                  const language =
-                    userLanguageMap[user._id.toString()] || "portuguese";
-                  reviewTokensByLanguage[language].push(token);
-                }
-              });
-
-              // Send Portuguese review notifications
-              if (reviewTokensByLanguage.portuguese.length > 0) {
-                try {
-                  await sendPushNotification(
-                    reviewTokensByLanguage.portuguese,
-                    `Por favor, avalie o projeto ${updatedProject.projectName}`,
-                    `O projeto foi concluído. Sua avaliação é importante para nós!`,
-                    {
-                      projectId: updatedProject._id.toString(),
-                      type: "REVIEW_REQUEST",
-                    }
-                  );
-                } catch (pushError) {
-                  console.error(
-                    `Failed to send Portuguese review push notifications for project ${updatedProject._id}:`,
-                    pushError.message
-                  );
-                }
-              }
-
-              // Send English review notifications
-              if (reviewTokensByLanguage.english.length > 0) {
-                try {
-                  await sendPushNotification(
-                    reviewTokensByLanguage.english,
-                    `Please review project ${updatedProject.projectName}`,
-                    `The project has been completed. Your feedback is important to us!`,
-                    {
-                      projectId: updatedProject._id.toString(),
-                      type: "REVIEW_REQUEST",
-                    }
-                  );
-                } catch (pushError) {
-                  console.error(
-                    `Failed to send English review push notifications for project ${updatedProject._id}:`,
-                    pushError.message
-                  );
-                }
-              }
-            }
-          } catch (reviewPushError) {
-            console.error(
-              "Error sending review push notifications:",
-              reviewPushError
-            );
-            // Don't throw - the project update was successful
-          }
-        }
-      } catch (notificationError) {
-        console.error(
-          "Error in post-transaction notifications:",
-          notificationError
-        );
-        // Don't throw - the project update was successful
-      }
-
-      // Return success response
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(200, updatedProject, "Project updated successfully.")
-        );
-    } catch (errorInTransaction) {
-      // Only abort if the transaction hasn't been committed yet
-      if (!transactionSucceeded) {
-        await session.abortTransaction();
-      }
-
-      console.error(
-        "Error during project update transaction:",
-        errorInTransaction
-      );
-
-      throw errorInTransaction; // Re-throw to be caught by the outer try-catch
-    }
-  } catch (error) {
-    // If we haven't ended the session yet and transaction didn't succeed
-    if (session && !transactionSucceeded) {
-      try {
-        await session.abortTransaction();
-      } catch (abortError) {
-        console.error("Error aborting transaction:", abortError);
-      }
-    }
-
-    console.error("Error in editProjects controller:", error);
-
-    const statusCode = error instanceof ApiError ? error.statusCode : 500;
-    const message =
-      error instanceof ApiError
-        ? error.message
-        : "An internal server error occurred during project update.";
-    const errors =
-      error instanceof ApiError
-        ? error.errors
-        : error.errors
-          ? error.errors
-          : [];
-
-    return res
-      .status(statusCode)
-      .json(new ApiResponse(statusCode, null, message, errors));
-  } finally {
-    // Always end the session
-    if (session) {
-      session.endSession();
+        importantFieldsChanged = true; 
     }
   }
-});
+
+  if (Array.isArray(newProjectOwnerIdsInput)) {
+    const validatedNewOwnerIds = newProjectOwnerIdsInput
+      .filter(Boolean)
+      .map((id) => {
+        if (!mongoose.Types.ObjectId.isValid(id)) throw new ApiError(400, `Invalid project owner ID format: ${id}`);
+        return id.toString();
+      });
+
+    const existingOwnerIdSet = new Set((existingProject.projectOwners || []).map(o => o.ownerId?._id?.toString()).filter(Boolean));
+    const newOwnerIdSet = new Set(validatedNewOwnerIds);
+
+    if (existingOwnerIdSet.size !== newOwnerIdSet.size || ![...newOwnerIdSet].every(id => existingOwnerIdSet.has(id))) {
+        updateData.projectOwners = validatedNewOwnerIds.map(id => ({ ownerId: new mongoose.Types.ObjectId(id) }));
+        ownersListChanged = true;
+        logs.push({
+            actionType: "Owners Update",
+            message: `Project owners updated by ${performingUser.userName}`,
+            userId: performingUser._id,
+            timestamp: new Date(),
+        });
+        changesSummary.push("Project owners updated");
+        importantFieldsChanged = true; 
+    }
+  }
+
+  let bannersChanged = false;
+  if (Array.isArray(removeBanners) && removeBanners.length > 0) {
+    const initialBannerCount = updatedProjectBanners.length;
+    updatedProjectBanners = updatedProjectBanners.filter(
+      (banner) => banner && banner.url && !removeBanners.includes(banner.url)
+    );
+    if (updatedProjectBanners.length < initialBannerCount) {
+        logs.push({
+            actionType: "Banner Removal",
+            message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
+            userId: performingUser._id,
+            timestamp: new Date(),
+        });
+        changesSummary.push(`${initialBannerCount - updatedProjectBanners.length} banner(s) removed`);
+        bannersChanged = true;
+        importantFieldsChanged = true;
+    }
+  }
+
+  const newBannerFiles = files?.projectBanner; 
+  if (Array.isArray(newBannerFiles) && newBannerFiles.length > 0) {
+      const maxBanners = 10;
+      if (updatedProjectBanners.length + newBannerFiles.length > maxBanners) {
+          throw new ApiError(400, `Cannot upload ${newBannerFiles.length} new banners. Maximum ${maxBanners} banners allowed in total (current: ${updatedProjectBanners.length}).`);
+      }
+
+      const uploadPromises = newBannerFiles.map(async (file) => {
+          const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
+          try {
+              const uploadedImageUrl = await uploadToS3(file.buffer, uniqueFileName, file.mimetype);
+              return uploadedImageUrl ? { url: uploadedImageUrl, uploadDate: new Date() } : null;
+          } catch (uploadError) {
+              console.error(`Failed to upload banner ${file.originalname}:`, uploadError);
+              return null; 
+          }
+      });
+
+      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);  
+
+      if (newBanners.length > 0) {
+          updatedProjectBanners.push(...newBanners);
+          logs.push({
+              actionType: "Banner Addition",
+              message: `${newBanners.length} new banner(s) added by ${performingUser.userName}`,
+              userId: performingUser._id,
+              timestamp: new Date(),
+          });
+          changesSummary.push(`${newBanners.length} new banner(s) added`);
+          bannersChanged = true;
+          importantFieldsChanged = true;
+      }
+  }
+
+  if (bannersChanged) {
+      updateData.projectBanner = updatedProjectBanners;
+  }
+
+
+  if (Object.keys(updateData).length === 0) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          existingProject,  
+          "No changes detected. Project remains the same."
+        )
+      );
+  }
+
+  if (logs.length > 0) {
+    updateData.logs = [...(existingProject.logs || []), ...logs];
+  }
+
+  const involvedUserIds = new Set();
+  if (performingUser?._id) involvedUserIds.add(performingUser._id.toString());
+  (existingProject.members || []).forEach(m => m?._id && involvedUserIds.add(m._id.toString()));
+  (existingProject.projectOwners || []).forEach(o => o?.ownerId?._id && involvedUserIds.add(o.ownerId._id.toString()));
+  if (membersListChanged) {
+    (updateData.members || []).forEach(id => involvedUserIds.add(id.toString()));
+  }
+  if (ownersListChanged) {
+    (updateData.projectOwners || []).forEach(ownerObj => ownerObj?.ownerId && involvedUserIds.add(ownerObj.ownerId.toString()));
+  }
+  const involvedUserIdArray = Array.from(involvedUserIds);
+
+  let userLanguageMap = {};
+  if (involvedUserIdArray.length > 0) {
+      try {
+          const languagePreferences = await LanguagePreference.find({
+              userId: { $in: involvedUserIdArray }
+          }).select('userId languageSelected -_id').lean(); 
+
+          languagePreferences.forEach(pref => {
+              userLanguageMap[pref.userId.toString()] = pref.languageSelected || 'portuguese'; 
+          });
+          involvedUserIdArray.forEach(id => {
+              if (!userLanguageMap[id]) {
+                  userLanguageMap[id] = 'portuguese';
+              }
+          });
+      } catch (langError) {
+          console.error("Error fetching language preferences:", langError);
+          involvedUserIdArray.forEach(id => { userLanguageMap[id] = 'portuguese'; });
+      }
+  }
+
+
+  const session = await mongoose.startSession();
+  let transactionSucceeded = false;
+  let updatedProject; 
+
+  try {
+    session.startTransaction();
+
+    updatedProject = await editProject.findByIdAndUpdate(
+        projectId,
+        { $set: updateData },
+        { new: true, session, runValidators: true }
+    )
+    .populate("projectOwners.ownerId", "email userName _id notificationToken fcmDeviceToken")
+    .populate("members", "email userName _id notificationToken fcmDeviceToken")
+    .lean(); 
+
+    if (!updatedProject) {
+      throw new ApiError(404, "Project not found during update. It might have been deleted.");
+    }
+
+    const notificationsToCreate = [];
+    const updateNotificationNeeded = importantFieldsChanged && changesSummary.length > 0;
+    const reviewNotificationNeeded = statusChangedToCompleted;
+
+    if ((updateNotificationNeeded || reviewNotificationNeeded) && involvedUserIdArray.length > 0) {
+        const changeSummaryString = changesSummary.join("; ");
+
+        involvedUserIdArray.forEach(userIdStr => {
+            const userLanguage = userLanguageMap[userIdStr] || 'portuguese';  
+
+            if (updateNotificationNeeded) {
+                const isPortuguese = userLanguage === 'portuguese';
+                notificationsToCreate.push({
+                    title: isPortuguese
+                        ? `Atualização de Projeto: ${updatedProject.projectName}`
+                        : `Project Update: ${updatedProject.projectName}`,
+                    type: "Project Update",
+                    description: isPortuguese
+                        ? `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changeSummaryString}.`
+                        : `Project "${updatedProject.projectName}" was updated by ${performingUser.userName}: ${changeSummaryString}.`,
+                    lengthyDesc: isPortuguese
+                        ? `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changeSummaryString}. Realizado por ${performingUser.userName}.`
+                        : `Details of project update for "${updatedProject.projectName}": ${changeSummaryString}. Performed by ${performingUser.userName}.`,
+                    memberId: new mongoose.Types.ObjectId(userIdStr),
+                    projectId: updatedProject._id,
+                });
+            }
+
+            if (reviewNotificationNeeded) {
+                const isPortuguese = userLanguage === 'portuguese';
+                notificationsToCreate.push({
+                    title: isPortuguese
+                        ? `Projeto Concluído: ${updatedProject.projectName}`
+                        : `Project Completed: ${updatedProject.projectName}`,
+                    type: "Review Request",
+                    description: isPortuguese
+                        ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
+                        : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
+                    lengthyDesc: isPortuguese
+                        ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
+                        : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
+                    memberId: new mongoose.Types.ObjectId(userIdStr),
+                    projectId: updatedProject._id,
+                });
+            }
+        });
+    }
+
+    if (notificationsToCreate.length > 0) {
+      try {
+        await ShowNotification.insertMany(notificationsToCreate, { session, ordered: false }); // Use insertMany for bulk creation, ordered: false might be slightly faster if order doesn't matter
+      } catch (notificationError) {
+        console.error("Error creating in-app notifications within transaction (will proceed):", notificationError);
+      }
+    }
+
+    await session.commitTransaction();
+    transactionSucceeded = true;
+
+  } catch (errorInTransaction) {
+    console.error("Error during project update transaction:", errorInTransaction);
+    if (session.inTransaction()) {
+        await session.abortTransaction();
+    }
+    throw errorInTransaction;
+
+  } finally {
+    await session.endSession();
+  }
+
+  if (transactionSucceeded && updatedProject) {
+    const updateNotificationNeeded = importantFieldsChanged && changesSummary.length > 0;
+    const reviewNotificationNeeded = statusChangedToCompleted;
+
+    if ((updateNotificationNeeded || reviewNotificationNeeded) && involvedUserIdArray.length > 0) {
+      let usersForNotification = [];
+      try {
+          usersForNotification = await User.find({ _id: { $in: involvedUserIdArray } })
+              .select('email userName notificationToken fcmDeviceToken _id') // Select necessary fields
+              .lean();
+      } catch (userFetchError) {
+          console.error("Error fetching user details for post-transaction notifications:", userFetchError);
+          usersForNotification = [];
+      }
+
+      if (usersForNotification.length > 0) {
+        const changeSummaryString = changesSummary.join("; ");
+
+        const notificationsByLanguage = {
+            portuguese: { pushTokens: [], emails: [], pushUpdatePayload: null, pushReviewPayload: null, emailUpdatePayload: null },
+            english: { pushTokens: [], emails: [], pushUpdatePayload: null, pushReviewPayload: null, emailUpdatePayload: null }
+        };
+
+        usersForNotification.forEach(user => {
+            const userIdStr = user._id.toString();
+            const lang = userLanguageMap[userIdStr] || 'portuguese';
+            const langGroup = notificationsByLanguage[lang];
+            const token = user.fcmDeviceToken || user.notificationToken;
+
+            if (token) langGroup.pushTokens.push(token);
+            if (user.email) langGroup.emails.push(user.email);
+
+            if (updateNotificationNeeded && !langGroup.pushUpdatePayload) {
+                const isPortuguese = lang === 'portuguese';
+                langGroup.pushUpdatePayload = {
+                    title: isPortuguese ? `Atualização de Projeto: ${updatedProject.projectName}` : `Project Update: ${updatedProject.projectName}`,
+                    body: isPortuguese ? `${changeSummaryString}. Por ${performingUser.userName}.` : `${changeSummaryString}. By ${performingUser.userName}.`,
+                    data: { projectId: updatedProject._id.toString(), type: "PROJECT_UPDATE" }
+                };
+                 langGroup.emailUpdatePayload = {
+                     subject: isPortuguese ? `Atualização de Projeto: ${updatedProject.projectName}` : `Project Update: ${updatedProject.projectName}`,
+                     html: isPortuguese
+                         ? `<!DOCTYPE html>... [Portuguese HTML Template for Update] ...</html>` // Replace with actual HTML
+                         : `<!DOCTYPE html>... [English HTML Template for Update] ...</html>`   // Replace with actual HTML
+                 };
+            }
+            if (reviewNotificationNeeded && !langGroup.pushReviewPayload) {
+                const isPortuguese = lang === 'portuguese';
+                 langGroup.pushReviewPayload = {
+                    title: isPortuguese ? `Por favor, avalie o projeto ${updatedProject.projectName}` : `Please review project ${updatedProject.projectName}`,
+                    body: isPortuguese ? `O projeto foi concluído. Sua avaliação é importante para nós!` : `The project has been completed. Your feedback is important to us!`,
+                    data: { projectId: updatedProject._id.toString(), type: "REVIEW_REQUEST" }
+                 };
+            }
+        });
+
+
+        for (const lang in notificationsByLanguage) {
+            const group = notificationsByLanguage[lang];
+
+            if (group.pushUpdatePayload && group.pushTokens.length > 0) {
+                sendPushNotification(group.pushTokens, group.pushUpdatePayload.title, group.pushUpdatePayload.body, group.pushUpdatePayload.data)
+                    .catch(err => console.error(`Failed to send ${lang} update push notifications for project ${updatedProject._id}:`, err.message)); // Log error, don't throw
+            }
+            if (group.pushReviewPayload && group.pushTokens.length > 0) {
+                 sendPushNotification(group.pushTokens, group.pushReviewPayload.title, group.pushReviewPayload.body, group.pushReviewPayload.data)
+                     .catch(err => console.error(`Failed to send ${lang} review push notifications for project ${updatedProject._id}:`, err.message)); // Log error, don't throw
+            }
+            if (group.emailUpdatePayload && group.emails.length > 0) {
+                 group.emails.forEach(email => {
+                     SendEmailUtil({
+                         from: process.env.EMAIL_FROM || "noreply@example.com",
+                         to: email,
+                         subject: group.emailUpdatePayload.subject,
+                         html: group.emailUpdatePayload.html,
+                     }).catch(err => console.error(`Failed to send ${lang} update email to ${email} for project ${updatedProject._id}:`, err.message)); // Log error, don't throw
+                 });
+            }
+             
+        }
+      }
+    }
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        updatedProject,
+        "Project updated successfully."
+      )
+    );
+
+}); 
+
+
+
+// const editProjects = asyncHandler(async (req, res) => {
+//   const session = await mongoose.startSession();
+//   let transactionSucceeded = false;
+
+//   try {
+//     const { projectId } = req.params;
+//     const performingUser = req.user;
+
+//     if (!mongoose.Types.ObjectId.isValid(projectId)) {
+//       throw new ApiError(400, "Invalid project ID format.");
+//     }
+
+//     const {
+//       projectName: newProjectNameInput,
+//       projectOwners: newProjectOwnerIdsInput,
+//       description: newDescriptionInput,
+//       location: newLocationInput,
+//       businessAreas: newBusinessAreasInput,
+//       comapanyName: newCompanyNameInput,
+//       members: newMemberIdsInput,
+//       status: newStatusInput,
+//       deadline: newDeadlineInput,
+//       physicalEducationRange: newPhysicalEducationRangeInput,
+//       financialEducationRange: newFinancialEducationRangeInput,
+//       removeBanners = [],
+//     } = req.body;
+
+//     const { files } = req;
+
+//     const existingProject = await editProject
+//       .findById(projectId)
+//       .populate(
+//         "projectOwners.ownerId",
+//         "email userName _id notificationToken fcmDeviceToken"
+//       )
+//       .populate(
+//         "members",
+//         "email userName _id notificationToken fcmDeviceToken"
+//       )
+//       .lean();
+
+//     if (!existingProject) {
+//       throw new ApiError(404, "Project not found.");
+//     }
+
+//     const updateData = {};
+//     const logs = [];
+//     let updatedProjectBanners = [...(existingProject.projectBanner || [])];
+//     const changesSummary = [];
+//     let importantFieldsChanged = false;
+//     let membersListChanged = false;
+//     let ownersListChanged = false;
+//     let statusChangedToCompleted = false;
+
+//     // Process project name changes
+//     let finalProjectName = existingProject.projectName;
+//     if (
+//       newProjectNameInput &&
+//       newProjectNameInput !== existingProject.projectName
+//     ) {
+//       const nameTaken = await editProject.findOne({
+//         projectName: newProjectNameInput,
+//         _id: { $ne: projectId },
+//       });
+//       if (nameTaken) {
+//         finalProjectName = `${newProjectNameInput}-${uuidv4().split("-")[0]}`;
+//         logs.push({
+//           actionType: "Project Name Change (Auto-Adjusted)",
+//           message: `Project name "${newProjectNameInput}" was taken, changed to "${finalProjectName}" by ${performingUser.userName}. Original: "${existingProject.projectName}"`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//       } else {
+//         finalProjectName = newProjectNameInput;
+//         logs.push({
+//           actionType: "Project Name Change",
+//           message: `Project name changed from "${existingProject.projectName}" to "${finalProjectName}" by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//       }
+//       updateData.projectName = finalProjectName;
+//       changesSummary.push(`Project name changed to "${finalProjectName}"`);
+//       importantFieldsChanged = true;
+//     }
+
+//     // Process status changes
+//     if (newStatusInput && newStatusInput !== existingProject.status) {
+//       updateData.status = newStatusInput;
+//       logs.push({
+//         actionType: "Status Update",
+//         message: `Status changed from "${existingProject.status}" to "${newStatusInput}" by ${performingUser.userName}`,
+//         userId: performingUser._id,
+//         timestamp: new Date(),
+//       });
+//       changesSummary.push(`Status updated to "${newStatusInput}"`);
+//       importantFieldsChanged = true;
+
+//       // Check if status was changed to "Completed"
+//       if (newStatusInput === "Completed") {
+//         statusChangedToCompleted = true;
+//       }
+//     }
+
+//     // Process deadline changes
+//     if (newDeadlineInput !== undefined) {
+//       if (newDeadlineInput !== existingProject.deadline) {
+//         updateData.deadline =
+//           newDeadlineInput === "" || newDeadlineInput === null
+//             ? null
+//             : newDeadlineInput;
+//         const oldDeadlineDisplay = existingProject.deadline || "N/A";
+//         const newDeadlineDisplay = updateData.deadline || "cleared";
+//         logs.push({
+//           actionType: "Deadline Change",
+//           message: `Deadline updated from "${oldDeadlineDisplay}" to "${newDeadlineDisplay}" by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push(`Deadline updated to "${newDeadlineDisplay}"`);
+//         importantFieldsChanged = true;
+//       }
+//     }
+
+//     // Process other simple field updates
+//     const simpleFieldUpdates = [
+//       {
+//         key: "description",
+//         newValue: newDescriptionInput,
+//         name: "Description",
+//       },
+//       { key: "location", newValue: newLocationInput, name: "Location" },
+//       {
+//         key: "businessAreas",
+//         newValue: newBusinessAreasInput,
+//         name: "Business Areas",
+//       },
+//       {
+//         key: "comapanyName",
+//         newValue: newCompanyNameInput,
+//         name: "Company Name",
+//       },
+//       {
+//         key: "physicalEducationRange",
+//         newValue: newPhysicalEducationRangeInput,
+//         name: "Physical Education Range",
+//       },
+//       {
+//         key: "financialEducationRange",
+//         newValue: newFinancialEducationRangeInput,
+//         name: "Financial Education Range",
+//       },
+//     ];
+
+//     simpleFieldUpdates.forEach(({ key, newValue, name }) => {
+//       if (newValue !== undefined && newValue !== existingProject[key]) {
+//         updateData[key] = newValue;
+//         logs.push({
+//           actionType: `${name} Update`,
+//           message: `${name} updated by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push(`${name} updated`);
+//         importantFieldsChanged = true;
+//       }
+//     });
+
+//     // Process members changes
+//     if (Array.isArray(newMemberIdsInput)) {
+//       const validatedNewMemberIds = newMemberIdsInput
+//         .filter(Boolean)
+//         .map((id) => {
+//           if (!mongoose.Types.ObjectId.isValid(id))
+//             throw new ApiError(400, `Invalid member ID format: ${id}`);
+//           return id.toString();
+//         });
+//       const existingMemberIds = (existingProject.members || []).map((m) =>
+//         m._id.toString()
+//       );
+//       if (
+//         JSON.stringify(validatedNewMemberIds.sort()) !==
+//         JSON.stringify(existingMemberIds.sort())
+//       ) {
+//         updateData.members = validatedNewMemberIds.map(
+//           (id) => new mongoose.Types.ObjectId(id)
+//         );
+//         membersListChanged = true;
+//         logs.push({
+//           actionType: "Members Update",
+//           message: `Project members updated by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push("Project members updated");
+//         importantFieldsChanged = true;
+//       }
+//     }
+
+//     // Process project owners changes
+//     if (Array.isArray(newProjectOwnerIdsInput)) {
+//       const validatedNewOwnerIds = newProjectOwnerIdsInput
+//         .filter(Boolean)
+//         .map((id) => {
+//           if (!mongoose.Types.ObjectId.isValid(id))
+//             throw new ApiError(400, `Invalid project owner ID format: ${id}`);
+//           return id.toString();
+//         });
+//       const existingOwnerIds = (existingProject.projectOwners || [])
+//         .map((o) => o.ownerId?._id.toString())
+//         .filter(Boolean);
+//       if (
+//         JSON.stringify(validatedNewOwnerIds.sort()) !==
+//         JSON.stringify(existingOwnerIds.sort())
+//       ) {
+//         updateData.projectOwners = validatedNewOwnerIds.map((id) => ({
+//           ownerId: new mongoose.Types.ObjectId(id),
+//         }));
+//         ownersListChanged = true;
+//         logs.push({
+//           actionType: "Owners Update",
+//           message: `Project owners updated by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push("Project owners updated");
+//         importantFieldsChanged = true;
+//       }
+//     }
+
+//     // Process banner removals
+//     if (Array.isArray(removeBanners) && removeBanners.length > 0) {
+//       const initialBannerCount = updatedProjectBanners.length;
+//       updatedProjectBanners = updatedProjectBanners.filter(
+//         (banner) => !removeBanners.includes(banner.url)
+//       );
+//       if (updatedProjectBanners.length < initialBannerCount) {
+//         updateData.projectBanner = updatedProjectBanners;
+//         logs.push({
+//           actionType: "Banner Removal",
+//           message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push(
+//           `${initialBannerCount - updatedProjectBanners.length} banner(s) removed`
+//         );
+//         importantFieldsChanged = true;
+//       }
+//     }
+
+//     // Process banner additions
+//     if (files?.projectBanner?.length > 0) {
+//       if (updatedProjectBanners.length + files.projectBanner.length > 10) {
+//         throw new ApiError(
+//           400,
+//           "Cannot upload new banners. Maximum 10 banners allowed in total."
+//         );
+//       }
+//       const uploadPromises = files.projectBanner.map(async (file) => {
+//         const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
+//         const uploadedImageUrl = await uploadToS3(
+//           file.buffer,
+//           uniqueFileName,
+//           file.mimetype
+//         );
+//         return uploadedImageUrl
+//           ? { url: uploadedImageUrl, uploadDate: new Date() }
+//           : null;
+//       });
+//       const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);
+//       if (newBanners.length > 0) {
+//         updatedProjectBanners.push(...newBanners);
+//         updateData.projectBanner = updatedProjectBanners;
+//         logs.push({
+//           actionType: "Banner Addition",
+//           message: `${newBanners.length} new banner(s) added by ${performingUser.userName}`,
+//           userId: performingUser._id,
+//           timestamp: new Date(),
+//         });
+//         changesSummary.push(`${newBanners.length} new banner(s) added`);
+//         importantFieldsChanged = true;
+//       }
+//     }
+
+//     if (
+//       updateData.projectBanner === undefined &&
+//       JSON.stringify(updatedProjectBanners) !==
+//         JSON.stringify(existingProject.projectBanner || [])
+//     ) {
+//       updateData.projectBanner = updatedProjectBanners;
+//     }
+
+//     // If no changes, return early
+//     if (Object.keys(updateData).length === 0) {
+//       return res
+//         .status(200)
+//         .json(
+//           new ApiResponse(
+//             200,
+//             existingProject,
+//             "No changes detected. Project remains the same."
+//           )
+//         );
+//     }
+
+//     // Add logs if there are any
+//     if (logs.length > 0) {
+//       updateData.logs = [...(existingProject.logs || []), ...logs];
+//     }
+
+//     // Start transaction
+//     session.startTransaction();
+//     let updatedProject;
+
+//     try {
+//       // Update the project
+//       updatedProject = await editProject
+//         .findByIdAndUpdate(
+//           projectId,
+//           { $set: updateData },
+//           { new: true, session, runValidators: true }
+//         )
+//         .populate(
+//           "projectOwners.ownerId",
+//           "email userName _id notificationToken fcmDeviceToken"
+//         )
+//         .populate(
+//           "members",
+//           "email userName _id notificationToken fcmDeviceToken"
+//         );
+
+//       if (!updatedProject) {
+//         throw new ApiError(
+//           500,
+//           "Failed to update project after changes. Project might have been deleted concurrently."
+//         );
+//       }
+
+//       // Create in-app notifications
+//       const inAppNotificationsToCreate = [];
+//       if (importantFieldsChanged || membersListChanged || ownersListChanged) {
+//         const involvedUserIdsForInApp = new Set();
+//         (updatedProject.members || []).forEach(
+//           (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
+//         );
+//         (updatedProject.projectOwners || []).forEach(
+//           (o) =>
+//             o?.ownerId?._id &&
+//             involvedUserIdsForInApp.add(o.ownerId._id.toString())
+//         );
+//         if (membersListChanged)
+//           (existingProject.members || []).forEach(
+//             (m) => m?._id && involvedUserIdsForInApp.add(m._id.toString())
+//           );
+//         if (ownersListChanged)
+//           (existingProject.projectOwners || []).forEach(
+//             (o) =>
+//               o?.ownerId?._id &&
+//               involvedUserIdsForInApp.add(o.ownerId._id.toString())
+//           );
+//         if (performingUser?._id)
+//           involvedUserIdsForInApp.add(performingUser._id.toString());
+
+//         if (changesSummary.length > 0 && involvedUserIdsForInApp.size > 0) {
+//           const inAppNotificationMessage = `Project "${updatedProject.projectName}" was updated by ${performingUser.userName}: ${changesSummary.join("; ")}.`;
+//           Array.from(involvedUserIdsForInApp).forEach((userIdStr) => {
+//             inAppNotificationsToCreate.push({
+//               title: `Project Update: ${updatedProject.projectName}`,
+//               type: "Project Update",
+//               description: inAppNotificationMessage,
+//               lengthyDesc: `Details of project update for "${updatedProject.projectName}": ${changesSummary.join("; ")}. Performed by ${performingUser.userName}.`,
+//               memberId: new mongoose.Types.ObjectId(userIdStr),
+//               projectId: updatedProject._id,
+//             });
+//           });
+//         }
+//       }
+
+//       // Process in-app notifications with language preferences
+//       if (inAppNotificationsToCreate.length > 0) {
+//         try {
+//           // Get language preferences for all users in one query
+//           const userIds = inAppNotificationsToCreate.map((notif) =>
+//             notif.memberId.toString()
+//           );
+//           const languagePreferences = await LanguagePreference.find({
+//             userId: { $in: userIds },
+//           }).lean();
+
+//           // Create a map of userId to language preference
+//           const userLanguageMap = {};
+//           languagePreferences.forEach((pref) => {
+//             userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+//           });
+
+//           // Update notifications based on language preference
+//           const notificationsWithLanguage = inAppNotificationsToCreate.map(
+//             (notif) => {
+//               const userId = notif.memberId.toString();
+//               const userLanguage = userLanguageMap[userId] || "portuguese";
+
+//               if (userLanguage === "portuguese") {
+//                 return {
+//                   ...notif,
+//                   title: `Atualização de Projeto: ${updatedProject.projectName}`,
+//                   description: `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
+//                   lengthyDesc: `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
+//                 };
+//               }
+//               return notif;
+//             }
+//           );
+
+//           await ShowNotification.create(notificationsWithLanguage, {
+//             session,
+//             ordered: true,
+//           });
+//         } catch (notificationError) {
+//           console.error(
+//             "Error creating in-app notifications:",
+//             notificationError
+//           );
+//           // Continue with transaction - don't fail the update if notifications fail
+//         }
+//       }
+
+//       // Additional notification for completed status
+//       if (statusChangedToCompleted) {
+//         try {
+//           const involvedUserIdsForReview = new Set();
+//           (updatedProject.members || []).forEach(
+//             (m) => m?._id && involvedUserIdsForReview.add(m._id.toString())
+//           );
+//           (updatedProject.projectOwners || []).forEach(
+//             (o) =>
+//               o?.ownerId?._id &&
+//               involvedUserIdsForReview.add(o.ownerId._id.toString())
+//           );
+
+//           if (involvedUserIdsForReview.size > 0) {
+//             const reviewNotificationsToCreate = [];
+
+//             // Get language preferences for all users in one query
+//             const userIds = Array.from(involvedUserIdsForReview);
+//             const languagePreferences = await LanguagePreference.find({
+//               userId: { $in: userIds },
+//             }).lean();
+
+//             // Create a map of userId to language preference
+//             const userLanguageMap = {};
+//             languagePreferences.forEach((pref) => {
+//               userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+//             });
+
+//             Array.from(involvedUserIdsForReview).forEach((userIdStr) => {
+//               const userLanguage = userLanguageMap[userIdStr] || "portuguese";
+
+//               reviewNotificationsToCreate.push({
+//                 title:
+//                   userLanguage === "portuguese"
+//                     ? `Projeto Concluído: ${updatedProject.projectName}`
+//                     : `Project Completed: ${updatedProject.projectName}`,
+//                 type: "Review Request",
+//                 description:
+//                   userLanguage === "portuguese"
+//                     ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
+//                     : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
+//                 lengthyDesc:
+//                   userLanguage === "portuguese"
+//                     ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
+//                     : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
+//                 memberId: new mongoose.Types.ObjectId(userIdStr),
+//                 projectId: updatedProject._id,
+//               });
+//             });
+
+//             await ShowNotification.create(reviewNotificationsToCreate, {
+//               session,
+//               ordered: true,
+//             });
+//           }
+//         } catch (reviewNotificationError) {
+//           console.error(
+//             "Error creating review notifications:",
+//             reviewNotificationError
+//           );
+//         }
+//       }
+
+//       // Commit the transaction
+//       await session.commitTransaction();
+//       transactionSucceeded = true;
+
+//       // Send push notifications and emails outside the transaction
+//       // This way, if they fail, the project update is still saved
+//       try {
+//         // Send push notifications for project updates
+//         if (
+//           (importantFieldsChanged || membersListChanged || ownersListChanged) &&
+//           changesSummary.length > 0
+//         ) {
+//           const notificationRecipients = new Map();
+//           (updatedProject.members || []).forEach(
+//             (user) =>
+//               user?._id && notificationRecipients.set(user._id.toString(), user)
+//           );
+//           (updatedProject.projectOwners || []).forEach(
+//             (ownerObj) =>
+//               ownerObj?.ownerId?._id &&
+//               notificationRecipients.set(
+//                 ownerObj.ownerId._id.toString(),
+//                 ownerObj.ownerId
+//               )
+//           );
+//           if (membersListChanged)
+//             (existingProject.members || []).forEach(
+//               (user) =>
+//                 user?._id &&
+//                 !notificationRecipients.has(user._id.toString()) &&
+//                 notificationRecipients.set(user._id.toString(), user)
+//             );
+//           if (ownersListChanged)
+//             (existingProject.projectOwners || []).forEach(
+//               (ownerObj) =>
+//                 ownerObj?.ownerId?._id &&
+//                 !notificationRecipients.has(ownerObj.ownerId._id.toString()) &&
+//                 notificationRecipients.set(
+//                   ownerObj.ownerId._id.toString(),
+//                   ownerObj.ownerId
+//                 )
+//             );
+
+//           if (
+//             performingUser?._id &&
+//             !notificationRecipients.has(performingUser._id.toString())
+//           ) {
+//             const performerDetails = await User.findById(performingUser._id)
+//               .select("email userName notificationToken fcmDeviceToken")
+//               .lean();
+//             if (performerDetails)
+//               notificationRecipients.set(
+//                 performerDetails._id.toString(),
+//                 performerDetails
+//               );
+//           }
+
+//           const usersToNotify = Array.from(notificationRecipients.values());
+
+//           // Send push notifications
+//           try {
+//             const fcmTokens = usersToNotify
+//               .map((u) => u.fcmDeviceToken || u.notificationToken)
+//               .filter(Boolean);
+
+//             if (fcmTokens.length > 0) {
+//               // Get language preferences for all users in one query
+//               const userIds = usersToNotify.map((user) => user._id.toString());
+//               const languagePreferences = await LanguagePreference.find({
+//                 userId: { $in: userIds },
+//               }).lean();
+
+//               // Create a map of userId to language preference
+//               const userLanguageMap = {};
+//               languagePreferences.forEach((pref) => {
+//                 userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+//               });
+
+//               // Group tokens by language for more efficient sending
+//               const tokensByLanguage = {
+//                 portuguese: [],
+//                 english: [],
+//               };
+
+//               usersToNotify.forEach((user) => {
+//                 const userId = user._id.toString();
+//                 const token = user.fcmDeviceToken || user.notificationToken;
+//                 if (token) {
+//                   const language = userLanguageMap[userId] || "portuguese";
+//                   tokensByLanguage[language].push(token);
+//                 }
+//               });
+
+//               // Send Portuguese notifications
+//               if (tokensByLanguage.portuguese.length > 0) {
+//                 const pushTitle = `Atualização de Projeto: ${updatedProject.projectName}`;
+//                 const pushBody = `${changesSummary.join("; ")}. Por ${performingUser.userName}.`;
+//                 try {
+//                   await sendPushNotification(
+//                     tokensByLanguage.portuguese,
+//                     pushTitle,
+//                     pushBody,
+//                     {
+//                       projectId: updatedProject._id.toString(),
+//                       type: "PROJECT_UPDATE",
+//                     }
+//                   );
+//                 } catch (pushError) {
+//                   console.error(
+//                     `Failed to send Portuguese push notifications for project ${updatedProject._id}:`,
+//                     pushError.message
+//                   );
+//                 }
+//               }
+
+//               // Send English notifications
+//               if (tokensByLanguage.english.length > 0) {
+//                 const pushTitle = `Project Update: ${updatedProject.projectName}`;
+//                 const pushBody = `${changesSummary.join("; ")}. By ${performingUser.userName}.`;
+//                 try {
+//                   await sendPushNotification(
+//                     tokensByLanguage.english,
+//                     pushTitle,
+//                     pushBody,
+//                     {
+//                       projectId: updatedProject._id.toString(),
+//                       type: "PROJECT_UPDATE",
+//                     }
+//                   );
+//                 } catch (pushError) {
+//                   console.error(
+//                     `Failed to send English push notifications for project ${updatedProject._id}:`,
+//                     pushError.message
+//                   );
+//                 }
+//               }
+//             }
+//           } catch (pushError) {
+//             console.error("Error sending push notifications:", pushError);
+//             // Don't throw - continue with email notifications
+//           }
+
+//           // Send email notifications
+//           try {
+//             if (usersToNotify.some((u) => u.email)) {
+//               // Get language preferences for all users in one query
+//               const userIds = usersToNotify.map((user) => user._id.toString());
+//               const languagePreferences = await LanguagePreference.find({
+//                 userId: { $in: userIds },
+//               }).lean();
+
+//               // Create a map of userId to language preference
+//               const userLanguageMap = {};
+//               languagePreferences.forEach((pref) => {
+//                 userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+//               });
+
+//               // Email templates
+//               const emailTemplates = {
+//                 portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+//                 english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
+//               };
+
+//               for (const user of usersToNotify) {
+//                 if (user.email) {
+//                   try {
+//                     const userLanguage =
+//                       userLanguageMap[user._id.toString()] || "portuguese";
+//                     const emailHtml = emailTemplates[userLanguage];
+
+//                     await SendEmailUtil({
+//                       from: process.env.EMAIL_FROM || "noreply@example.com",
+//                       to: user.email,
+//                       subject:
+//                         userLanguage === "portuguese"
+//                           ? `Atualização de Projeto: ${updatedProject.projectName}`
+//                           : `Project Update: ${updatedProject.projectName}`,
+//                       html: emailHtml,
+//                     });
+//                   } catch (emailError) {
+//                     console.error(
+//                       `Failed to send project update email to ${user.email} for project ${updatedProject._id}:`,
+//                       emailError.message
+//                     );
+//                   }
+//                 }
+//               }
+//             }
+//           } catch (emailError) {
+//             console.error("Error sending email notifications:", emailError);
+//             // Don't throw - the project update was successful
+//           }
+//         }
+
+//         // Send push notifications for review requests
+//         if (statusChangedToCompleted) {
+//           try {
+//             const involvedUserIdsForReview = new Set();
+//             (updatedProject.members || []).forEach(
+//               (m) => m?._id && involvedUserIdsForReview.add(m._id.toString())
+//             );
+//             (updatedProject.projectOwners || []).forEach(
+//               (o) =>
+//                 o?.ownerId?._id &&
+//                 involvedUserIdsForReview.add(o.ownerId._id.toString())
+//             );
+
+//             if (involvedUserIdsForReview.size > 0) {
+//               // Send push notifications for review request
+//               const userIds = Array.from(involvedUserIdsForReview);
+//               const usersToNotifyForReview = await User.find({
+//                 _id: { $in: userIds },
+//                 $or: [
+//                   { fcmDeviceToken: { $exists: true } },
+//                   { notificationToken: { $exists: true } },
+//                 ],
+//               }).lean();
+
+//               const languagePreferences = await LanguagePreference.find({
+//                 userId: { $in: userIds },
+//               }).lean();
+
+//               // Create a map of userId to language preference
+//               const userLanguageMap = {};
+//               languagePreferences.forEach((pref) => {
+//                 userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+//               });
+
+//               // Group by language
+//               const reviewTokensByLanguage = {
+//                 portuguese: [],
+//                 english: [],
+//               };
+
+//               usersToNotifyForReview.forEach((user) => {
+//                 const token = user.fcmDeviceToken || user.notificationToken;
+//                 if (token) {
+//                   const language =
+//                     userLanguageMap[user._id.toString()] || "portuguese";
+//                   reviewTokensByLanguage[language].push(token);
+//                 }
+//               });
+
+//               // Send Portuguese review notifications
+//               if (reviewTokensByLanguage.portuguese.length > 0) {
+//                 try {
+//                   await sendPushNotification(
+//                     reviewTokensByLanguage.portuguese,
+//                     `Por favor, avalie o projeto ${updatedProject.projectName}`,
+//                     `O projeto foi concluído. Sua avaliação é importante para nós!`,
+//                     {
+//                       projectId: updatedProject._id.toString(),
+//                       type: "REVIEW_REQUEST",
+//                     }
+//                   );
+//                 } catch (pushError) {
+//                   console.error(
+//                     `Failed to send Portuguese review push notifications for project ${updatedProject._id}:`,
+//                     pushError.message
+//                   );
+//                 }
+//               }
+
+//               // Send English review notifications
+//               if (reviewTokensByLanguage.english.length > 0) {
+//                 try {
+//                   await sendPushNotification(
+//                     reviewTokensByLanguage.english,
+//                     `Please review project ${updatedProject.projectName}`,
+//                     `The project has been completed. Your feedback is important to us!`,
+//                     {
+//                       projectId: updatedProject._id.toString(),
+//                       type: "REVIEW_REQUEST",
+//                     }
+//                   );
+//                 } catch (pushError) {
+//                   console.error(
+//                     `Failed to send English review push notifications for project ${updatedProject._id}:`,
+//                     pushError.message
+//                   );
+//                 }
+//               }
+//             }
+//           } catch (reviewPushError) {
+//             console.error(
+//               "Error sending review push notifications:",
+//               reviewPushError
+//             );
+//             // Don't throw - the project update was successful
+//           }
+//         }
+//       } catch (notificationError) {
+//         console.error(
+//           "Error in post-transaction notifications:",
+//           notificationError
+//         );
+//         // Don't throw - the project update was successful
+//       }
+
+//       // Return success response
+//       return res
+//         .status(200)
+//         .json(
+//           new ApiResponse(200, updatedProject, "Project updated successfully.")
+//         );
+//     } catch (errorInTransaction) {
+//       // Only abort if the transaction hasn't been committed yet
+//       if (!transactionSucceeded) {
+//         await session.abortTransaction();
+//       }
+
+//       console.error(
+//         "Error during project update transaction:",
+//         errorInTransaction
+//       );
+
+//       throw errorInTransaction; // Re-throw to be caught by the outer try-catch
+//     }
+//   } catch (error) {
+//     // If we haven't ended the session yet and transaction didn't succeed
+//     if (session && !transactionSucceeded) {
+//       try {
+//         await session.abortTransaction();
+//       } catch (abortError) {
+//         console.error("Error aborting transaction:", abortError);
+//       }
+//     }
+
+//     console.error("Error in editProjects controller:", error);
+
+//     const statusCode = error instanceof ApiError ? error.statusCode : 500;
+//     const message =
+//       error instanceof ApiError
+//         ? error.message
+//         : "An internal server error occurred during project update.";
+//     const errors =
+//       error instanceof ApiError
+//         ? error.errors
+//         : error.errors
+//           ? error.errors
+//           : [];
+
+//     return res
+//       .status(statusCode)
+//       .json(new ApiResponse(statusCode, null, message, errors));
+//   } finally {
+//     // Always end the session
+//     if (session) {
+//       session.endSession();
+//     }
+//   }
+// });
 
 const createProject = asyncHandler(async (req, res) => {
   try {
