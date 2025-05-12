@@ -12,7 +12,7 @@ const getNotificationSettings = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid User ID format.");
   }
 
-  if (requestingUser._id.toString() !== userId && !requestingUser.isAdmin) {
+  if (requestingUser._id.toString() !== userId) {
     throw new ApiError(403, "You are not authorized to access these settings.");
   }
 

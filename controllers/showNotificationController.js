@@ -1,5 +1,5 @@
 import { ShowNotification } from "../models/showNotificationSchema.js";
-import { NotificationSetting } from "../models/notificationSetting.model.js"
+import { NotificationSetting } from "../models/notificationSetting.model.js";
 import { editProject } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -7,7 +7,8 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
 
 const createNotification = asyncHandler(async (req, res) => {
-  const { title, type, description, lengthyDesc, memberId, projectId } = req.body;
+  const { title, type, description, lengthyDesc, memberId, projectId } =
+    req.body;
 
   // Basic validation
   if (!title || !type || !memberId) {
@@ -22,14 +23,16 @@ const createNotification = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid project ID format.");
   }
 
-   // ✅ Check NotificationSetting.status
-   const setting = await NotificationSetting.findOne({ userId: memberId });
-   if (!setting || setting.status === false) {
-     // ✅ Skip creating notification if disabled
-     return res
-       .status(200)
-       .json(new ApiResponse(200, {}, "Notifications are disabled for this user"));
-   }
+  // ✅ Check NotificationSetting.status
+  const setting = await NotificationSetting.findOne({ userId: memberId });
+  if (!setting || setting.status === false) {
+    // ✅ Skip creating notification if disabled
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, {}, "Notifications are disabled for this user")
+      );
+  }
 
   // Prepare data, ensuring optional fields are handled
   const notificationData = {
@@ -55,18 +58,25 @@ const createNotification = asyncHandler(async (req, res) => {
     );
 });
 
-/**
- * @description Get notifications (optionally filtered)
- * @route GET /api/v1/notifications
- * @access Private (Requires authenticated user - typically filtered for the user)
- */
 const getNotifications = asyncHandler(async (req, res) => {
   const { memberId, projectId, isRead } = req.query;
   const filter = {};
+
   if (memberId) {
     if (!mongoose.Types.ObjectId.isValid(memberId)) {
       throw new ApiError(400, "Invalid recipient (memberId) format in query.");
     }
+
+    // ✅ Check NotificationSetting.status
+    const setting = await NotificationSetting.findOne({ userId: memberId });
+    if (!setting || setting.status === false) {
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(200, [], "Notifications are disabled for this user")
+        );
+    }
+
     filter.memberId = memberId;
   }
 
@@ -92,7 +102,6 @@ const getNotifications = asyncHandler(async (req, res) => {
     );
 });
 
-
 const getNotificationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -100,14 +109,24 @@ const getNotificationById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid notification ID format.");
   }
 
-  // Find notification and populate basic fields
   const notification = await ShowNotification.findById(id).lean();
 
   if (!notification) {
     throw new ApiError(404, "Notification not found.");
   }
 
-  // If notification has a projectId, fetch and attach project details
+  // ✅ Check NotificationSetting.status
+  const setting = await NotificationSetting.findOne({
+    userId: notification.memberId,
+  });
+  if (!setting || setting.status === false) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, {}, "Notifications are disabled for this user")
+      );
+  }
+
   if (notification.projectId) {
     const project = await editProject
       .findById(notification.projectId)
@@ -117,7 +136,6 @@ const getNotificationById = asyncHandler(async (req, res) => {
       .lean();
 
     if (project) {
-      // Attach project details to the notification response
       notification.projectDetails = {
         name: project.projectName,
         banner: project.projectBanner,
@@ -151,11 +169,11 @@ const getNotificationById = asyncHandler(async (req, res) => {
 const updateNotificationStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { isRead } = req.body;
+
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new ApiError(400, "Invalid notification ID format.");
   }
 
-  // Validate isRead input
   if (typeof isRead !== "boolean") {
     throw new ApiError(
       400,
@@ -163,15 +181,29 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
     );
   }
 
+  const existingNotification = await ShowNotification.findById(id);
+
+  if (!existingNotification) {
+    throw new ApiError(404, "Notification not found.");
+  }
+
+  // ✅ Check NotificationSetting.status
+  const setting = await NotificationSetting.findOne({
+    userId: existingNotification.memberId,
+  });
+  if (!setting || setting.status === false) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, {}, "Notifications are disabled for this user")
+      );
+  }
+
   const updatedNotification = await ShowNotification.findByIdAndUpdate(
     id,
     { $set: { isRead: isRead } },
     { new: true, runValidators: true }
   );
-
-  if (!updatedNotification) {
-    throw new ApiError(404, "Notification not found.");
-  }
 
   return res
     .status(200)
@@ -184,51 +216,63 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
     );
 });
 
+const clearAllNotifications = asyncHandler(async (req, res) => {
+  const { memberId } = req.params;
 
-const clearAllNotifications = asyncHandler (async (req, res) => {
-  const { memberId } = req.params
-
-  if (!mongoose.Types.ObjectId.isValid(memberId)){
-    throw new Error (400, "Invalid format for memberId")
+  if (!mongoose.Types.ObjectId.isValid(memberId)) {
+    throw new ApiError(400, "Invalid format for memberId");
   }
 
-  const result = await ShowNotification.deleteMany({ memberId })
+  // ✅ Check NotificationSetting.status
+  const setting = await NotificationSetting.findOne({ userId: memberId });
+  if (!setting || setting.status === false) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, {}, "Notifications are disabled for this user")
+      );
+  }
 
-  if ( result.deletedCount === 0) {
-    return res.status(200).json(new ApiResponse(200, {}, "No notifications found to delete"));
+  const result = await ShowNotification.deleteMany({ memberId });
+
+  if (result.deletedCount === 0) {
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, "No notifications found to delete"));
   }
 
   return res
-  .status(200)
-  .json(
-    new ApiResponse(
-      200,
-      { deletedCount: result.deletedCount },
-      "All notifications cleared successfully"
-    )
-  );
-})
-
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { deletedCount: result.deletedCount },
+        "All notifications cleared successfully"
+      )
+    );
+});
 
 const getAllNotificationsForUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
-  // 1. Validate userId format
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new ApiError(400, "Invalid User ID format in URL parameter.");
   }
 
-  // 2. Fetch notifications for the given userId (assuming userId maps to 'memberId' in your schema)
-  //    Sort by newest first. Using .lean() for performance if you don't need Mongoose model instances.
+  // ✅ Check NotificationSetting.status
+  const setting = await NotificationSetting.findOne({ userId });
+  if (!setting || setting.status === false) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, [], "Notifications are disabled for this user")
+      );
+  }
+
   const userNotifications = await ShowNotification.find({ memberId: userId })
     .sort({ createdAt: -1 })
-    .lean(); // Use .lean() if you don't need Mongoose documents
+    .lean();
 
-  // 3. Optional: If no notifications are found, you might want to return an empty array
-  //    or a specific message, but an empty array is standard for "no results".
-  //    The current setup will correctly return an empty array.
-
-  // 4. Respond with the notifications
   return res
     .status(200)
     .json(
