@@ -1,17 +1,11 @@
 import { ShowNotification } from "../models/showNotificationSchema.js";
+import { NotificationSetting } from "../models/notificationSetting.model.js"
 import { editProject } from "../models/project.model.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
 
-// --- Your Existing Functions ---
-
-/**
- * @description Create a new notification
- * @route POST /api/v1/notifications
- * @access Private (Requires authenticated user)
- */
 const createNotification = asyncHandler(async (req, res) => {
   const { title, type, description, lengthyDesc, memberId, projectId } = req.body;
 
@@ -27,6 +21,15 @@ const createNotification = asyncHandler(async (req, res) => {
   if (projectId && !mongoose.Types.ObjectId.isValid(projectId)) {
     throw new ApiError(400, "Invalid project ID format.");
   }
+
+   // ✅ Check NotificationSetting.status
+   const setting = await NotificationSetting.findOne({ userId: memberId });
+   if (!setting || setting.status === false) {
+     // ✅ Skip creating notification if disabled
+     return res
+       .status(200)
+       .json(new ApiResponse(200, {}, "Notifications are disabled for this user"));
+   }
 
   // Prepare data, ensuring optional fields are handled
   const notificationData = {
@@ -89,16 +92,7 @@ const getNotifications = asyncHandler(async (req, res) => {
     );
 });
 
-/**
- * @description Get a single notification by its ID
- * @route GET /api/v1/notifications/:id
- * @access Private (Requires authenticated user - ideally checks ownership)
- */
-/**
- * @description Get a single notification by its ID with project details
- * @route GET /api/v1/notifications/:id
- * @access Private (Requires authenticated user - ideally checks ownership)
- */
+
 const getNotificationById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -154,11 +148,6 @@ const getNotificationById = asyncHandler(async (req, res) => {
     );
 });
 
-/**
- * @description Update the read status of a notification
- * @route PATCH /api/v1/notifications/:id/status
- * @access Private (Requires authenticated user - ideally checks ownership)
- */
 const updateNotificationStatus = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { isRead } = req.body;
@@ -196,12 +185,6 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
 });
 
 
-/**
- * @description Delete all notifications for a specific member
- * @route DELETE /api/v1/notifications/clear/:memberId
- * @access Private (Requires authenticated user)
- */
-
 const clearAllNotifications = asyncHandler (async (req, res) => {
   const { memberId } = req.params
 
@@ -227,11 +210,6 @@ const clearAllNotifications = asyncHandler (async (req, res) => {
 })
 
 
-/**
- * @description Get all notifications for a specific user by their ID
- * @route GET /api/v1/notifications/user/:userId
- * @access Private (Requires authenticated user - ideally checks if the requester is the user or an admin)
- */
 const getAllNotificationsForUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 

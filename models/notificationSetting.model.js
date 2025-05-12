@@ -4,24 +4,15 @@ const notificationSettingSchema = new Schema(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: "User", // Assuming you have a 'User' model
+      ref: "User",
       required: true,
-      unique: true, // Each user has one set of notification settings
+      unique: true,
       index: true,
     },
-    projectReportsEnabled: {
+    status: {
       type: Boolean,
-      default: true, // Default to enabled
+      default: true, // All notifications enabled by default
     },
-    projectUpdatesEnabled: {
-      type: Boolean,
-      default: true, // Default to enabled
-    },
-    financialUpdatesEnabled: {
-      type: Boolean,
-      default: true, // Default to enabled
-    },
-    // You can add more notification types here in the future
   },
   { timestamps: true }
 );

@@ -3,6 +3,7 @@ import admin from 'firebase-admin';
 import { readFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { NotificationSetting } from "../models/notificationSetting.model.js"; 
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,13 +31,21 @@ async function initializeFirebaseAdmin() {
 
 initializeFirebaseAdmin();
 
-export const sendNotification = async (tokens, title, body, data = {}) => {
+export const sendNotification = async (userId, tokens, title, body, data = {}) => {
   if (!initialized) {
     console.error('Firebase Admin SDK not initialized. Cannot send notification.');
     return;
   }
 
   try {
+    // Check if the user has notifications enabled
+    const setting = await NotificationSetting.findOne({ userId });
+
+    if (!setting || setting.status === false) {
+      console.log(`Notifications are disabled for user ${userId}`);
+      return;
+    }
+
     if (!tokens || tokens.length === 0) {
       console.log('No tokens provided for notification');
       return;
@@ -83,7 +92,6 @@ export const sendNotification = async (tokens, title, body, data = {}) => {
     console.log(`Notification send complete: ${successCount} successes, ${failureCount} failures.`);
     if (failedTokens.length > 0) {
       console.log('List of tokens that failed:', failedTokens);
-      // Optional: Clean up database here if needed
     }
 
     return { successCount, failureCount, failedTokens };

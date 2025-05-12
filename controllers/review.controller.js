@@ -241,7 +241,7 @@ export const deleteProjectWithReviews = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Project and its ${deletedReviews.deletedCount} associated review(s) deleted successfully`,
+      message: `Project associated review(s) deleted successfully`,
     });
   } catch (error) {
     console.error("Error in deleteProjectWithReviews:", error);
