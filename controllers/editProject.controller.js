@@ -912,7 +912,6 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 const editProjects = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   let transactionSucceeded = false;
-  // Declare updatedProject here so it's accessible after the inner try block
   let updatedProject;
 
   try {

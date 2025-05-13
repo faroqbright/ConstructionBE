@@ -203,7 +203,7 @@ async function sendMilestoneEmail(recipients, milestone, project, type, changes 
         `;
     } else if (type === 'update') {
       subject = isPortuguese
-        ? `Marco Atualizado: ${milestone.title}`
+        ? `Marco Actualizado : ${milestone.title}`
         : `Milestone Updated: ${milestone.title}`;
       
       const changesText = changes.length > 0
@@ -217,7 +217,7 @@ async function sendMilestoneEmail(recipients, milestone, project, type, changes 
       html = isPortuguese
         ? `
           <p>Prezado(a) <strong>${user.userName}</strong>,</p>
-          <p>O marco "<strong>${milestone.title}</strong>" no projeto "<strong>${project.projectName}</strong>" foi atualizado.</p>
+          <p>O marco "<strong>${milestone.title}</strong>" no projeto "<strong>${project.projectName}</strong>" foi Actualizado .</p>
           ${changesText}
           <br />
           <p>Acesse seu painel para mais detalhes.</p>
@@ -308,7 +308,7 @@ export const createOrUpdateMilestone = async (req, res) => {
       if (status && status !== existingMilestone.status) {
         existingMilestone.status = status;
         emailChanges.push(
-          `Status atualizado para: ${status}`,
+          `Status Actualizado para: ${status}`,
           `Status updated to: ${status}`
         );
         pushNotificationChanges.push(`status changed to ${status}`);
@@ -332,14 +332,14 @@ export const createOrUpdateMilestone = async (req, res) => {
 
         return {
           title: isPortuguese
-            ? `Marco Atualizado: ${title}`
+            ? `Marco Actualizado : ${title}`
             : `Milestone Updated: ${title}`,
           type: "Milestone Update",
           description: isPortuguese
-            ? `Um marco foi atualizado no projeto "${title}"`
+            ? `Um marco foi Actualizado no projeto "${title}"`
             : `A milestone was updated in project "${title}"`,
           lengthyDesc: isPortuguese
-            ? `Informamos que o marco "${title}" foi atualizado no projeto. Para visualizar as alterações, acesse a seção do projeto na plataforma.<br>Em caso de dúvidas ou necessidade de assistência, nossa equipe está à disposição.//
+            ? `Informamos que o marco "${title}" foi Actualizado no projeto. Para visualizar as alterações, acesse a seção do projeto na plataforma.<br>Em caso de dúvidas ou necessidade de assistência, nossa equipe está à disposição.//
             Atenciosamente,//
             [Equipe Soapro]`
             : `We would like to inform you that the milestone "${title}" has been updated in the project. To view the changes, please access the project section on the platform.<br>Should you have any questions or require assistance, our team remains at your disposal.//
@@ -357,7 +357,7 @@ export const createOrUpdateMilestone = async (req, res) => {
       await sendMilestonePushNotifications(
         recipients,
         {
-          portuguese: `Marco Atualizado: ${title}`,
+          portuguese: `Marco Actualizado : ${title}`,
           english: `Milestone Updated: ${title}`
         },
         {
@@ -501,7 +501,7 @@ export const updateMilestone = async (req, res) => {
     };
 
     if (updates.title && updates.title !== existingMilestone.title) {
-      changes.portuguese.push(`Título atualizado de "${existingMilestone.title}" para "${updates.title}"`);
+      changes.portuguese.push(`Título Actualizado de "${existingMilestone.title}" para "${updates.title}"`);
       changes.english.push(`Title updated from "${existingMilestone.title}" to "${updates.title}"`);
       existingMilestone.title = updates.title;
     }
@@ -511,7 +511,7 @@ export const updateMilestone = async (req, res) => {
       existingMilestone.description = updates.description;
     }
     if (updates.status && updates.status !== existingMilestone.status) {
-      changes.portuguese.push(`Status atualizado para: ${updates.status}`);
+      changes.portuguese.push(`Status Actualizado para: ${updates.status}`);
       changes.english.push(`Status updated to: ${updates.status}`);
       existingMilestone.status = updates.status;
     }
@@ -533,14 +533,14 @@ export const updateMilestone = async (req, res) => {
 
       return {
         title: isPortuguese
-          ? `Marco Atualizado: ${updatedMilestone.title}`
+          ? `Marco Actualizado : ${updatedMilestone.title}`
           : `Milestone Updated: ${updatedMilestone.title}`,
         type: "Milestone Update",
         description: isPortuguese
-          ? `O marco foi atualizado no projeto "${updatedMilestone.title}"`
+          ? `O marco foi Actualizado no projeto "${updatedMilestone.title}"`
           : `The milestone was updated in project "${updatedMilestone.title}"`,
         lengthyDesc: isPortuguese
-          ? `Informamos que o marco "${updatedMilestone.title}" foi atualizado no projeto. Alterações: ${changes.portuguese.join(", ")}.<br>Acesse a plataforma para mais detalhes.//
+          ? `Informamos que o marco "${updatedMilestone.title}" foi Actualizado no projeto. Alterações: ${changes.portuguese.join(", ")}.<br>Acesse a plataforma para mais detalhes.//
           Atenciosamente,//
           [Equipe Soapro]`
           : `We would like to inform you that the milestone "${updatedMilestone.title}" has been updated in the project. Changes: ${changes.english.join(", ")}.<br>Please access the platform for more details.//
@@ -558,7 +558,7 @@ export const updateMilestone = async (req, res) => {
     await sendMilestonePushNotifications(
       recipients,
       {
-        portuguese: `Marco Atualizado: ${updatedMilestone.title}`,
+        portuguese: `Marco Actualizado : ${updatedMilestone.title}`,
         english: `Milestone Updated: ${updatedMilestone.title}`
       },
       {
