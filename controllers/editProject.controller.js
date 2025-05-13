@@ -84,15 +84,15 @@ async function sendProjectNotificationEmail(
     // Email templates for different notification types
     const templates = {
       update: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projecto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projecto</h2><p style="font-size: 16px; color: #555;">O Projecto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       deletion: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Eliminação de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projecto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Eliminação de Projecto</h2><p style="font-size: 16px; color: #555;">O Projecto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este Projecto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Deleted</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Deletion Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been deleted by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">All documents and data associated with this project have been removed from the system.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       creation: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projecto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Novo Projecto</h2><p style="font-size: 16px; color: #555;">Um novo Projecto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes do Projecto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Project Created</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">New Project Notification</h2><p style="font-size: 16px; color: #555;">A new project <strong>${projectInfo.projectName}</strong> has been created by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Please log in to view the project details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
     };
@@ -103,10 +103,10 @@ async function sendProjectNotificationEmail(
       subject:
         userLanguage === "portuguese"
           ? type === "update"
-            ? `Atualização de Projeto: ${projectInfo.projectName}`
+            ? `Atualização de Projecto: ${projectInfo.projectName}`
             : type === "deletion"
-              ? `Projeto Eliminado: ${projectInfo.projectName}`
-              : `Novo Projeto: ${projectInfo.projectName}`
+              ? `Projecto Eliminado: ${projectInfo.projectName}`
+              : `Novo Projecto: ${projectInfo.projectName}`
           : type === "update"
             ? `Project Update: ${projectInfo.projectName}`
             : type === "deletion"
@@ -557,9 +557,9 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //             if (userLanguage === "portuguese") {
 //               return {
 //                 ...notif,
-//                 title: `Atualização de Projeto: ${updatedProject.projectName}`,
-//                 description: `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
-//                 lengthyDesc: `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
+//                 title: `Atualização de Projecto: ${updatedProject.projectName}`,
+//                 description: `O Projecto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
+//                 lengthyDesc: `Detalhes da atualização do Projecto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
 //               };
 //             }
 //             return notif;
@@ -605,16 +605,16 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //             reviewNotificationsToCreate.push({
 //               title:
 //                 userLanguage === "portuguese"
-//                   ? `Projeto Concluído: ${updatedProject.projectName}`
+//                   ? `Projecto Concluído: ${updatedProject.projectName}`
 //                   : `Project Completed: ${updatedProject.projectName}`,
 //               type: "Review Request",
 //               description:
 //                 userLanguage === "portuguese"
-//                   ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
+//                   ? `O Projecto "${updatedProject.projectName}" foi concluído. Por favor, avalie o Projecto.`
 //                   : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
 //               lengthyDesc:
 //                 userLanguage === "portuguese"
-//                   ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
+//                   ? `O Projecto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este Projecto.`
 //                   : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
 //               memberId: new mongoose.Types.ObjectId(userIdStr),
 //               projectId: updatedProject._id,
@@ -655,8 +655,8 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //             try {
 //               await sendPushNotification(
 //                 reviewTokensByLanguage.portuguese,
-//                 `Por favor, avalie o projeto ${updatedProject.projectName}`,
-//                 `O projeto foi concluído. Sua avaliação é importante para nós!`,
+//                 `Por favor, avalie o Projecto ${updatedProject.projectName}`,
+//                 `O Projecto foi concluído. Sua avaliação é importante para nós!`,
 //                 {
 //                   projectId: updatedProject._id.toString(),
 //                   type: "REVIEW_REQUEST",
@@ -778,7 +778,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 
 //           // Send Portuguese notifications
 //           if (tokensByLanguage.portuguese.length > 0) {
-//             const pushTitle = `Atualização de Projeto: ${updatedProject.projectName}`;
+//             const pushTitle = `Atualização de Projecto: ${updatedProject.projectName}`;
 //             const pushBody = `${changesSummary.join("; ")}. Por ${performingUser.userName}.`;
 //             try {
 //               await sendPushNotification(
@@ -836,7 +836,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 
 //           // Email templates
 //           const emailTemplates = {
-//             portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+//             portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projecto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projecto</h2><p style="font-size: 16px; color: #555;">O Projecto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
 //             english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
 //           };
 
@@ -852,7 +852,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //                   to: user.email,
 //                   subject:
 //                     userLanguage === "portuguese"
-//                       ? `Atualização de Projeto: ${updatedProject.projectName}`
+//                       ? `Atualização de Projecto: ${updatedProject.projectName}`
 //                       : `Project Update: ${updatedProject.projectName}`,
 //                   html: emailHtml,
 //                 });
@@ -1376,11 +1376,11 @@ const editProjects = asyncHandler(async (req, res) => {
           const userLanguage = userLanguageMap[userIdStr] || "portuguese";
           const title =
             userLanguage === "portuguese"
-              ? `Atualização de Projeto: ${safeProjectName}`
+              ? `Atualização de Projecto: ${safeProjectName}`
               : `Project Update: ${safeProjectName}`;
           const description =
             userLanguage === "portuguese"
-              ? `O projeto "${safeProjectName}" foi atualizado por ${safePerformerName}: ${safeChangesText}.`
+              ? `O Projecto "${safeProjectName}" foi atualizado por ${safePerformerName}: ${safeChangesText}.`
               : `The project "${safeProjectName}" was updated by ${safePerformerName}: ${safeChangesText}.`;
           const lengthyDesc =
             userLanguage === "portuguese"
@@ -1419,15 +1419,15 @@ const editProjects = asyncHandler(async (req, res) => {
             const userLanguage = reviewLangMap[userIdStr] || "portuguese";
             const title =
               userLanguage === "portuguese"
-                ? `Projeto Concluído: ${safeProjectName}`
+                ? `Projecto Concluído: ${safeProjectName}`
                 : `Project Completed: ${safeProjectName}`;
             const description =
               userLanguage === "portuguese"
-                ? `O projeto "${safeProjectName}" foi concluído. Por favor, avalie.`
+                ? `O Projecto "${safeProjectName}" foi concluído. Por favor, avalie.`
                 : `The project "${safeProjectName}" is complete. Please review.`;
             const lengthyDesc =
               userLanguage === "portuguese"
-                ? `O projeto "${safeProjectName}" foi marcado como concluído. Sua avaliação é importante.`
+                ? `O Projecto "${safeProjectName}" foi marcado como concluído. Sua avaliação é importante.`
                 : `The project "${safeProjectName}" is marked complete. Your review is valuable.`;
             inAppNotificationsToCreate.push({
               title,
@@ -1542,7 +1542,7 @@ const editProjects = asyncHandler(async (req, res) => {
               if (tokensByLanguage.portuguese.length > 0)
                 sendPushNotification(
                   tokensByLanguage.portuguese,
-                  `Atualização de Projeto: ${safeProjectName}`,
+                  `Atualização de Projecto: ${safeProjectName}`,
                   `${pushSummary}. Por ${finalPerformerName}.`,
                   {
                     projectId: finalProjectDataForNotif._id.toString(),
@@ -1589,7 +1589,7 @@ const editProjects = asyncHandler(async (req, res) => {
                     finalUserLanguageMap[user._id.toString()] || "portuguese";
                   const subject =
                     lang === "portuguese"
-                      ? `Atualização de Projeto: ${safeProjectName}`
+                      ? `Atualização de Projecto: ${safeProjectName}`
                       : `Project Update: ${safeProjectName}`;
                   SendEmailUtil({
                     from: process.env.EMAIL_FROM,
@@ -1629,8 +1629,8 @@ const editProjects = asyncHandler(async (req, res) => {
                 if (reviewTokensByLanguage.portuguese.length > 0)
                   sendPushNotification(
                     reviewTokensByLanguage.portuguese,
-                    `Por favor, avalie o projeto ${safeProjectName}`,
-                    `O projeto foi concluído. Sua avaliação é importante!`,
+                    `Por favor, avalie o Projecto ${safeProjectName}`,
+                    `O Projecto foi concluído. Sua avaliação é importante!`,
                     {
                       projectId: finalProjectDataForNotif._id.toString(),
                       type: "REVIEW_REQUEST",
@@ -1906,14 +1906,14 @@ const createProject = asyncHandler(async (req, res) => {
 
               return {
                 title: isPortuguese
-                  ? `Novo Projeto Criado: ${project.projectName}`
+                  ? `Novo Projecto Criado: ${project.projectName}`
                   : `New Project Created: ${project.projectName}`,
                 type: "Project Creation",
                 description: isPortuguese
-                  ? `Um novo projeto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`
+                  ? `Um novo Projecto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`
                   : `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`,
                 lengthyDesc: isPortuguese
-                  ? `Detalhes do novo projeto "${project.projectName}" criado por ${performingUser?.userName || "sistema"}.`
+                  ? `Detalhes do novo Projecto "${project.projectName}" criado por ${performingUser?.userName || "sistema"}.`
                   : `Details of new project "${project.projectName}" created by ${performingUser?.userName || "system"}.`,
                 memberId: user._id,
                 projectId: project._id,
@@ -1932,11 +1932,11 @@ const createProject = asyncHandler(async (req, res) => {
             await sendLanguageSpecificPushNotifications(
               usersWithTokens,
               {
-                portuguese: `Novo Projeto Criado: ${project.projectName}`,
+                portuguese: `Novo Projecto Criado: ${project.projectName}`,
                 english: `New Project Created: ${project.projectName}`,
               },
               {
-                portuguese: `Um novo projeto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`,
+                portuguese: `Um novo Projecto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`,
                 english: `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`,
               },
               {
@@ -2516,14 +2516,14 @@ const deleteProject = asyncHandler(async (req, res) => {
 
         return {
           title: isPortuguese
-            ? `Projeto Eliminado: ${deletedProjectName}`
+            ? `Projecto Eliminado: ${deletedProjectName}`
             : `Project Deleted: ${deletedProjectName}`,
           type: "Project Deletion",
           description: isPortuguese
-            ? `O projeto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`
+            ? `O projecto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`
             : `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
           lengthyDesc: isPortuguese
-            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. Ação realizada por ${performingUser.userName}.`
+            ? `Todos os documentos e dados associados ao projecto "${deletedProjectName}" foram removidos do sistema. Ação realizada por ${performingUser.userName}.`
             : `All documents and data associated with project "${deletedProjectName}" have been removed from the system. Action performed by ${performingUser.userName}.`,
           memberId: user._id,
           projectId: deletedProjectId,
@@ -2548,11 +2548,11 @@ const deleteProject = asyncHandler(async (req, res) => {
         await sendLanguageSpecificPushNotifications(
           usersWithTokens,
           {
-            portuguese: `Projeto Eliminado: ${deletedProjectName}`,
+            portuguese: `Projecto Eliminado: ${deletedProjectName}`,
             english: `Project Deleted: ${deletedProjectName}`,
           },
           {
-            portuguese: `O projeto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`,
+            portuguese: `O Projecto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`,
             english: `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
           },
           {

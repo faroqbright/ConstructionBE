@@ -425,6 +425,15 @@ const updateStatus = async (req, res) => {
     }
 
     await session.commitTransaction();
+
+     // Modified response messages based on status
+     let successMessage = "Document updated successfully";
+     if (updates.status === "approved") {
+       successMessage = "Report successfully approved";
+     } else if (updates.status === "rejected") {
+       successMessage = "Report successfully rejected";
+     }
+     
     res.status(200).json({
       message: "Document updated successfully",
       document: updatedDocument,
