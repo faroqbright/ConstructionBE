@@ -253,7 +253,7 @@ export const createOrUpdateBusinessArea = async (req, res) => {
             : isNew
               ? `New Business Area Created`
               : `Business Area Updated`,
-          type: "Business Area Event",
+          type: "Business Area Event Updated",
           description: isPortuguese
             ? `Área de negócio "${businessAreaData.businessArea}" foi ${isNew ? "criada" : "atualizada"} por ${performingUserName}.`
             : `Business area "${businessAreaData.businessArea}" was ${actionVerb} by ${performingUserName}.`,
@@ -282,7 +282,7 @@ export const createOrUpdateBusinessArea = async (req, res) => {
           english: `"${businessAreaData.businessArea}" was ${actionVerb}.`,
         },
         {
-          type: isNew ? "BUSINESS_AREA_CREATED" : "BUSINESS_AREA_UPDATED",
+          type: isNew ? "Business Area Created" : "Business Area Updated",
           businessAreaId: businessAreaData._id.toString(),
           businessAreaName: businessAreaData.businessArea,
         }
@@ -383,7 +383,7 @@ export const updateBusinessArea = async (req, res) => {
           title: isPortuguese
             ? `Área de Negócio Atualizada`
             : `Business Area Updated`,
-          type: "Business Area Event",
+          type: "Business Area Event Updated",
           description: isPortuguese
             ? `Área de negócio "${updated.businessArea}" foi atualizada por ${performingUserName}.`
             : `Business area "${updated.businessArea}" was updated by ${performingUserName}.`,
@@ -410,7 +410,7 @@ export const updateBusinessArea = async (req, res) => {
           english: `"${updated.businessArea}" was updated.`,
         },
         {
-          type: "BUSINESS_AREA_UPDATED",
+          type: "Business Area Event Updated",
           businessAreaId: updated._id.toString(),
           businessAreaName: updated.businessArea,
         }
@@ -463,7 +463,7 @@ export const deleteBusinessArea = async (req, res) => {
           title: isPortuguese
             ? `Área de Negócio Removida`
             : `Business Area Deleted`,
-          type: "Business Area Event",
+          type: "Business Area Event Updated",
           description: isPortuguese
             ? `Área de negócio "${deleted.businessArea}" foi removida por ${performingUserName}.`
             : `Business area "${deleted.businessArea}" was deleted by ${performingUserName}.`,
@@ -489,7 +489,7 @@ export const deleteBusinessArea = async (req, res) => {
           english: `Business area "${deleted.businessArea}" was deleted.`,
         },
         {
-          type: "BUSINESS_AREA_DELETED",
+          type: "Business Area Event Deleted",
           businessAreaName: deleted.businessArea,
         }
       );

@@ -256,22 +256,64 @@ const getAllNotificationsForUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
-    throw new ApiError(400, "Invalid User ID format in URL parameter.");
+    // It's good practice to return here so the execution stops.
+    // throw new ApiError(...) will be caught by asyncHandler and send a response.
+    return res
+      .status(400)
+      .json(new ApiError(400, "Invalid User ID format in URL parameter."));
   }
 
   // ✅ Check NotificationSetting.status
-  const setting = await NotificationSetting.findOne({ userId });
-  if (!setting || setting.status === false) {
+  // ASSUMPTION: The field in NotificationSetting model linking to the user is 'user'.
+  // If it's 'userId', change '{ user: userId }' back to '{ userId: userId }' or '{ userId }'.
+  const setting = await NotificationSetting.findOne({ user: userId }); // <--- MODIFIED HERE
+
+  // It's good to log what you find for debugging, especially if issues persist
+  console.log(`Notification setting for user ${userId}:`, setting);
+
+  if (!setting) {
+    // If no setting document is found, it implies notifications might be off by default
+    // or the user hasn't configured them. Decide on default behavior.
+    // For now, treating as "disabled" if no specific setting is found.
     return res
       .status(200)
       .json(
-        new ApiResponse(200, [], "Notifications are disabled for this user")
+        new ApiResponse(
+          200,
+          [],
+          "Notification settings not found for this user, assuming disabled."
+        )
       );
   }
 
+  if (setting.status === false) {
+    // Explicitly disabled
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          [],
+          "Notifications are explicitly disabled for this user."
+        )
+      );
+  }
+
+  // If settings are found and status is true (or not explicitly false), fetch notifications
   const userNotifications = await ShowNotification.find({ memberId: userId })
     .sort({ createdAt: -1 })
-    .lean();
+    .lean(); // .lean() is good for performance if you don't need Mongoose full documents
+
+  if (!userNotifications) {
+    // This case is unlikely if the query is correct, find usually returns an empty array if no docs match.
+    // But, as a safeguard or if there was a DB error not caught by asyncHandler.
+    console.error(
+      `Failed to fetch notifications for user ${userId} despite settings being enabled.`
+    );
+    return res
+      .status(500)
+      .json(new ApiError(500, "Failed to fetch notifications."));
+  }
 
   return res
     .status(200)
@@ -279,7 +321,9 @@ const getAllNotificationsForUser = asyncHandler(async (req, res) => {
       new ApiResponse(
         200,
         userNotifications,
-        `Notifications fetched successfully for user ${userId}`
+        userNotifications.length > 0
+          ? `Notifications fetched successfully for user ${userId}`
+          : `No notifications found for user ${userId}`
       )
     );
 });

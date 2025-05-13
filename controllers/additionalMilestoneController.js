@@ -371,7 +371,7 @@ export const createOrUpdateMilestone = async (req, res) => {
         {
           projectId: project._id.toString(),
           milestoneId: updatedMilestone._id.toString(),
-          type: "MILESTONE_UPDATE",
+          type: "Milestone Update",
         }
       );
 
@@ -443,7 +443,7 @@ export const createOrUpdateMilestone = async (req, res) => {
       {
         projectId: project._id.toString(),
         milestoneId: newMilestone._id.toString(),
-        type: "MILESTONE_CREATE",
+        type: "Milestone Creation",
       }
     );
 
@@ -572,7 +572,7 @@ export const updateMilestone = async (req, res) => {
       {
         projectId: updatedMilestone.projectId.toString(),
         milestoneId: updatedMilestone._id.toString(),
-        type: "MILESTONE_UPDATE",
+        type: "Milestone Update",
       }
     );
 
@@ -662,7 +662,7 @@ export const deleteMilestone = async (req, res) => {
       {
         projectId: deleted.projectId.toString(),
         deletedMilestoneId: deleted._id.toString(),
-        type: "MILESTONE_DELETE",
+        type: "Milestone Deletion",
       }
     );
 

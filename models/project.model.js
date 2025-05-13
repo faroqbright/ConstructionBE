@@ -26,6 +26,10 @@ const editProjectSchema = new mongoose.Schema(
         { name: "Completed", completed: false },
       ],
     },
+    isCreated: {
+      type: Boolean,
+      default: true, 
+    },
     documents: [{ type: mongoose.Schema.Types.ObjectId, ref: "UserDocument" }],
     projectName: {
       type: String,
@@ -46,7 +50,7 @@ const editProjectSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    comapanyName: {
+    comapanyName: { 
       type: String,
       required: true,
     },

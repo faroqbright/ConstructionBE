@@ -299,7 +299,7 @@ const uploadFile = async (req, res) => {
               projectId: project._id.toString(),
               documentId: document._id.toString(),
               documentName: document.fileName,
-              type: "DOCUMENT_UPLOAD",
+              type: "Document Upload",
             },
             userLanguageMap
         );
@@ -504,7 +504,7 @@ const updateStatus = async (req, res) => {
               documentId: updatedDocument._id.toString(),
               documentName: updatedDocument.fileName,
               newStatus: updatedDocument.status,
-              type: "DOCUMENT_STATUS_UPDATE",
+              type: "Document Status Update",
             },
             userLanguageMap
         );
@@ -650,7 +650,7 @@ const deleteDocument = async (req, res) => {
               projectId: project._id.toString(),
               documentId: documentId.toString(),
               documentName: fileName,
-              type: "DOCUMENT_DELETED",
+              type: "Document Deletion",
             },
             userLanguageMap
         );
