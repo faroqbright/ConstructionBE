@@ -435,7 +435,7 @@ const updateStatus = async (req, res) => {
      }
      
     res.status(200).json({
-      message: "Document updated successfully",
+      message: successMessage,
       document: updatedDocument,
     });
   } catch (error) {
