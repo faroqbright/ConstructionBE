@@ -1,6 +1,7 @@
 import { editProject } from "../models/project.model.js";
 import { Review } from "../models/reviewsModel.js";
 import mongoose from "mongoose";
+import { User } from "../models/user.model.js"; // Example
 
 export const createReview = async (req, res) => {
   const { projectId, userId, message, rating } = req.body;
@@ -41,37 +42,28 @@ export const getReviewByProjectId = async (req, res) => {
       });
     }
 
-    // Check if the ID is exactly 24 characters (standard MongoDB ObjectId length)
-    if (projectId.length !== 24) {
+    if (
+      projectId.length !== 24 ||
+      !mongoose.Types.ObjectId.isValid(projectId)
+    ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid Project ID length - must be 24 characters",
+        message: "Invalid Project ID format or length",
       });
     }
 
-    // Validate that projectId is a valid MongoDB ObjectId
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Project ID format",
-      });
-    }
-
-    console.log(`Fetching reviews for projectId: ${projectId}`);
-
-    // Convert to ObjectId for consistent querying
     const objectId = new mongoose.Types.ObjectId(projectId);
 
-    // Fetch reviews for the given projectId
     const reviews = await Review.find(
       { projectId: objectId },
       "message rating createdAt userId projectId"
     )
-      .populate("userId", "username email")
+      .populate("userId", "userName email") // Assuming review author also uses userName
       .sort({ createdAt: -1 })
       .lean();
 
     if (reviews.length === 0) {
+      // console.log(`[DEBUG] No reviews found for projectId: ${projectId}`); // Optional
       return res.status(200).json({
         success: true,
         message: "No reviews found for this project",
@@ -79,23 +71,55 @@ export const getReviewByProjectId = async (req, res) => {
       });
     }
 
-    console.log(`Reviews fetched: ${reviews.length}`);
-
-    // Fetch project details for this projectId
     const project = await editProject
-      .findById(objectId, "projectOwners projectName projectBanner")
+      .findById(objectId)
+      .populate({
+        path: "projectOwners.ownerId",
+        select: "userName email _id", // <--- USE 'userName' HERE
+      })
+      .select("projectOwners projectName projectBanner")
       .lean();
 
-    // Combine reviews with project data
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    const projectOwnersFromDB = project.projectOwners || [];
+
     const reviewsWithProjectData = reviews.map((review) => ({
       ...review,
-      project: project
-        ? {
-            projectOwners: project.projectOwners,
-            projectName: project.projectName,
-            projectBanner: project.projectBanner,
+      project: {
+        projectOwners: projectOwnersFromDB.map((ownerSubDoc) => {
+          // console.log("[DEBUG] Processing ownerSubDoc from project.projectOwners:", JSON.stringify(ownerSubDoc, null, 2)); // Optional
+          let resolvedOwnerName = ownerSubDoc.ownerName; // Default to stored string
+          let populatedOwnerIdFields = null;
+
+          if (ownerSubDoc.ownerId && typeof ownerSubDoc.ownerId === "object") {
+            populatedOwnerIdFields = ownerSubDoc.ownerId;
+
+            if (populatedOwnerIdFields.userName) {
+              resolvedOwnerName = populatedOwnerIdFields.userName;
+            } else {
+              // console.log("[DEBUG] Could not find 'userName' in populated ownerId. Using stored ownerName:", resolvedOwnerName); // Optional
+            }
+          } else {
+            // console.log("[DEBUG] ownerSubDoc.ownerId was not populated or is not an object. Original ownerId value:", ownerSubDoc.ownerId, ". Using stored ownerName:", resolvedOwnerName); // Optional
           }
-        : null,
+
+          return {
+            _id: ownerSubDoc._id,
+            ownerId: populatedOwnerIdFields
+              ? populatedOwnerIdFields._id
+              : ownerSubDoc.ownerId || null,
+            ownerName: resolvedOwnerName,
+          };
+        }),
+        projectName: project.projectName,
+        projectBanner: project.projectBanner,
+      },
     }));
 
     res.status(200).json({
@@ -103,7 +127,8 @@ export const getReviewByProjectId = async (req, res) => {
       data: reviewsWithProjectData,
     });
   } catch (error) {
-    console.error("ERROR in getReviewByProjectId:", error);
+    console.error("ERROR in getReviewByProjectId:", error.message);
+    console.error("Full error stack:", error.stack); // Keep for detailed debugging
     res.status(500).json({
       success: false,
       message: "Internal server error",
