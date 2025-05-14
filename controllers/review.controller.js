@@ -148,75 +148,117 @@ export const getAllReviews = async (req, res) => {
     console.log("1. Starting to fetch all reviews...");
     const reviews = await Review.find(
       {},
-      "name email message rating createdAt projectId userId"
-    ).sort({ createdAt: -1 });
+      "message rating createdAt userId projectId" // Removed name, email as they should come from User populate
+    )
+      .populate("userId", "userName email") // Populate review author's userName and email
+      .sort({ createdAt: -1 })
+      .lean(); // Use lean for reviews as well for consistency and performance
+
     console.log("2. Reviews fetched successfully. Count:", reviews.length);
-    console.log(
-      "Sample review:",
-      reviews[0] ? reviews[0].toObject() : "No reviews found"
-    );
-
-    const projectIds = [
-      ...new Set(reviews.map((review) => review.projectId?.toString())),
-    ].filter(Boolean);
-    console.log("3. Unique project IDs extracted:", projectIds);
-
-    if (projectIds.length === 0) {
-      console.log("3a. No project IDs found in reviews");
+    if (reviews.length > 0) {
+      console.log("Sample review (after populate):", reviews[0]);
+    } else {
+      console.log("No reviews found in the database.");
       return res.status(200).json({
         success: true,
         data: [],
-        message: "No reviews with valid project IDs found",
+        message: "No reviews found",
       });
     }
 
-    console.log("4. Starting to fetch projects...");
+    const projectIds = [
+      ...new Set(reviews.map((review) => review.projectId?.toString())),
+    ].filter(Boolean); // Filter out any null/undefined projectIds
+    console.log("3. Unique project IDs extracted:", projectIds);
+
+    if (projectIds.length === 0) {
+      console.log(
+        "3a. No valid project IDs found in reviews, returning reviews as is (or an empty project array per review)."
+      );
+      // If no project IDs, reviews will have null for project.
+      // Or, you might decide to not return reviews that don't have a projectId.
+      // For now, let's map and add an empty project object if no project is found.
+      const reviewsWithoutProjectDetails = reviews.map((review) => ({
+        ...review,
+        project: null, // Or some default project structure
+      }));
+      return res.status(200).json({
+        success: true,
+        data: reviewsWithoutProjectDetails,
+        message:
+          "Reviews fetched, but no associated project details found for some/all.",
+      });
+    }
+
+    console.log("4. Starting to fetch projects with populated owners...");
     const projects = await editProject
-      .find(
-        { _id: { $in: projectIds } },
-        "projectOwners projectName projectBanner"
-      )
-      .lean();
+      .find({ _id: { $in: projectIds } })
+      .populate({
+        path: "projectOwners.ownerId", // Path to the array and the ref field
+        select: "userName email _id", // Select userName, email, and _id from User model
+      })
+      .select("projectOwners projectName projectBanner") // Select fields from editProject
+      .lean(); // Use lean here
+
     console.log("5. Projects fetched successfully. Count:", projects.length);
-    console.log("Sample project:", projects[0] || "No projects found");
+    if (projects.length > 0) {
+      console.log("Sample project (after populate):", projects[0]);
+      if (projects[0].projectOwners && projects[0].projectOwners.length > 0) {
+        console.log(
+          "Sample project owner (after populate):",
+          projects[0].projectOwners[0]
+        );
+      }
+    }
 
     const projectMap = {};
     projects.forEach((project) => {
+      // Process projectOwners to include resolvedOwnerName
+      const processedProjectOwners = (project.projectOwners || []).map(
+        (ownerSubDoc) => {
+          let resolvedOwnerName = ownerSubDoc.ownerName; // Fallback
+          let populatedOwnerIdFields = null;
+
+          if (ownerSubDoc.ownerId && typeof ownerSubDoc.ownerId === "object") {
+            populatedOwnerIdFields = ownerSubDoc.ownerId;
+            if (populatedOwnerIdFields.userName) {
+              resolvedOwnerName = populatedOwnerIdFields.userName;
+            }
+          }
+          return {
+            _id: ownerSubDoc._id,
+            ownerId: populatedOwnerIdFields
+              ? populatedOwnerIdFields._id
+              : ownerSubDoc.ownerId || null,
+            ownerName: resolvedOwnerName,
+          };
+        }
+      );
+
       projectMap[project._id.toString()] = {
-        projectOwners: project.projectOwners,
+        // Use the processed owners
+        projectOwners: processedProjectOwners,
         projectName: project.projectName,
         projectBanner: project.projectBanner,
       };
     });
     console.log("6. Project map created with keys:", Object.keys(projectMap));
 
-    const userIds = [
-      ...new Set(reviews.map((review) => review.userId?.toString())),
-    ].filter(Boolean);
-    console.log("7. Unique user IDs extracted:", userIds);
-
     console.log("8. Starting to combine review data with project data...");
-    // const reviewsWithProjectData = reviews.map((review) => {
-    //   const projectData = projectMap[review.projectId?.toString()] || null;
-    //   console.log(
-    //     `8a. Processing review ${review._id} - project data:`,
-    //     projectData ? "found" : "not found"
-    //   );
+    const reviewsWithProjectData = reviews.map((review) => {
+      const projectData = review.projectId
+        ? projectMap[review.projectId.toString()]
+        : null;
+      // console.log( // Optional: more detailed logging per review
+      //   `8a. Processing review ${review._id} - project data:`,
+      //   projectData ? "found" : "not found"
+      // );
 
-    //   return {
-    //     ...review.toObject(),
-    //     project: projectData,
-    //   };
-    // });
-    const reviewsWithProjectData = reviews
-      .filter((review) => projectMap[review.projectId?.toString()])
-      .map((review) => {
-        const projectData = projectMap[review.projectId.toString()];
-        return {
-          ...review.toObject(),
-          project: projectData,
-        };
-      });
+      return {
+        ...review, // review is already a lean object
+        project: projectData, // projectData now includes the resolved ownerName
+      };
+    });
 
     console.log("9. Final data processing complete");
 
