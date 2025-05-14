@@ -26,7 +26,7 @@ async function sendDocumentNotificationEmail(user, documentInfo) {
 
     // Email templates
     const templates = {
-      portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Notificação de Novo Documento</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">Novo Documento Disponível</h2><p style="font-size: 16px; color: #555;">Olá <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">Foi adicionado um novo documento chamado <strong>”${documentInfo.fileName}”</strong> ao projecto <strong>”${documentInfo.projectName}”</strong>.</p><p style="font-size: 16px; color: #555;">Clique no botão abaixo para aceder ao documento:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Documento</a><p style="font-size: 14px; color: #999; margin-top: 30px;">Se tiver alguma dúvida ou necessitar de assistência, a nossa equipa está disponível para o apoiar.</p><p style="font-size: 14px; color: #999;">Com os melhores cumprimentos,<br><strong>Equipa Soapro</strong></p></td></tr></table></body></html>`,
+      portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Notifica  o de Novo Documento</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">Novo Documento Dispon vel</h2><p style="font-size: 16px; color: #555;">Ol  <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">Foi adicionado um novo documento chamado <strong> ${documentInfo.fileName} </strong> ao projecto <strong> ${documentInfo.projectName} </strong>.</p><p style="font-size: 16px; color: #555;">Clique no bot o abaixo para aceder ao documento:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Documento</a><p style="font-size: 14px; color: #999; margin-top: 30px;">Se tiver alguma d vida ou necessitar de assist ncia, a nossa equipa est  dispon vel para o apoiar.</p><p style="font-size: 14px; color: #999;">Com os melhores cumprimentos,<br><strong>Equipa Soapro</strong></p></td></tr></table></body></html>`,
       english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Document Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">New Document Available</h2><p style="font-size: 16px; color: #555;">Dear <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">A new document titled <strong>"${documentInfo.fileName}"</strong> has been uploaded to the project <strong>"${documentInfo.projectName}"</strong>.</p><p style="font-size: 16px; color: #555;">Click the button below to view the document:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">View Document</a><p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p><p style="font-size: 14px; color: #999;">Best regards,<br><strong>Soapro Team</strong></p></td></tr></table></body></html>`,
     };
 
@@ -84,15 +84,15 @@ async function sendProjectNotificationEmail(
     // Email templates for different notification types
     const templates = {
       update: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualiza  o de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Atualiza  o de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das altera  es:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, fa a login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       deletion: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Eliminação de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Elimina  o de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Deleted</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Deletion Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been deleted by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">All documents and data associated with this project have been removed from the system.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       creation: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, fa a login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Project Created</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">New Project Notification</h2><p style="font-size: 16px; color: #555;">A new project <strong>${projectInfo.projectName}</strong> has been created by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Please log in to view the project details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
     };
@@ -103,7 +103,7 @@ async function sendProjectNotificationEmail(
       subject:
         userLanguage === "portuguese"
           ? type === "update"
-            ? `Atualização de Projeto: ${projectInfo.projectName}`
+            ? `Atualiza  o de Projeto: ${projectInfo.projectName}`
             : type === "deletion"
               ? `Projeto Eliminado: ${projectInfo.projectName}`
               : `Novo Projeto: ${projectInfo.projectName}`
@@ -171,7 +171,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 const editProjects = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   let transactionSucceeded = false;
-  let updatedProject; // Defined here to be accessible in the success response
+  let updatedProject;
 
   try {
     const { projectId } = req.params;
@@ -231,9 +231,9 @@ const editProjects = asyncHandler(async (req, res) => {
 
     if (isFirstUpdate) {
       updateData.isCreated = false;
-      // console.log(
-      //   "This is the first update after project creation. Setting isCreated to false."
-      // );
+      console.log(
+        "This is the first update after project creation. Setting isCreated to false."
+      );
     }
 
     // Project Name
@@ -341,10 +341,10 @@ const editProjects = asyncHandler(async (req, res) => {
         name: "Business Areas",
       },
       {
-        key: "comapanyName", // Corrected key
+        key: "comapanyName",
         newValue: newcomapanyNameInput,
         name: "Company Name",
-      },
+      }, // Corrected key
       {
         key: "physicalEducationRange",
         newValue: newPhysicalEducationRangeInput,
@@ -560,7 +560,7 @@ const editProjects = asyncHandler(async (req, res) => {
     session.startTransaction();
 
     try {
-      updatedProject = await editProject // Assign to the higher-scoped variable
+      updatedProject = await editProject
         .findByIdAndUpdate(projectId, updateData, {
           new: true,
           session,
@@ -650,8 +650,8 @@ const editProjects = asyncHandler(async (req, res) => {
             const creationDetailsPt =
               changesSummary.length === 1 &&
               changesSummary[0] === "Project has been activated."
-                ? "O Projecto está agora ativo."
-                : `Alterações: ${safeChangesText}.`;
+                ? "O Projecto est  agora ativo."
+                : `Altera  es: ${safeChangesText}.`;
             const creationDetailsEn =
               changesSummary.length === 1 &&
               changesSummary[0] === "Project has been activated."
@@ -669,7 +669,7 @@ const editProjects = asyncHandler(async (req, res) => {
           } else {
             title =
               userLanguage === "portuguese"
-                ? `Atualização de Projecto: ${safeProjectName}`
+                ? `Atualiza  o de Projecto: ${safeProjectName}`
                 : `Project Update: ${safeProjectName}`;
             description =
               userLanguage === "portuguese"
@@ -677,7 +677,7 @@ const editProjects = asyncHandler(async (req, res) => {
                 : `The project "${safeProjectName}" was updated by ${safePerformerName}: ${safeChangesText}.`;
             lengthyDesc =
               userLanguage === "portuguese"
-                ? `Detalhes da atualização: ${safeChangesText}. Realizado por ${safePerformerName}.`
+                ? `Detalhes da atualiza  o: ${safeChangesText}. Realizado por ${safePerformerName}.`
                 : `Details of update: ${safeChangesText}. Performed by ${safePerformerName}.`;
           }
 
@@ -717,16 +717,16 @@ const editProjects = asyncHandler(async (req, res) => {
             inAppNotificationsToCreate.push({
               title:
                 userLanguage === "portuguese"
-                  ? `Projecto Concluído: ${safeProjectName}`
+                  ? `Projecto Conclu do: ${safeProjectName}`
                   : `Project Completed: ${safeProjectName}`,
               type: "Review Request",
               description:
                 userLanguage === "portuguese"
-                  ? `O Projecto "${safeProjectName}" foi concluído. Por favor, avalie.`
+                  ? `O Projecto "${safeProjectName}" foi conclu do. Por favor, avalie.`
                   : `The project "${safeProjectName}" is complete. Please review.`,
               lengthyDesc:
                 userLanguage === "portuguese"
-                  ? `O Projecto "${safeProjectName}" foi marcado como concluído. Sua avaliação é importante.`
+                  ? `O Projecto "${safeProjectName}" foi marcado como conclu do. Sua avalia  o   importante.`
                   : `The project "${safeProjectName}" is marked complete. Your review is valuable.`,
               memberId: new mongoose.Types.ObjectId(userIdStr),
               projectId: updatedProject._id,
@@ -752,238 +752,233 @@ const editProjects = asyncHandler(async (req, res) => {
       await session.commitTransaction();
       transactionSucceeded = true;
 
-      // MODIFICATION POINT STARTS HERE
       const finalProjectDataForNotif = updatedProject;
 
       if (!finalProjectDataForNotif) {
         console.error(
-          `CRITICAL POST-TRANSACTION ERROR: updatedProject data is missing for project ${projectId} after commit. This should not happen.`
+          `Post-transaction error: updatedProject data is missing for project ${projectId}`
         );
-        // This throw will be caught by the outer catch block, which will handle aborting the transaction if still active (though it's committed here)
-        // and sending an error response.
-        throw new ApiError(
-          500,
-          "Internal Server Error: Project data inconsistent after update. Please contact support."
-        );
-      }
-      // MODIFICATION POINT ENDS HERE
+      } else {
+        try {
+          const finalChangesSummary = changesSummary;
+          const finalPerformerName = performingUser.userName || "A user";
+          const notificationRecipientsMap = new Map();
 
-      // Post-transaction notifications (emails, push notifications)
-      // This block now assumes finalProjectDataForNotif is valid due to the check above.
-      try {
-        const finalChangesSummary = changesSummary;
-        const finalPerformerName = performingUser.userName || "A user";
-        const notificationRecipientsMap = new Map();
-
-        (finalProjectDataForNotif.members || []).forEach((user) => {
-          if (user?._id)
-            notificationRecipientsMap.set(user._id.toString(), user);
-        });
-        (finalProjectDataForNotif.projectOwners || []).forEach((ownerObj) => {
-          if (ownerObj?.ownerId?._id)
-            notificationRecipientsMap.set(
-              ownerObj.ownerId._id.toString(),
-              ownerObj.ownerId
-            );
-        });
-        if (membersListChanged)
-          (existingProject.members || []).forEach((user) => {
-            if (
-              user?._id &&
-              !notificationRecipientsMap.has(user._id.toString())
-            )
+          (finalProjectDataForNotif.members || []).forEach((user) => {
+            if (user?._id)
               notificationRecipientsMap.set(user._id.toString(), user);
           });
-        if (ownersListChanged)
-          (existingProject.projectOwners || []).forEach((ownerObj) => {
-            if (
-              ownerObj?.ownerId?._id &&
-              !notificationRecipientsMap.has(ownerObj.ownerId._id.toString())
-            )
+          (finalProjectDataForNotif.projectOwners || []).forEach((ownerObj) => {
+            if (ownerObj?.ownerId?._id)
               notificationRecipientsMap.set(
                 ownerObj.ownerId._id.toString(),
                 ownerObj.ownerId
               );
           });
-
-        notificationRecipientsMap.delete(performingUser._id.toString());
-
-        const usersToNotify = Array.from(notificationRecipientsMap.values());
-
-        if (usersToNotify.length > 0) {
-          const userIdsToNotify = usersToNotify.map((u) => u._id.toString());
-          const finalLanguagePrefs = await LanguagePreference.find({
-            userId: { $in: userIdsToNotify },
-          }).lean();
-          const finalUserLanguageMap = {};
-          finalLanguagePrefs.forEach((pref) => {
-            finalUserLanguageMap[pref.userId.toString()] =
-              pref.languageSelected;
-          });
-          const safeProjectName =
-            finalProjectDataForNotif.projectName || "Unknown Project";
-
-          if (
-            (isFirstUpdate ||
-              importantFieldsChanged ||
-              membersListChanged ||
-              ownersListChanged) &&
-            finalChangesSummary.length > 0
-          ) {
-            const tokensByLanguage = { portuguese: [], english: [] };
-            usersToNotify.forEach((user) => {
-              const token = user.fcmDeviceToken || user.notificationToken;
-              if (token)
-                tokensByLanguage[
-                  finalUserLanguageMap[user._id.toString()] || "portuguese"
-                ].push(token);
+          if (membersListChanged)
+            (existingProject.members || []).forEach((user) => {
+              if (
+                user?._id &&
+                !notificationRecipientsMap.has(user._id.toString())
+              )
+                notificationRecipientsMap.set(user._id.toString(), user);
             });
-            const pushSummary = finalChangesSummary.map(String).join("; ");
+          if (ownersListChanged)
+            (existingProject.projectOwners || []).forEach((ownerObj) => {
+              if (
+                ownerObj?.ownerId?._id &&
+                !notificationRecipientsMap.has(ownerObj.ownerId._id.toString())
+              )
+                notificationRecipientsMap.set(
+                  ownerObj.ownerId._id.toString(),
+                  ownerObj.ownerId
+                );
+            });
 
-            if (tokensByLanguage.portuguese.length > 0) {
-              const pushTitle = isFirstUpdate
-                ? `Novo Projecto Criado: ${safeProjectName}`
-                : `Atualização de Projecto: ${safeProjectName}`;
-              const pushBody = isFirstUpdate
-                ? `Novo projecto "${safeProjectName}" criado por ${finalPerformerName}. ${pushSummary}`
-                : `O projecto "${safeProjectName}" foi atualizado por ${finalPerformerName}: ${pushSummary}`;
-              sendPushNotification(
-                tokensByLanguage.portuguese,
-                pushTitle,
-                pushBody,
-                {
-                  projectId: finalProjectDataForNotif._id.toString(),
-                  type: isFirstUpdate ? "PROJECT_CREATED" : "PROJECT_UPDATE",
-                }
-              ).catch((e) =>
-                console.error(
-                  `Push Error (PT ${isFirstUpdate ? "Creation" : "Update"}) for ${finalProjectDataForNotif._id}: ${e.message}`
-                )
-              );
-            }
-            if (tokensByLanguage.english.length > 0) {
-              const pushTitle = isFirstUpdate
-                ? `New Project Created: ${safeProjectName}`
-                : `Project Update: ${safeProjectName}`;
-              const pushBody = isFirstUpdate
-                ? `New project "${safeProjectName}" created by ${finalPerformerName}. ${pushSummary}`
-                : `The project "${safeProjectName}" was updated by ${finalPerformerName}: ${pushSummary}`;
-              sendPushNotification(
-                tokensByLanguage.english,
-                pushTitle,
-                pushBody,
-                {
-                  projectId: finalProjectDataForNotif._id.toString(),
-                  type: isFirstUpdate ? "PROJECT_CREATED" : "PROJECT_UPDATE",
-                }
-              ).catch((e) =>
-                console.error(
-                  `Push Error (EN ${isFirstUpdate ? "Creation" : "Update"}) for ${finalProjectDataForNotif._id}: ${e.message}`
-                )
-              );
-            }
-          }
+          notificationRecipientsMap.delete(performingUser._id.toString());
 
-          if (
-            (isFirstUpdate ||
-              importantFieldsChanged ||
-              membersListChanged ||
-              ownersListChanged) &&
-            finalChangesSummary.length > 0 &&
-            usersToNotify.some((u) => u.email)
-          ) {
-            for (const user of usersToNotify) {
-              if (user.email) {
-                const emailType = isFirstUpdate ? "creation" : "update";
-                sendProjectNotificationEmail(
-                  user,
-                  { projectName: safeProjectName },
-                  performingUser,
-                  finalChangesSummary,
-                  emailType
+          const usersToNotify = Array.from(notificationRecipientsMap.values());
+
+          if (usersToNotify.length > 0) {
+            const userIdsToNotify = usersToNotify.map((u) => u._id.toString());
+            const finalLanguagePrefs = await LanguagePreference.find({
+              userId: { $in: userIdsToNotify },
+            }).lean();
+            const finalUserLanguageMap = {};
+            finalLanguagePrefs.forEach((pref) => {
+              finalUserLanguageMap[pref.userId.toString()] =
+                pref.languageSelected;
+            });
+            const safeProjectName =
+              finalProjectDataForNotif.projectName || "Unknown Project";
+
+            if (
+              (isFirstUpdate ||
+                importantFieldsChanged ||
+                membersListChanged ||
+                ownersListChanged) &&
+              finalChangesSummary.length > 0
+            ) {
+              const tokensByLanguage = { portuguese: [], english: [] };
+              usersToNotify.forEach((user) => {
+                const token = user.fcmDeviceToken || user.notificationToken;
+                if (token)
+                  tokensByLanguage[
+                    finalUserLanguageMap[user._id.toString()] || "portuguese"
+                  ].push(token);
+              });
+              const pushSummary = finalChangesSummary.map(String).join("; ");
+
+              if (tokensByLanguage.portuguese.length > 0) {
+                const pushTitle = isFirstUpdate
+                  ? `Novo Projecto Criado: ${safeProjectName}`
+                  : `Atualiza  o de Projecto: ${safeProjectName}`;
+                const pushBody = isFirstUpdate
+                  ? `Novo projecto "${safeProjectName}" criado por ${finalPerformerName}. ${pushSummary}`
+                  : `O projecto "${safeProjectName}" foi atualizado por ${finalPerformerName}: ${pushSummary}`;
+                sendPushNotification(
+                  tokensByLanguage.portuguese,
+                  pushTitle,
+                  pushBody,
+                  {
+                    projectId: finalProjectDataForNotif._id.toString(),
+                    type: isFirstUpdate ? "PROJECT_CREATED" : "PROJECT_UPDATE",
+                  }
                 ).catch((e) =>
                   console.error(
-                    `Email Error (${emailType}) to ${user.email} for ${finalProjectDataForNotif._id}: ${e.message}`
+                    `Push Error (PT ${isFirstUpdate ? "Creation" : "Update"}) for ${finalProjectDataForNotif._id}: ${e.message}`
+                  )
+                );
+              }
+              if (tokensByLanguage.english.length > 0) {
+                const pushTitle = isFirstUpdate
+                  ? `New Project Created: ${safeProjectName}`
+                  : `Project Update: ${safeProjectName}`;
+                const pushBody = isFirstUpdate
+                  ? `New project "${safeProjectName}" created by ${finalPerformerName}. ${pushSummary}`
+                  : `The project "${safeProjectName}" was updated by ${finalPerformerName}: ${pushSummary}`;
+                sendPushNotification(
+                  tokensByLanguage.english,
+                  pushTitle,
+                  pushBody,
+                  {
+                    projectId: finalProjectDataForNotif._id.toString(),
+                    type: isFirstUpdate ? "PROJECT_CREATED" : "PROJECT_UPDATE",
+                  }
+                ).catch((e) =>
+                  console.error(
+                    `Push Error (EN ${isFirstUpdate ? "Creation" : "Update"}) for ${finalProjectDataForNotif._id}: ${e.message}`
                   )
                 );
               }
             }
-          }
 
-          if (statusChangedToCompleted) {
-            const reviewUserIds = new Set();
-            (finalProjectDataForNotif.members || []).forEach(
-              (m) => m?._id && reviewUserIds.add(m._id.toString())
-            );
-            (finalProjectDataForNotif.projectOwners || []).forEach(
-              (o) =>
-                o?.ownerId?._id && reviewUserIds.add(o.ownerId._id.toString())
-            );
-            reviewUserIds.delete(performingUser._id.toString());
+            if (
+              (isFirstUpdate ||
+                importantFieldsChanged ||
+                membersListChanged ||
+                ownersListChanged) &&
+              finalChangesSummary.length > 0 &&
+              usersToNotify.some((u) => u.email)
+            ) {
+              for (const user of usersToNotify) {
+                if (user.email) {
+                  const emailType = isFirstUpdate ? "creation" : "update";
+                  // Await this call if its failure should be noted or stop anything,
+                  // or ensure its internal error handling is robust.
+                  // For now, keeping it as fire-and-forget with internal logging.
+                  sendProjectNotificationEmail(
+                    user,
+                    { projectName: safeProjectName },
+                    performingUser,
+                    finalChangesSummary,
+                    emailType
+                  ).catch((e) =>
+                    console.error(
+                      `Email Error (${emailType}) to ${user.email} for ${finalProjectDataForNotif._id}: ${e.message}`
+                    )
+                  );
+                }
+              }
+            }
 
-            const usersForReviewPush = usersToNotify.filter((u) =>
-              reviewUserIds.has(u._id.toString())
-            );
-            if (usersForReviewPush.length > 0) {
-              const reviewTokensByLanguage = { portuguese: [], english: [] };
-              usersForReviewPush.forEach((user) => {
-                const token = user.fcmDeviceToken || user.notificationToken;
-                if (token)
-                  reviewTokensByLanguage[
-                    finalUserLanguageMap[user._id.toString()] || "portuguese"
-                  ].push(token);
-              });
-              if (reviewTokensByLanguage.portuguese.length > 0)
-                sendPushNotification(
-                  reviewTokensByLanguage.portuguese,
-                  `Por favor, avalie o Projecto ${safeProjectName}`,
-                  `O Projecto foi concluído. Sua avaliação é importante!`,
-                  {
-                    projectId: finalProjectDataForNotif._id.toString(),
-                    type: "REVIEW_REQUEST",
-                  }
-                ).catch((e) =>
-                  console.error(
-                    `Push Error (PT Review) for ${finalProjectDataForNotif._id}: ${e.message}`
-                  )
-                );
-              if (reviewTokensByLanguage.english.length > 0)
-                sendPushNotification(
-                  reviewTokensByLanguage.english,
-                  `Please review project ${safeProjectName}`,
-                  `The project has been completed. Your feedback is important!`,
-                  {
-                    projectId: finalProjectDataForNotif._id.toString(),
-                    type: "REVIEW_REQUEST",
-                  }
-                ).catch((e) =>
-                  console.error(
-                    `Push Error (EN Review) for ${finalProjectDataForNotif._id}: ${e.message}`
-                  )
-                );
+            if (statusChangedToCompleted) {
+              const reviewUserIds = new Set();
+              (finalProjectDataForNotif.members || []).forEach(
+                (m) => m?._id && reviewUserIds.add(m._id.toString())
+              );
+              (finalProjectDataForNotif.projectOwners || []).forEach(
+                (o) =>
+                  o?.ownerId?._id && reviewUserIds.add(o.ownerId._id.toString())
+              );
+              reviewUserIds.delete(performingUser._id.toString());
+
+              const usersForReviewPush = usersToNotify.filter((u) =>
+                reviewUserIds.has(u._id.toString())
+              );
+              if (usersForReviewPush.length > 0) {
+                const reviewTokensByLanguage = { portuguese: [], english: [] };
+                usersForReviewPush.forEach((user) => {
+                  const token = user.fcmDeviceToken || user.notificationToken;
+                  if (token)
+                    reviewTokensByLanguage[
+                      finalUserLanguageMap[user._id.toString()] || "portuguese"
+                    ].push(token);
+                });
+                if (reviewTokensByLanguage.portuguese.length > 0)
+                  sendPushNotification(
+                    reviewTokensByLanguage.portuguese,
+                    `Por favor, avalie o Projecto ${safeProjectName}`,
+                    `O Projecto foi conclu do. Sua avalia  o   importante!`,
+                    {
+                      projectId: finalProjectDataForNotif._id.toString(),
+                      type: "REVIEW_REQUEST",
+                    }
+                  ).catch((e) =>
+                    console.error(
+                      `Push Error (PT Review) for ${finalProjectDataForNotif._id}: ${e.message}`
+                    )
+                  );
+                if (reviewTokensByLanguage.english.length > 0)
+                  sendPushNotification(
+                    reviewTokensByLanguage.english,
+                    `Please review project ${safeProjectName}`,
+                    `The project has been completed. Your feedback is important!`,
+                    {
+                      projectId: finalProjectDataForNotif._id.toString(),
+                      type: "REVIEW_REQUEST",
+                    }
+                  ).catch((e) =>
+                    console.error(
+                      `Push Error (EN Review) for ${finalProjectDataForNotif._id}: ${e.message}`
+                    )
+                  );
+              }
             }
           }
+        } catch (notificationError) {
+          console.error(
+            `Error during post-transaction notifications for project ${finalProjectDataForNotif?._id}:`,
+            notificationError
+          );
         }
-      } catch (notificationError) {
-        console.error(
-          `Error during post-transaction notifications for project ${finalProjectDataForNotif._id}:`, // finalProjectDataForNotif is guaranteed non-null here
-          notificationError
-        );
       }
 
       // Ensure this is the only response sent on success path
-      return res.status(200).json(
-        new ApiResponse(
-          200,
-          finalProjectDataForNotif, // Use directly, now guaranteed to be non-null
-          "Project updated successfully."
-        )
-      );
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            finalProjectDataForNotif || updatedProject,
+            "Project updated successfully."
+          )
+        );
     } catch (errorInTransaction) {
       if (session.inTransaction()) {
-        // console.log(
-        //   "Aborting transaction due to error during update/notification phase..."
-        // );
+        console.log(
+          "Aborting transaction due to error during update/notification phase..."
+        );
         await session.abortTransaction();
       }
       console.error(
@@ -995,9 +990,9 @@ const editProjects = asyncHandler(async (req, res) => {
   } catch (error) {
     if (session && session.inTransaction() && !transactionSucceeded) {
       try {
-        // console.log(
-        //   "Aborting transaction due to error in outer catch block..."
-        // );
+        console.log(
+          "Aborting transaction due to error in outer catch block..."
+        );
         await session.abortTransaction();
       } catch (abortError) {
         console.error("Error aborting transaction in outer catch:", abortError);
@@ -1017,6 +1012,7 @@ const editProjects = asyncHandler(async (req, res) => {
           : [];
 
     if (!res.headersSent) {
+      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(
@@ -1048,7 +1044,7 @@ const createProject = asyncHandler(async (req, res) => {
       location,
       status,
       businessAreas,
-      comapanyName, // Corrected typo
+      comapanyName, // Corrected typo from comapanyName
       deadline: newDeadlineInput,
       physicalEducationRange,
       financialEducationRange,
@@ -1156,7 +1152,7 @@ const createProject = asyncHandler(async (req, res) => {
       daysLeft: daysLeft || null,
       projectBanner: projectBanners,
       createdBy: performingUser?._id,
-      isCreated: true,
+      isCreated: true, // Explicitly set for new projects, can be used by editProjects logic
       logs: [
         {
           actionType: "Project Creation",
@@ -1168,9 +1164,6 @@ const createProject = asyncHandler(async (req, res) => {
     };
 
     const project = await editProject.create(projectData);
-
-    // If project creation fails, `editProject.create` will throw, and this part won't be reached.
-    // If it succeeds, `project` will be the created document.
 
     if (project && (validatedProjectOwners.length > 0 || performingUser?._id)) {
       const recipientUserIds = new Set(
@@ -1194,7 +1187,7 @@ const createProject = asyncHandler(async (req, res) => {
 
           if (usersForNotification.length > 0) {
             const userLanguageMap = await getUserLanguagePreferences(
-              usersForNotification.map((u) => u._id.toString())
+              usersForNotification.map((u) => u._id.toString()) // Use actual users found
             );
 
             const inAppNotificationsToCreate = usersForNotification.map(
@@ -1248,11 +1241,13 @@ const createProject = asyncHandler(async (req, res) => {
 
             const usersWithEmails = usersForNotification.filter((u) => u.email);
             for (const user of usersWithEmails) {
+              // Await this if its failure should be critical,
+              // or rely on its internal error handling if it's fire-and-forget.
               await sendProjectNotificationEmail(
                 user,
                 { projectName: project.projectName },
-                performingUser || { userName: "sistema" },
-                [],
+                performingUser || { userName: "sistema" }, // Ensure performingUser is not null
+                [], // No changes summary for creation, or provide relevant info
                 "creation"
               );
             }
@@ -1262,9 +1257,11 @@ const createProject = asyncHandler(async (req, res) => {
             "Failed to send project creation notifications:",
             error.message
           );
+          // Do not re-throw here if notification failure should not fail the whole request
         }
       }
     }
+    // Ensure this is the only response sent on success path
     return res
       .status(201)
       .json(new ApiResponse(201, project, "Project created successfully"));
@@ -1287,6 +1284,7 @@ const createProject = asyncHandler(async (req, res) => {
           (error.name === "ValidationError" ? error.errors : []);
 
     if (!res.headersSent) {
+      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(new ApiResponse(statusCode, null, message, errors));
@@ -1347,14 +1345,21 @@ const getAllProjects = asyncHandler(async (req, res) => {
       }
 
       if (baseFilter.$or && userAccessConditions.length > 0) {
+        // If baseFilter already has an $or (from search), and we also have user access $or conditions
         finalFilter = {
-          $and: [baseFilter, { $or: userAccessConditions }],
+          $and: [
+            baseFilter, // This contains the original $or from search
+            { $or: userAccessConditions }, // This is the new $or for access
+          ],
         };
       } else if (baseFilter.$or) {
+        // Only search $or exists
         finalFilter = baseFilter;
       } else if (userAccessConditions.length > 0) {
-        finalFilter.$or = userAccessConditions;
+        // Only user access $or exists
+        finalFilter.$or = userAccessConditions; // Add it to the existing finalFilter (which might have status)
       }
+      // If neither $or exists, finalFilter remains baseFilter (which might be empty or just have status)
     }
 
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -1737,7 +1742,7 @@ const deleteProject = asyncHandler(async (req, res) => {
       .lean();
 
     if (!projectToDelete) {
-      await session.abortTransaction();
+      await session.abortTransaction(); // Abort if project not found before trying to delete
       session.endSession();
       throw new ApiError(404, "Project not found.");
     }
@@ -1774,16 +1779,18 @@ const deleteProject = asyncHandler(async (req, res) => {
         )
     );
 
+    // Ensure performingUser details are available for notifications, even if not in project lists
     let performingUserDetailsForNotif = performingUser;
     if (
       performingUser?._id &&
       !notificationRecipients.has(performingUser._id.toString())
     ) {
+      // Fetch if not already populated with notification tokens, etc.
       const performer = await User.findById(performingUser._id)
         .select("email userName _id notificationToken fcmDeviceToken")
         .lean();
       if (performer) {
-        performingUserDetailsForNotif = performer;
+        performingUserDetailsForNotif = performer; // Use potentially more complete user object
         notificationRecipients.set(performer._id.toString(), performer);
       }
     } else if (performingUser?._id) {
@@ -1812,7 +1819,7 @@ const deleteProject = asyncHandler(async (req, res) => {
             ? `O projeto "${deletedProjectName}" foi eliminado por ${performingUserDetailsForNotif.userName}.`
             : `The project "${deletedProjectName}" was deleted by ${performingUserDetailsForNotif.userName}.`,
           lengthyDesc: isPortuguese
-            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. Ação realizada por ${performingUserDetailsForNotif.userName}.`
+            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. A  o realizada por ${performingUserDetailsForNotif.userName}.`
             : `All documents and data associated with project "${deletedProjectName}" have been removed from the system. Action performed by ${performingUserDetailsForNotif.userName}.`,
           memberId: user._id,
           projectId: deletedProjectId,
@@ -1821,12 +1828,13 @@ const deleteProject = asyncHandler(async (req, res) => {
       if (inAppNotificationsToCreate.length > 0) {
         await ShowNotification.create(inAppNotificationsToCreate, {
           session,
-          ordered: false,
+          ordered: false, // Changed to false for potentially better performance
         });
       }
     }
 
     await session.commitTransaction();
+    // Notifications (push, email) are sent after successful commit
 
     if (usersToNotify.length > 0) {
       const usersWithTokens = usersToNotify.filter(
@@ -1874,6 +1882,7 @@ const deleteProject = asyncHandler(async (req, res) => {
       );
   } catch (error) {
     if (session.inTransaction()) {
+      // Check if transaction is active before aborting
       await session.abortTransaction();
     }
     console.error("Error deleting project (FULL ERROR OBJECT):", error);
@@ -1884,6 +1893,7 @@ const deleteProject = asyncHandler(async (req, res) => {
         : "An error occurred while deleting the project.";
 
     if (!res.headersSent) {
+      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(new ApiResponse(statusCode, null, message, error.errors || []));
@@ -1894,6 +1904,7 @@ const deleteProject = asyncHandler(async (req, res) => {
     }
   } finally {
     if (session) {
+      // ensure session exists before trying to end it
       session.endSession();
     }
   }
