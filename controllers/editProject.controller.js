@@ -191,7 +191,7 @@ const editProjects = asyncHandler(async (req, res) => {
       description: newDescriptionInput,
       location: newLocationInput,
       businessAreas: newBusinessAreasInput,
-      companyName: newCompanyNameInput, // Corrected typo from comapanyName
+      comapanyName: newcomapanyNameInput, // Corrected typo from comapanyName
       members: newMemberIdsInput,
       status: newStatusInput,
       deadline: newDeadlineInput,
@@ -341,8 +341,8 @@ const editProjects = asyncHandler(async (req, res) => {
         name: "Business Areas",
       },
       {
-        key: "companyName",
-        newValue: newCompanyNameInput,
+        key: "comapanyName",
+        newValue: newcomapanyNameInput,
         name: "Company Name",
       }, // Corrected key
       {
@@ -1044,7 +1044,7 @@ const createProject = asyncHandler(async (req, res) => {
       location,
       status,
       businessAreas,
-      companyName, // Corrected typo from comapanyName
+      comapanyName, // Corrected typo from comapanyName
       deadline: newDeadlineInput,
       physicalEducationRange,
       financialEducationRange,
@@ -1143,7 +1143,7 @@ const createProject = asyncHandler(async (req, res) => {
       projectOwners: validatedProjectOwners,
       description,
       businessAreas,
-      companyName, // Corrected typo
+      comapanyName, // Corrected typo
       location,
       status: status || "Ongoing",
       deadline: validatedDeadline,
@@ -1324,7 +1324,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         { projectName: searchRegex },
         { description: searchRegex },
         { location: searchRegex },
-        { companyName: searchRegex }, // Corrected typo
+        { comapanyName: searchRegex }, // Corrected typo
       ];
     }
 
