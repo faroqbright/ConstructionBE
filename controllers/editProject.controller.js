@@ -1,14 +1,15 @@
+// Assuming this is your project controller file (e.g., project.controller.js)
 import mongoose from "mongoose";
 import { v4 as uuidv4 } from "uuid";
-import { editProject } from "../models/project.model.js";
+import { editProject } from "../models/project.model.js"; // Ensure this model name is correct
 import { User } from "../models/user.model.js";
 import { ShowNotification } from "../models/showNotificationSchema.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { uploadToS3 } from "../utils/cloudinary.js";
-import { SendEmailUtil } from "../utils/emailsender.js";
-import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
+import { uploadToS3 } from "../utils/cloudinary.js"; // Ensure path is correct
+import { SendEmailUtil } from "../utils/emailsender.js"; // Ensure path is correct
+import { sendNotification as sendPushNotification } from "../utils/firebase.service.js"; // Ensure path is correct
 import { AdditionalMilestone } from "../models/additionalMilestone.js";
 import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
@@ -171,10 +172,10 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 const editProjects = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   let transactionSucceeded = false;
-  let updatedProject;
+  let updatedProject; // Renamed from project for clarity in this scope
 
   try {
-    const { projectId } = req.params;
+    const { projectId } = req.params; // Assuming projectId is the name from your route parameter
     const performingUser = req.user;
 
     if (!performingUser || !performingUser._id || !performingUser.userName) {
@@ -185,24 +186,25 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid project ID format.");
     }
 
+    // Destructure all expected fields from req.body
     const {
       projectName: newProjectNameInput,
-      projectOwners: newProjectOwnerIdsInput,
+      projectOwners: newProjectOwnerIdsInput, // Array of owner IDs
       description: newDescriptionInput,
       location: newLocationInput,
       businessAreas: newBusinessAreasInput,
-      comapanyName: newcomapanyNameInput, // Corrected typo from comapanyName
-      members: newMemberIdsInput,
+      comapanyName: newcomapanyNameInput, // Typo, consider correcting to companyName globally
+      members: newMemberIdsInput, // Array of member IDs
       status: newStatusInput,
-      deadline: newDeadlineInput,
+      deadline: newDeadlineInput, // This is the string like "MM/DD/YYYY - MM/DD/YYYY" or null/empty
       physicalEducationRange: newPhysicalEducationRangeInput,
       financialEducationRange: newFinancialEducationRangeInput,
-      removeBanners = [],
+      removeBanners = [], // Expects array of URLs to remove
     } = req.body;
 
-    const { files } = req;
+    const { files } = req; // For file uploads (e.g., projectBanner)
 
-    const existingProject = await editProject
+    const existingProject = await editProject // Use your model name
       .findById(projectId)
       .populate(
         "projectOwners.ownerId",
@@ -212,7 +214,7 @@ const editProjects = asyncHandler(async (req, res) => {
         "members",
         "email userName _id notificationToken fcmDeviceToken"
       )
-      .lean();
+      .lean(); // Use .lean() for performance if you don't need Mongoose documents
 
     if (!existingProject) {
       throw new ApiError(404, "Project not found.");
@@ -282,40 +284,24 @@ const editProjects = asyncHandler(async (req, res) => {
       if (newStatusInput === "Completed") statusChangedToCompleted = true;
     }
 
-    // Deadline
+    // ========================= DEADLINE FIX START =========================
+    // Deadline - Assuming 'deadline' is stored as a String in your Mongoose schema
+    // e.g., "MM/DD/YYYY - MM/DD/YYYY" or null
     if (newDeadlineInput !== undefined) {
-      const normalizedNewDeadline =
+      // Check if deadline was part of the payload
+      // Normalize empty string to null if that's how you want to represent "no deadline"
+      const payloadDeadlineString =
         newDeadlineInput === "" || newDeadlineInput === null
           ? null
           : newDeadlineInput;
-      const normalizedExistingDeadline = existingProject.deadline
-        ? new Date(existingProject.deadline).toISOString()
-        : null;
-      let newDeadlineForComparison = null;
-      let newDeadlineForUpdate = null;
-      if (normalizedNewDeadline) {
-        try {
-          const parsedDate = new Date(normalizedNewDeadline);
-          if (!isNaN(parsedDate.getTime())) {
-            newDeadlineForComparison = parsedDate.toISOString();
-            newDeadlineForUpdate = parsedDate;
-          } else {
-            console.warn(
-              `Invalid date format for deadline: ${normalizedNewDeadline}`
-            );
-          }
-        } catch (e) {
-          console.warn(`Error parsing deadline: ${normalizedNewDeadline}`, e);
-        }
-      }
-      if (newDeadlineForComparison !== normalizedExistingDeadline) {
-        updateData.deadline = newDeadlineForUpdate;
-        const oldDeadlineDisplay = existingProject.deadline
-          ? new Date(existingProject.deadline).toLocaleDateString()
-          : "N/A";
-        const newDeadlineDisplay = updateData.deadline
-          ? new Date(updateData.deadline).toLocaleDateString()
-          : "cleared";
+      const currentDbDeadlineString = existingProject.deadline || null;
+
+      if (payloadDeadlineString !== currentDbDeadlineString) {
+        updateData.deadline = payloadDeadlineString; // Store the string directly
+
+        const oldDeadlineDisplay = currentDbDeadlineString || "N/A";
+        const newDeadlineDisplay = payloadDeadlineString || "cleared";
+
         logs.push({
           actionType: "Deadline Change",
           message: `Deadline updated from "${oldDeadlineDisplay}" to "${newDeadlineDisplay}" by ${performingUser.userName}`,
@@ -326,6 +312,7 @@ const editProjects = asyncHandler(async (req, res) => {
         importantFieldsChanged = true;
       }
     }
+    // ========================== DEADLINE FIX END ==========================
 
     // Simple Fields
     const simpleFieldUpdates = [
@@ -341,10 +328,10 @@ const editProjects = asyncHandler(async (req, res) => {
         name: "Business Areas",
       },
       {
-        key: "comapanyName",
+        key: "comapanyName", // Consider correcting typo to companyName
         newValue: newcomapanyNameInput,
         name: "Company Name",
-      }, // Corrected key
+      },
       {
         key: "physicalEducationRange",
         newValue: newPhysicalEducationRangeInput,
@@ -356,12 +343,14 @@ const editProjects = asyncHandler(async (req, res) => {
         name: "Financial Education Range",
       },
     ];
+
     simpleFieldUpdates.forEach(({ key, newValue, name }) => {
+      // Check if newValue is actually provided in the request and different from existing
       if (newValue !== undefined && newValue !== existingProject[key]) {
         updateData[key] = newValue;
         logs.push({
           actionType: `${name} Update`,
-          message: `${name} updated by ${performingUser.userName}`,
+          message: `${name} updated by ${performingUser.userName}. Old: "${existingProject[key]}", New: "${newValue}"`,
           userId: performingUser._id,
           timestamp: new Date(),
         });
@@ -427,7 +416,7 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     }
 
-    // Owners
+    // Owners (projectOwners)
     if (Array.isArray(newProjectOwnerIdsInput)) {
       const potentialOwnerIdStrings = newProjectOwnerIdsInput
         .map((idInput) => {
@@ -468,7 +457,7 @@ const editProjects = asyncHandler(async (req, res) => {
         JSON.stringify([...existingOwnerIds].sort())
       ) {
         updateData.projectOwners = validatedNewOwnerIds.map((id) => ({
-          ownerId: new mongoose.Types.ObjectId(id),
+          ownerId: new mongoose.Types.ObjectId(id), // Schema for projectOwners is likely an array of objects
         }));
         ownersListChanged = true;
         logs.push({
@@ -485,26 +474,33 @@ const editProjects = asyncHandler(async (req, res) => {
     // Banner processing
     let bannersChanged = false;
     if (Array.isArray(removeBanners) && removeBanners.length > 0) {
-      const initialBannerCount = updatedProjectBanners.length;
-      updatedProjectBanners = updatedProjectBanners.filter(
-        (b) => b?.url && !removeBanners.includes(b.url)
+      const validUrlsToRemove = removeBanners.filter(
+        (url) => typeof url === "string" && url.trim() !== ""
       );
-      if (updatedProjectBanners.length < initialBannerCount) {
-        logs.push({
-          actionType: "Banner Removal",
-          message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
-          userId: performingUser._id,
-          timestamp: new Date(),
-        });
-        changesSummary.push(
-          `${initialBannerCount - updatedProjectBanners.length} banner(s) removed`
+      if (validUrlsToRemove.length > 0) {
+        const initialBannerCount = updatedProjectBanners.length;
+        updatedProjectBanners = updatedProjectBanners.filter(
+          (b) => b?.url && !validUrlsToRemove.includes(b.url)
         );
-        importantFieldsChanged = true;
-        bannersChanged = true;
+        if (updatedProjectBanners.length < initialBannerCount) {
+          logs.push({
+            actionType: "Banner Removal",
+            message: `${initialBannerCount - updatedProjectBanners.length} banner(s) removed by ${performingUser.userName}`,
+            userId: performingUser._id,
+            timestamp: new Date(),
+          });
+          changesSummary.push(
+            `${initialBannerCount - updatedProjectBanners.length} banner(s) removed`
+          );
+          importantFieldsChanged = true;
+          bannersChanged = true;
+        }
       }
     }
+
     if (files?.projectBanner?.length > 0) {
       if (updatedProjectBanners.length + files.projectBanner.length > 10) {
+        // Or your defined limit
         throw new ApiError(
           400,
           `Cannot upload ${files.projectBanner.length} new banner(s). Max 10 allowed (have ${updatedProjectBanners.length}).`
@@ -514,6 +510,7 @@ const editProjects = asyncHandler(async (req, res) => {
         try {
           const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
           const uploadedImageUrl = await uploadToS3(
+            // Ensure uploadToS3 is correctly imported and configured
             file.buffer,
             uniqueFileName,
             file.mimetype
@@ -526,10 +523,12 @@ const editProjects = asyncHandler(async (req, res) => {
             `Error uploading banner ${file.originalname}:`,
             uploadError
           );
-          return null;
+          // Decide if one failed upload should fail the whole request or just be skipped
+          return null; // Or throw new ApiError(500, "Banner upload failed for " + file.originalname);
         }
       });
-      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean);
+      const newBanners = (await Promise.all(uploadPromises)).filter(Boolean); // Filter out nulls from failed uploads
+
       if (newBanners.length > 0) {
         updatedProjectBanners.push(...newBanners);
         logs.push({
@@ -543,6 +542,7 @@ const editProjects = asyncHandler(async (req, res) => {
         bannersChanged = true;
       }
     }
+
     if (bannersChanged) {
       updateData.projectBanner = updatedProjectBanners;
     }
@@ -554,17 +554,17 @@ const editProjects = asyncHandler(async (req, res) => {
     }
 
     if (logs.length > 0) {
-      updateData.$push = { logs: { $each: logs, $slice: -50 } };
+      updateData.$push = { logs: { $each: logs, $slice: -50 } }; // Limit logs array size
     }
 
     session.startTransaction();
 
     try {
-      updatedProject = await editProject
+      updatedProject = await editProject // Use your model name
         .findByIdAndUpdate(projectId, updateData, {
-          new: true,
-          session,
-          runValidators: true,
+          new: true, // Return the modified document
+          session, // Include the session for atomicity
+          runValidators: true, // Ensure schema validations run
         })
         .populate(
           "projectOwners.ownerId",
@@ -574,18 +574,22 @@ const editProjects = asyncHandler(async (req, res) => {
           "members",
           "email userName _id notificationToken fcmDeviceToken"
         )
-        .lean();
+        .lean(); // Use .lean() if you only need plain JS objects for the response
 
       if (!updatedProject) {
+        // This case should ideally not happen if existingProject was found,
+        // but good to have a guard.
         throw new ApiError(
           404,
-          "Update failed. Project might have been deleted."
+          "Update failed. Project might have been deleted concurrently."
         );
       }
 
+      // --- Start Notification Logic (simplified for brevity, keep your existing complex logic) ---
       const inAppNotificationsToCreate = [];
       const performingUserIdStr = performingUser._id.toString();
       const involvedUserIdsForNotif = new Set();
+
       (updatedProject.members || []).forEach(
         (m) => m?._id && involvedUserIdsForNotif.add(m._id.toString())
       );
@@ -646,7 +650,6 @@ const editProjects = asyncHandler(async (req, res) => {
               userLanguage === "portuguese"
                 ? `Novo Projecto Criado: ${safeProjectName}`
                 : `New Project Created: ${safeProjectName}`;
-
             const creationDetailsPt =
               changesSummary.length === 1 &&
               changesSummary[0] === "Project has been activated."
@@ -657,7 +660,6 @@ const editProjects = asyncHandler(async (req, res) => {
               changesSummary[0] === "Project has been activated."
                 ? "The project is now active."
                 : `Changes: ${safeChangesText}.`;
-
             description =
               userLanguage === "portuguese"
                 ? `Um novo Projecto "${safeProjectName}" foi criado por ${safePerformerName}. ${creationDetailsPt}`
@@ -746,13 +748,17 @@ const editProjects = asyncHandler(async (req, res) => {
             `In-app notification error (project ${projectId}):`,
             notificationError
           );
+          // Decide if this error should abort the transaction or be logged and ignored
         }
       }
+      // --- End Notification Logic ---
 
       await session.commitTransaction();
-      transactionSucceeded = true;
+      transactionSucceeded = true; // Mark transaction as succeeded
 
-      const finalProjectDataForNotif = updatedProject;
+      // Post-transaction notifications (Email, Push) - keep your existing logic
+      // This ensures they are sent only if the DB update was successful.
+      const finalProjectDataForNotif = updatedProject; // Use the committed data
 
       if (!finalProjectDataForNotif) {
         console.error(
@@ -796,7 +802,6 @@ const editProjects = asyncHandler(async (req, res) => {
             });
 
           notificationRecipientsMap.delete(performingUser._id.toString());
-
           const usersToNotify = Array.from(notificationRecipientsMap.values());
 
           if (usersToNotify.length > 0) {
@@ -884,9 +889,6 @@ const editProjects = asyncHandler(async (req, res) => {
               for (const user of usersToNotify) {
                 if (user.email) {
                   const emailType = isFirstUpdate ? "creation" : "update";
-                  // Await this call if its failure should be noted or stop anything,
-                  // or ensure its internal error handling is robust.
-                  // For now, keeping it as fire-and-forget with internal logging.
                   sendProjectNotificationEmail(
                     user,
                     { projectName: safeProjectName },
@@ -964,17 +966,15 @@ const editProjects = asyncHandler(async (req, res) => {
         }
       }
 
-      // Ensure this is the only response sent on success path
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            finalProjectDataForNotif || updatedProject,
-            "Project updated successfully."
-          )
-        );
+      return res.status(200).json(
+        new ApiResponse(
+          200,
+          finalProjectDataForNotif || updatedProject, // Send the latest data
+          "Project updated successfully."
+        )
+      );
     } catch (errorInTransaction) {
+      // If an error occurs during the transaction (e.g., validation error, DB error)
       if (session.inTransaction()) {
         console.log(
           "Aborting transaction due to error during update/notification phase..."
@@ -985,9 +985,11 @@ const editProjects = asyncHandler(async (req, res) => {
         "Error during project update transaction:",
         errorInTransaction
       );
-      throw errorInTransaction; // Propagate to outer catch / asyncHandler
+      // Propagate the error so it's handled by the outer catch / asyncHandler
+      throw errorInTransaction;
     }
   } catch (error) {
+    // This catches errors from before the transaction starts, or propagated from within.
     if (session && session.inTransaction() && !transactionSucceeded) {
       try {
         console.log(
@@ -999,6 +1001,8 @@ const editProjects = asyncHandler(async (req, res) => {
       }
     }
     console.error("Error in editProjects controller:", error);
+
+    // Determine status code and message
     const statusCode = error instanceof ApiError ? error.statusCode : 500;
     const message =
       error instanceof ApiError
@@ -1012,7 +1016,6 @@ const editProjects = asyncHandler(async (req, res) => {
           : [];
 
     if (!res.headersSent) {
-      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(
@@ -1039,32 +1042,62 @@ const createProject = asyncHandler(async (req, res) => {
   try {
     const {
       projectName,
-      projectOwners,
+      projectOwners, // Expecting an array of owner IDs
       description,
       location,
       status,
       businessAreas,
-      comapanyName, // Corrected typo from comapanyName
-      deadline: newDeadlineInput,
+      comapanyName, // Typo, consider correcting to companyName globally
+      deadline: newDeadlineInput, // This is the string "MM/DD/YYYY - MM/DD/YYYY" or null/empty
       physicalEducationRange,
       financialEducationRange,
       daysLeft,
+      // members, // If you also want to assign members during creation
     } = req.body;
-    const { files } = req;
-    const performingUser = req.user;
+    const { files } = req; // For file uploads (e.g., projectBanner)
+    const performingUser = req.user; // Assuming req.user is populated by auth middleware
 
-    const existingProjectCheck = await editProject.findOne({ projectName });
+    // Validate required fields
+    if (!projectName) {
+      throw new ApiError(400, "Project name is required.");
+    }
+    // Add other necessary validations
+
+    const existingProjectCheck = await editProject.findOne({ projectName }); // Use your model
     if (existingProjectCheck) {
       throw new ApiError(400, "Project name already taken.");
     }
 
+    // Validate and format deadline (ensure it's a string or null)
     let validatedDeadline = null;
     if (newDeadlineInput !== undefined) {
       if (newDeadlineInput === "" || newDeadlineInput === null) {
         validatedDeadline = null;
       } else if (typeof newDeadlineInput === "string") {
-        validatedDeadline = newDeadlineInput;
+        // Basic check for format, you might want more robust validation
+        if (
+          newDeadlineInput.includes(" - ") &&
+          newDeadlineInput.split(" - ").length === 2
+        ) {
+          validatedDeadline = newDeadlineInput;
+        } else if (
+          !newDeadlineInput.includes(" - ") &&
+          !isNaN(new Date(newDeadlineInput).getTime())
+        ) {
+          // If it's a single valid date string, you might choose to accept it or adapt.
+          // For now, sticking to the "date - date" format implies the frontend logic.
+          // Or, if it's just a single date string, store it as is.
+          // This example assumes the frontend sends the "date1 - date2" string OR a single date string.
+          // If your schema strictly expects "date1 - date2", then enforce that here or adjust.
+          validatedDeadline = newDeadlineInput; // For simplicity, storing what's sent if it's a string
+        } else {
+          console.warn(
+            `Received deadline in unexpected string format: ${newDeadlineInput}. Storing as is or consider rejecting.`
+          );
+          validatedDeadline = newDeadlineInput; // Or throw ApiError if format is critical
+        }
       } else {
+        // If it's not a string, undefined, null, or empty string.
         throw new ApiError(
           400,
           `Deadline must be a string (e.g., 'DD/MM/YYYY - DD/MM/YYYY'), null, or empty. Received type: ${typeof newDeadlineInput}`
@@ -1072,6 +1105,7 @@ const createProject = asyncHandler(async (req, res) => {
       }
     }
 
+    // Validate projectOwners (ensure it's an array of valid ObjectIds)
     const validatedProjectOwners = [];
     if (Array.isArray(projectOwners)) {
       projectOwners.forEach((ownerId) => {
@@ -1087,6 +1121,7 @@ const createProject = asyncHandler(async (req, res) => {
           ownerId.ownerId &&
           mongoose.Types.ObjectId.isValid(ownerId.ownerId)
         ) {
+          // If frontend sends objects like { ownerId: '...' }
           validatedProjectOwners.push({
             ownerId: new mongoose.Types.ObjectId(ownerId.ownerId),
           });
@@ -1098,15 +1133,18 @@ const createProject = asyncHandler(async (req, res) => {
       });
     }
 
+    // Banner Upload Logic (simplified, ensure your S3 upload works)
     let projectBanners = [];
     if (files?.projectBanner?.length > 0) {
       if (files.projectBanner.length > 10) {
+        // Max 10 banners
         throw new ApiError(400, "You can upload up to 10 banners.");
       }
       const uploadFile = async (file) => {
         if (file.size > 5 * 1024 * 1024) {
+          // 5MB limit per file
           console.warn(`File too large, skipped: ${file.originalname}`);
-          return null;
+          return null; // Skip this file
         }
         try {
           const uniqueFileName = `${uuidv4()}-${file.originalname.replace(/\s+/g, "_")}`;
@@ -1123,10 +1161,14 @@ const createProject = asyncHandler(async (req, res) => {
             `Upload failed for ${file.originalname}:`,
             uploadError.message
           );
+          // Decide if one failed upload should fail the whole request
+          // For now, we'll skip it by returning null
           return null;
         }
       };
-      const batchSize = 3;
+
+      // Process uploads in batches or concurrently with Promise.allSettled for robustness
+      const batchSize = 3; // Example batch size
       for (let i = 0; i < files.projectBanner.length; i += batchSize) {
         const batch = files.projectBanner.slice(i, i + batchSize);
         const uploadedBatch = await Promise.allSettled(batch.map(uploadFile));
@@ -1141,18 +1183,19 @@ const createProject = asyncHandler(async (req, res) => {
     const projectData = {
       projectName,
       projectOwners: validatedProjectOwners,
+      // members: validatedMembers, // If handling members during creation
       description,
       businessAreas,
-      comapanyName, // Corrected typo
+      comapanyName, // Typo
       location,
-      status: status || "Ongoing",
-      deadline: validatedDeadline,
+      status: status || "Ongoing", // Default status
+      deadline: validatedDeadline, // Store the string "MM/DD/YYYY - MM/DD/YYYY" or null
       physicalEducationRange,
       financialEducationRange,
-      daysLeft: daysLeft || null,
+      daysLeft: daysLeft || null, // Or calculate if needed
       projectBanner: projectBanners,
-      createdBy: performingUser?._id,
-      isCreated: true, // Explicitly set for new projects, can be used by editProjects logic
+      createdBy: performingUser?._id, // Link to the user who created it
+      isCreated: true, // Flag for first update logic if needed
       logs: [
         {
           actionType: "Project Creation",
@@ -1163,8 +1206,9 @@ const createProject = asyncHandler(async (req, res) => {
       ],
     };
 
-    const project = await editProject.create(projectData);
+    const project = await editProject.create(projectData); // Use your model
 
+    // --- Start Notification Logic (simplified, keep your existing complex logic) ---
     if (project && (validatedProjectOwners.length > 0 || performingUser?._id)) {
       const recipientUserIds = new Set(
         validatedProjectOwners.map((po) => po.ownerId.toString())
@@ -1187,7 +1231,7 @@ const createProject = asyncHandler(async (req, res) => {
 
           if (usersForNotification.length > 0) {
             const userLanguageMap = await getUserLanguagePreferences(
-              usersForNotification.map((u) => u._id.toString()) // Use actual users found
+              usersForNotification.map((u) => u._id.toString())
             );
 
             const inAppNotificationsToCreate = usersForNotification.map(
@@ -1195,7 +1239,6 @@ const createProject = asyncHandler(async (req, res) => {
                 const userLanguage =
                   userLanguageMap[user._id.toString()] || "portuguese";
                 const isPortuguese = userLanguage === "portuguese";
-
                 return {
                   title: isPortuguese
                     ? `Novo Projeto Criado: ${project.projectName}`
@@ -1212,7 +1255,6 @@ const createProject = asyncHandler(async (req, res) => {
                 };
               }
             );
-
             if (inAppNotificationsToCreate.length > 0) {
               await ShowNotification.create(inAppNotificationsToCreate);
             }
@@ -1220,7 +1262,6 @@ const createProject = asyncHandler(async (req, res) => {
             const usersWithTokens = usersForNotification.filter(
               (u) => u.fcmDeviceToken || u.notificationToken
             );
-
             if (usersWithTokens.length > 0) {
               await sendLanguageSpecificPushNotifications(
                 usersWithTokens,
@@ -1232,22 +1273,17 @@ const createProject = asyncHandler(async (req, res) => {
                   portuguese: `Um novo projeto "${project.projectName}" foi criado por ${performingUser?.userName || "sistema"}.`,
                   english: `A new project "${project.projectName}" has been created by ${performingUser?.userName || "system"}.`,
                 },
-                {
-                  projectId: project._id.toString(),
-                  type: "PROJECT_CREATED",
-                }
+                { projectId: project._id.toString(), type: "PROJECT_CREATED" }
               );
             }
 
             const usersWithEmails = usersForNotification.filter((u) => u.email);
             for (const user of usersWithEmails) {
-              // Await this if its failure should be critical,
-              // or rely on its internal error handling if it's fire-and-forget.
               await sendProjectNotificationEmail(
                 user,
                 { projectName: project.projectName },
-                performingUser || { userName: "sistema" }, // Ensure performingUser is not null
-                [], // No changes summary for creation, or provide relevant info
+                performingUser || { userName: "sistema" },
+                [], // No changes summary for creation
                 "creation"
               );
             }
@@ -1257,11 +1293,12 @@ const createProject = asyncHandler(async (req, res) => {
             "Failed to send project creation notifications:",
             error.message
           );
-          // Do not re-throw here if notification failure should not fail the whole request
+          // Log and continue, creation shouldn't fail due to notification error
         }
       }
     }
-    // Ensure this is the only response sent on success path
+    // --- End Notification Logic ---
+
     return res
       .status(201)
       .json(new ApiResponse(201, project, "Project created successfully"));
@@ -1284,7 +1321,6 @@ const createProject = asyncHandler(async (req, res) => {
           (error.name === "ValidationError" ? error.errors : []);
 
     if (!res.headersSent) {
-      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(new ApiResponse(statusCode, null, message, errors));
@@ -1303,12 +1339,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
       isMain,
       _id: loggedInUserId,
       assignedBusinessAreas = [],
-    } = req.user;
+    } = req.user; // Assuming req.user is populated by auth middleware
+
     const validStatuses = [
+      // Define valid status values
       "Ongoing",
       "Pending",
       "Completed",
-      "Awaiting Start",
+      "Awaiting Start", // As per your frontend
       "On Hold",
       "Cancelled",
       "Archived",
@@ -1318,22 +1356,26 @@ const getAllProjects = asyncHandler(async (req, res) => {
     if (status && validStatuses.includes(status)) {
       baseFilter.status = status;
     }
+
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const searchRegex = new RegExp(search, "i"); // Case-insensitive search
       baseFilter.$or = [
         { projectName: searchRegex },
         { description: searchRegex },
         { location: searchRegex },
-        { comapanyName: searchRegex }, // Corrected typo
+        { comapanyName: searchRegex }, // Typo, consider correcting
+        // Add other fields you want to search by
       ];
     }
 
+    // User access control
     const userBusinessAreas = assignedBusinessAreas
       .map((area) => area.businessArea)
       .filter(Boolean);
     let finalFilter = { ...baseFilter };
 
     if (!isMain) {
+      // If not a main/admin user, restrict access
       const userAccessConditions = [
         { members: loggedInUserId },
         { "projectOwners.ownerId": loggedInUserId },
@@ -1345,51 +1387,57 @@ const getAllProjects = asyncHandler(async (req, res) => {
       }
 
       if (baseFilter.$or && userAccessConditions.length > 0) {
-        // If baseFilter already has an $or (from search), and we also have user access $or conditions
         finalFilter = {
           $and: [
-            baseFilter, // This contains the original $or from search
-            { $or: userAccessConditions }, // This is the new $or for access
+            baseFilter, // contains original $or from search
+            { $or: userAccessConditions }, // new $or for access
           ],
         };
       } else if (baseFilter.$or) {
-        // Only search $or exists
+        // only search $or
         finalFilter = baseFilter;
       } else if (userAccessConditions.length > 0) {
-        // Only user access $or exists
-        finalFilter.$or = userAccessConditions; // Add it to the existing finalFilter (which might have status)
+        // only user access $or
+        finalFilter.$or = userAccessConditions; // add to finalFilter (which might have status)
       }
-      // If neither $or exists, finalFilter remains baseFilter (which might be empty or just have status)
+      // If neither $or, finalFilter is baseFilter (empty or just status)
     }
 
-    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-    const pageSize = 10;
+    // Pagination
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1); // Ensure page is at least 1
+    const pageSize = 10; // Or from config/query param
     const skip = (pageNumber - 1) * pageSize;
 
-    const totalProjects = await editProject.countDocuments(finalFilter);
-    let query = editProject
+    const totalProjects = await editProject.countDocuments(finalFilter); // Use your model
+    let query = editProject // Use your model
       .find(finalFilter)
       .populate([
         {
           path: "members",
-          select: "userName avatar role",
+          select: "userName avatar role", // Select fields you need
           populate: { path: "role", select: "roleName" },
         },
         {
           path: "projectOwners.ownerId",
-          select: "userName role",
+          select: "userName role", // Select fields you need
           populate: { path: "role", select: "roleName" },
         },
+        // Add other populaces as needed, e.g., createdBy
       ])
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 }); // Sort by creation date, newest first
 
-    if (pageNumber > 0) query = query.skip(skip).limit(pageSize);
-    const projects = await query.lean();
+    if (pageNumber > 0) {
+      // Apply pagination if page is specified
+      query = query.skip(skip).limit(pageSize);
+    }
 
+    const projects = await query.lean(); // Use .lean() for performance
+
+    // --- Milestone Filtering (if milestoneUserIds is provided) ---
     let filteredProjectsByMilestone = projects;
     if (milestoneUserIds) {
       try {
-        const parsedMilestoneUserIds = JSON.parse(milestoneUserIds);
+        const parsedMilestoneUserIds = JSON.parse(milestoneUserIds); // Expects a JSON array string
         if (
           Array.isArray(parsedMilestoneUserIds) &&
           parsedMilestoneUserIds.length > 0
@@ -1397,6 +1445,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
           const validUserIdsForMilestoneFilter = parsedMilestoneUserIds.filter(
             (id) => mongoose.Types.ObjectId.isValid(id)
           );
+
           if (validUserIdsForMilestoneFilter.length > 0) {
             const projectIdsForMilestoneFilter = projects.map(
               (project) => project._id
@@ -1406,7 +1455,8 @@ const getAllProjects = asyncHandler(async (req, res) => {
               userId: { $in: validUserIdsForMilestoneFilter },
             })
               .select("projectId")
-              .lean();
+              .lean(); // Only need projectId to filter
+
             const projectsWithMatchingMilestones = new Set(
               milestonesData.map((m) => m.projectId.toString())
             );
@@ -1420,8 +1470,10 @@ const getAllProjects = asyncHandler(async (req, res) => {
           "Error parsing milestoneUserIds, skipping milestone filter:",
           parseError.message
         );
+        // Potentially return an error or just ignore the filter
       }
     }
+    // --- End Milestone Filtering ---
 
     const projectIds = filteredProjectsByMilestone.map((p) => p._id);
     const projectNames = filteredProjectsByMilestone
@@ -1451,14 +1503,14 @@ const getAllProjects = asyncHandler(async (req, res) => {
       allAdditionalMilestones = await AdditionalMilestone.find({
         projectId: { $in: projectIds },
       })
-        .populate({ path: "userId", model: "User", select: "userName" })
-        .sort({ createdAt: -1 })
+        .populate({ path: "userId", model: "User", select: "userName" }) // Populate user details for milestones
+        .sort({ createdAt: -1 }) // Sort milestones, e.g., by creation
         .lean();
     }
 
     const groupDocsBy = (docs, keyField) => {
       return docs.reduce((acc, doc) => {
-        const key = doc[keyField]?.toString();
+        const key = doc[keyField]?.toString(); // Ensure key is a string for object lookup
         if (key) {
           if (!acc[key]) acc[key] = [];
           acc[key].push(doc);
@@ -1475,6 +1527,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
       "projectId"
     );
 
+    // Enhance projects with details and access type
     const projectsWithDetails = filteredProjectsByMilestone.map((project) => {
       const isMember =
         project.members?.some((member) => member._id.equals(loggedInUserId)) ||
@@ -1483,6 +1536,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         project.projectOwners?.some(
           (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
         ) || false;
+
       const projectBAs = Array.isArray(project.businessAreas)
         ? project.businessAreas
         : project.businessAreas
@@ -1501,7 +1555,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
 
       return {
         ...project,
-        accessType: { isMember, isOwner, fromBusinessArea },
+        accessType: { isMember, isOwner, fromBusinessArea }, // For frontend UI logic
         documents: projectUserDocs.map((doc) => ({
           ...doc,
           id: doc._id,
@@ -1553,31 +1607,36 @@ const getProjectById = asyncHandler(async (req, res) => {
       isMain,
       _id: loggedInUserId,
       assignedBusinessAreas = [],
-    } = req.user;
+    } = req.user; // Assuming req.user is populated
 
-    if (!mongoose.Types.ObjectId.isValid(projectId))
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
       throw new ApiError(400, "Invalid Project ID format");
+    }
 
-    const project = await editProject
+    const project = await editProject // Use your model
       .findById(projectId)
       .populate([
         {
           path: "members",
-          model: "User",
-          select: "userName avatar role userType",
+          model: "User", // Explicitly specify model if not always clear
+          select: "userName avatar role userType", // Select fields needed
           populate: { path: "role", model: "Role", select: "roleName" },
         },
         {
           path: "projectOwners.ownerId",
           model: "User",
-          select: "userName role email",
+          select: "userName role email", // Select fields needed
           populate: { path: "role", select: "roleName" },
         },
+        // { path: "createdBy", select: "userName" } // Example if you want creator info
       ])
-      .lean();
+      .lean(); // Use .lean() if you only need plain JS objects
 
-    if (!project) throw new ApiError(404, "Project not found");
+    if (!project) {
+      throw new ApiError(404, "Project not found");
+    }
 
+    // Access control for non-main users
     if (!isMain) {
       const isMember =
         project.members?.some((member) => member._id.equals(loggedInUserId)) ||
@@ -1586,6 +1645,7 @@ const getProjectById = asyncHandler(async (req, res) => {
         project.projectOwners?.some(
           (owner) => owner.ownerId && owner.ownerId._id.equals(loggedInUserId)
         ) || false;
+
       const projectBAs = Array.isArray(project.businessAreas)
         ? project.businessAreas
         : project.businessAreas
@@ -1595,6 +1655,7 @@ const getProjectById = asyncHandler(async (req, res) => {
         .map((ba) => ba.businessArea)
         .filter(Boolean);
       const businessAreaMatch = projectBAs.some((pba) => userBAs.includes(pba));
+
       if (!isMember && !isOwner && !businessAreaMatch) {
         throw new ApiError(
           403,
@@ -1603,6 +1664,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       }
     }
 
+    // --- Current Milestones Logic (as per your original code) ---
     const currentMilestones = [
       { name: "Project Details", completed: true, key: "details" },
       { name: "Filling", completed: false, key: "filling" },
@@ -1621,6 +1683,7 @@ const getProjectById = asyncHandler(async (req, res) => {
       (currentMilestones.find((m) => m.key === "filling") || {}).completed =
         true;
 
+    // Fetch related documents
     const [
       projectUserDocs,
       projectSystemDocs,
@@ -1645,6 +1708,7 @@ const getProjectById = asyncHandler(async (req, res) => {
     if (projectFinanceDocs.length > 0)
       (currentMilestones.find((m) => m.key === "payment") || {}).completed =
         true;
+
     const fillingMilestone = currentMilestones.find(
       (m) => m.key === "filling"
     ) || { completed: false };
@@ -1659,27 +1723,28 @@ const getProjectById = asyncHandler(async (req, res) => {
       (
         currentMilestones.find((m) => m.key === "project_completed") || {}
       ).completed = true;
+    // --- End Current Milestones Logic ---
 
     const responseData = {
       ...project,
       members:
         project.members?.map((member) => ({
-          userId: member._id,
+          userId: member._id, // Keep _id as userId for frontend if needed
           _id: member._id,
           userName: member.userName,
           avatar: member.avatar,
-          userType: member.userType || "N/A",
-          role: member.role?.roleName || "N/A",
+          userType: member.userType || "N/A", // Handle missing userType
+          role: member.role?.roleName || "N/A", // Handle missing role
         })) || [],
       projectOwners:
         project.projectOwners
-          ?.filter((owner) => owner.ownerId)
+          ?.filter((owner) => owner.ownerId) // Filter out any malformed owner entries
           .map((owner) => ({
             ownerId: owner.ownerId._id,
-            ownerName: owner.ownerId.userName || "",
-            role: owner.ownerId.role?.roleName || "N/A",
-            _id: owner.ownerId._id,
+            _id: owner.ownerId._id, // for frontend key or selection
+            ownerName: owner.ownerId.userName || "", // Ensure ownerName is present
             email: owner.ownerId.email || "",
+            role: owner.ownerId.role?.roleName || "N/A",
           })) || [],
       documents: projectUserDocs.map((doc) => ({
         ...doc,
@@ -1719,7 +1784,7 @@ const getProjectById = asyncHandler(async (req, res) => {
 
 const deleteProject = asyncHandler(async (req, res) => {
   const { projectId } = req.params;
-  const performingUser = req.user;
+  const performingUser = req.user; // Assuming req.user is populated
 
   if (!mongoose.Types.ObjectId.isValid(projectId)) {
     throw new ApiError(400, "Invalid Project ID format.");
@@ -1728,7 +1793,7 @@ const deleteProject = asyncHandler(async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const projectToDelete = await editProject
+    const projectToDelete = await editProject // Use your model
       .findById(projectId)
       .populate(
         "projectOwners.ownerId",
@@ -1738,11 +1803,11 @@ const deleteProject = asyncHandler(async (req, res) => {
         "members",
         "email userName _id notificationToken fcmDeviceToken"
       )
-      .session(session)
-      .lean();
+      .session(session) // Important for transaction
+      .lean(); // Use lean if you only need the data for notifications
 
     if (!projectToDelete) {
-      await session.abortTransaction(); // Abort if project not found before trying to delete
+      await session.abortTransaction();
       session.endSession();
       throw new ApiError(404, "Project not found.");
     }
@@ -1750,6 +1815,7 @@ const deleteProject = asyncHandler(async (req, res) => {
     const deletedProjectName = projectToDelete.projectName;
     const deletedProjectId = projectToDelete._id;
 
+    // Perform deletions within the transaction
     await editProject.findByIdAndDelete(projectId, { session });
     await UserDocument.deleteMany(
       { projName: deletedProjectName },
@@ -1764,7 +1830,10 @@ const deleteProject = asyncHandler(async (req, res) => {
       { projectId: deletedProjectId },
       { session }
     );
+    // Also delete any other related data, e.g., ShowNotification entries for this project
+    // await ShowNotification.deleteMany({ projectId: deletedProjectId }, { session });
 
+    // Prepare notification recipients
     const notificationRecipients = new Map();
     (projectToDelete.members || []).forEach(
       (user) =>
@@ -1779,19 +1848,19 @@ const deleteProject = asyncHandler(async (req, res) => {
         )
     );
 
-    // Ensure performingUser details are available for notifications, even if not in project lists
     let performingUserDetailsForNotif = performingUser;
     if (
       performingUser?._id &&
       !notificationRecipients.has(performingUser._id.toString())
     ) {
-      // Fetch if not already populated with notification tokens, etc.
       const performer = await User.findById(performingUser._id)
         .select("email userName _id notificationToken fcmDeviceToken")
         .lean();
       if (performer) {
-        performingUserDetailsForNotif = performer; // Use potentially more complete user object
-        notificationRecipients.set(performer._id.toString(), performer);
+        performingUserDetailsForNotif = performer;
+        // No need to add to notificationRecipients if they are not a member/owner explicitly
+        // Or, if they should be notified, add them:
+        // notificationRecipients.set(performer._id.toString(), performer);
       }
     } else if (performingUser?._id) {
       performingUserDetailsForNotif =
@@ -1801,6 +1870,7 @@ const deleteProject = asyncHandler(async (req, res) => {
 
     const usersToNotify = Array.from(notificationRecipients.values());
 
+    // In-app notifications within transaction (optional, can be outside if preferred)
     if (usersToNotify.length > 0) {
       const userIds = usersToNotify.map((user) => user._id.toString());
       const userLanguageMap = await getUserLanguagePreferences(userIds);
@@ -1809,7 +1879,6 @@ const deleteProject = asyncHandler(async (req, res) => {
         const userLanguage =
           userLanguageMap[user._id.toString()] || "portuguese";
         const isPortuguese = userLanguage === "portuguese";
-
         return {
           title: isPortuguese
             ? `Projeto Eliminado: ${deletedProjectName}`
@@ -1822,25 +1891,24 @@ const deleteProject = asyncHandler(async (req, res) => {
             ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. A  o realizada por ${performingUserDetailsForNotif.userName}.`
             : `All documents and data associated with project "${deletedProjectName}" have been removed from the system. Action performed by ${performingUserDetailsForNotif.userName}.`,
           memberId: user._id,
-          projectId: deletedProjectId,
+          projectId: deletedProjectId, // Storing the ID of the deleted project
         };
       });
       if (inAppNotificationsToCreate.length > 0) {
         await ShowNotification.create(inAppNotificationsToCreate, {
           session,
-          ordered: false, // Changed to false for potentially better performance
+          ordered: false,
         });
       }
     }
 
     await session.commitTransaction();
-    // Notifications (push, email) are sent after successful commit
+    // Notifications (Push, Email) are sent *after* successful commit
 
     if (usersToNotify.length > 0) {
       const usersWithTokens = usersToNotify.filter(
         (u) => u.fcmDeviceToken || u.notificationToken
       );
-
       if (usersWithTokens.length > 0) {
         await sendLanguageSpecificPushNotifications(
           usersWithTokens,
@@ -1865,7 +1933,7 @@ const deleteProject = asyncHandler(async (req, res) => {
           user,
           { projectName: deletedProjectName },
           performingUserDetailsForNotif,
-          [],
+          [], // No changes summary for deletion
           "deletion"
         );
       }
@@ -1882,7 +1950,6 @@ const deleteProject = asyncHandler(async (req, res) => {
       );
   } catch (error) {
     if (session.inTransaction()) {
-      // Check if transaction is active before aborting
       await session.abortTransaction();
     }
     console.error("Error deleting project (FULL ERROR OBJECT):", error);
@@ -1893,7 +1960,6 @@ const deleteProject = asyncHandler(async (req, res) => {
         : "An error occurred while deleting the project.";
 
     if (!res.headersSent) {
-      // Ensure response is sent only once
       return res
         .status(statusCode)
         .json(new ApiResponse(statusCode, null, message, error.errors || []));
@@ -1904,7 +1970,6 @@ const deleteProject = asyncHandler(async (req, res) => {
     }
   } finally {
     if (session) {
-      // ensure session exists before trying to end it
       session.endSession();
     }
   }
