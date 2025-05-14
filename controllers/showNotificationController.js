@@ -24,15 +24,15 @@ const createNotification = asyncHandler(async (req, res) => {
   }
 
   // ✅ Check NotificationSetting.status
-  const setting = await NotificationSetting.findOne({ userId: memberId });
-  if (!setting || setting.status === false) {
-    // ✅ Skip creating notification if disabled
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, {}, "Notifications are disabled for this user")
-      );
-  }
+  // const setting = await NotificationSetting.findOne({ userId: memberId });
+  // if (!setting || setting.status === false) {
+  //   // ✅ Skip creating notification if disabled
+  //   return res
+  //     .status(200)
+  //     .json(
+  //       new ApiResponse(200, {}, "Notifications are disabled for this user")
+  //     );
+  // }
 
   // Prepare data, ensuring optional fields are handled
   const notificationData = {
@@ -116,16 +116,16 @@ const getNotificationById = asyncHandler(async (req, res) => {
   }
 
   // ✅ Check NotificationSetting.status
-  const setting = await NotificationSetting.findOne({
-    userId: notification.memberId,
-  });
-  if (!setting || setting.status === false) {
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, {}, "Notifications are disabled for this user")
-      );
-  }
+  // const setting = await NotificationSetting.findOne({
+  //   userId: notification.memberId,
+  // });
+  // if (!setting || setting.status === false) {
+  //   return res
+  //     .status(200)
+  //     .json(
+  //       new ApiResponse(200, {}, "Notifications are disabled for this user")
+  //     );
+  // }
 
   if (notification.projectId) {
     const project = await editProject
@@ -188,16 +188,16 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
   }
 
   // ✅ Check NotificationSetting.status
-  const setting = await NotificationSetting.findOne({
-    userId: existingNotification.memberId,
-  });
-  if (!setting || setting.status === false) {
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, {}, "Notifications are disabled for this user")
-      );
-  }
+  // const setting = await NotificationSetting.findOne({
+  //   userId: existingNotification.memberId,
+  // });
+  // if (!setting || setting.status === false) {
+  //   return res
+  //     .status(200)
+  //     .json(
+  //       new ApiResponse(200, {}, "Notifications are disabled for this user")
+  //     );
+  // }
 
   const updatedNotification = await ShowNotification.findByIdAndUpdate(
     id,
@@ -224,14 +224,14 @@ const clearAllNotifications = asyncHandler(async (req, res) => {
   }
 
   // ✅ Check NotificationSetting.status
-  const setting = await NotificationSetting.findOne({ userId: memberId });
-  if (!setting || setting.status === false) {
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, {}, "Notifications are disabled for this user")
-      );
-  }
+  // const setting = await NotificationSetting.findOne({ userId: memberId });
+  // if (!setting || setting.status === false) {
+  //   return res
+  //     .status(200)
+  //     .json(
+  //       new ApiResponse(200, {}, "Notifications are disabled for this user")
+  //     );
+  // }
 
   const result = await ShowNotification.deleteMany({
     memberId: new mongoose.Types.ObjectId(memberId),
@@ -253,6 +253,7 @@ const clearAllNotifications = asyncHandler(async (req, res) => {
       )
     );
 });
+
 
 const getAllNotificationsForUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
