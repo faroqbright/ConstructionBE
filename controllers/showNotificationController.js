@@ -7,36 +7,37 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import mongoose from "mongoose";
 import { SendEmailUtil } from "../utils/emailsender.js";
-import { sendNotification as sendPushNotificationFirebase } from "../utils/firebase.service.js"; // Renamed
+import { sendNotification as sendPushNotificationFirebase } from "../utils/firebase.service.js";
 import { LanguagePreference } from "../models/languagePreferenceSchema.js";
 
-// Helper function to get language preference for a single user (simplified from your example)
 async function getUserLanguagePreference(userId) {
-  if (!userId) return 'portuguese'; // Default
+  if (!userId) return 'portuguese';
   try {
     const objectIdUserId = new mongoose.Types.ObjectId(userId);
     const preference = await LanguagePreference.findOne({ userId: objectIdUserId }).lean();
-    return preference?.languageSelected || 'portuguese'; // Default if not found
+    return preference?.languageSelected || 'portuguese';
   } catch (error) {
-    // console.warn(`Invalid ObjectId string for language preference: ${userId}`);
-    return 'portuguese'; // Default on error
+    console.warn(`[getUserLanguagePreference] Error converting or fetching pref for ${userId}:`, error.message);
+    return 'portuguese';
   }
 }
 
 const createNotification = asyncHandler(async (req, res) => {
   const {
-    title: requestTitle, // Renamed to avoid clash with generated title
+    title: requestTitle,
     type,
-    description: requestDescription, // Renamed
-    lengthyDesc: requestLengthyDesc, // Renamed
-    memberId, // Recipient ID
+    description: requestDescription,
+    lengthyDesc: requestLengthyDesc,
+    memberId,
     projectId,
   } = req.body;
 
   const performingUserId = req.user?._id;
-  const performingUserName = req.user?.userName || "a system process"; // Or "an administrator"
+  const performingUserName = req.user?.userName || "a system process";
 
-  // --- Basic Validation ---
+  console.log("[CreateNotification] Start. Req Body:", req.body);
+  console.log(`[CreateNotification] Performing User: ${performingUserName} (${performingUserId})`);
+
   if (!requestTitle || !type || !memberId) {
     throw new ApiError(400, "Title, type, and memberId are required.");
   }
@@ -47,7 +48,6 @@ const createNotification = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid project ID format.");
   }
 
-  // --- Fetch Recipient User Details ---
   const recipientUser = await User.findById(memberId)
     .select("_id userName email notificationToken fcmDeviceToken")
     .lean();
@@ -55,13 +55,12 @@ const createNotification = asyncHandler(async (req, res) => {
   if (!recipientUser) {
     throw new ApiError(404, "Recipient user (memberId) not found.");
   }
+  console.log("[CreateNotification] Recipient User Fetched:", { _id: recipientUser._id, userName: recipientUser.userName, email: recipientUser.email, notificationToken: recipientUser.notificationToken, fcmDeviceToken: recipientUser.fcmDeviceToken });
 
-  // --- Check NotificationSetting.status for the recipient ---
+
   const setting = await NotificationSetting.findOne({ userId: recipientUser._id });
   if (setting && setting.status === false) {
-    // Only create in-app if that's the desired behavior even if global notifications are off.
-    // For now, if settings are off, we assume no notification of any kind is desired.
-    // If you want to still create the ShowNotification entry, this logic needs adjustment.
+    console.log(`[CreateNotification] Notifications disabled for user ${recipientUser._id}. Skipping.`);
     return res
       .status(200)
       .json(
@@ -73,32 +72,29 @@ const createNotification = asyncHandler(async (req, res) => {
       );
   }
 
-  // --- Fetch Language Preference for Recipient ---
   const recipientLang = await getUserLanguagePreference(recipientUser._id);
+  console.log(`[CreateNotification] Recipient Language for ${recipientUser._id}: ${recipientLang}`);
 
-  // --- Fetch Project Details (if projectId is provided) ---
   let project = null;
   let projectNameForMsg = "";
   if (projectId) {
     project = await editProject.findById(projectId).select("projectName").lean();
     if (project) {
       projectNameForMsg = project.projectName;
+      console.log(`[CreateNotification] Project Fetched: ${projectNameForMsg}`);
     } else {
-      // console.warn(`[CreateNotification] Project with ID ${projectId} not found, but proceeding.`);
-      // Decide if this should be an error or just a warning.
-      // For now, notification will proceed without project name in messages if project not found.
+      console.warn(`[CreateNotification] Project with ID ${projectId} not found.`);
     }
   }
 
-  // --- Prepare Localized Content for In-App, Push, and Email ---
-  let inAppTitle, inAppDescription, inAppLengthyDesc;
-  let pushTitles, pushBodies;
-  let emailSubject, emailHtmlBody;
-
-  // Use requestTitle, requestDescription, requestLengthyDesc as the core content
   const baseTitle = requestTitle;
   const baseDescription = requestDescription || "";
-  const baseLengthyDesc = requestLengthyDesc || baseDescription; // Fallback for lengthyDesc
+  const baseLengthyDesc = requestLengthyDesc || baseDescription;
+
+  let inAppTitle, inAppDescription, inAppLengthyDesc;
+  let pushTitles = { english: "", portuguese: ""}; // Initialize to prevent undefined
+  let pushBodies = { english: "", portuguese: ""}; // Initialize
+  let emailSubject, emailHtmlBody;
 
   if (recipientLang === "english") {
     inAppTitle = project
@@ -111,17 +107,11 @@ const createNotification = asyncHandler(async (req, res) => {
       ? `${baseLengthyDesc}\n\nThis notification is regarding project "${projectNameForMsg}" and was initiated by ${performingUserName}.\nBest regards,\nSoapro Team`
       : `${baseLengthyDesc}\n\nThis notification was initiated by ${performingUserName}.\nBest regards,\nSoapro Team`;
 
-    pushTitles = {
-      english: project ? `Project ${projectNameForMsg}: ${baseTitle}` : `New Notification: ${baseTitle}`,
-      portuguese: "", // Will be filled below if needed, but only English is sent for this user
-    };
-    pushBodies = {
-      english: project
+    pushTitles.english = project ? `Project ${projectNameForMsg}: ${baseTitle}` : `New Notification: ${baseTitle}`;
+    pushBodies.english = project
         ? `${baseDescription.substring(0,100)}... (Project: ${projectNameForMsg}) by ${performingUserName}`
-        : `${baseDescription.substring(0,100)}... by ${performingUserName}`,
-      portuguese: "",
-    };
-
+        : `${baseDescription.substring(0,100)}... by ${performingUserName}`;
+    
     emailSubject = project
       ? `Notification regarding ${projectNameForMsg}: ${baseTitle}`
       : `Important Notification: ${baseTitle}`;
@@ -150,16 +140,11 @@ const createNotification = asyncHandler(async (req, res) => {
       ? `${baseLengthyDesc}\n\nEsta notificação é referente ao projecto "${projectNameForMsg}" e foi iniciada por ${performingUserName}.\nCom os melhores cumprimentos,\nEquipa Soapro`
       : `${baseLengthyDesc}\n\nEsta notificação foi iniciada por ${performingUserName}.\nCom os melhores cumprimentos,\nEquipa Soapro`;
 
-    pushTitles = {
-      english: "",
-      portuguese: project ? `Projecto ${projectNameForMsg}: ${baseTitle}` : `Nova Notificação: ${baseTitle}`,
-    };
-    pushBodies = {
-      english: "",
-      portuguese: project
+    pushTitles.portuguese = project ? `Projecto ${projectNameForMsg}: ${baseTitle}` : `Nova Notificação: ${baseTitle}`;
+    pushBodies.portuguese = project
         ? `${baseDescription.substring(0,100)}... (Projecto: ${projectNameForMsg}) por ${performingUserName}`
-        : `${baseDescription.substring(0,100)}... por ${performingUserName}`,
-    };
+        : `${baseDescription.substring(0,100)}... por ${performingUserName}`;
+
     emailSubject = project
       ? `Notificação referente a ${projectNameForMsg}: ${baseTitle}`
       : `Notificação Importante: ${baseTitle}`;
@@ -179,12 +164,8 @@ const createNotification = asyncHandler(async (req, res) => {
       </table></body></html>`;
   }
 
-  // --- Create In-App Notification ---
   const notificationData = {
-    title: inAppTitle,
-    type, // Original type from request
-    description: inAppDescription,
-    lengthyDesc: inAppLengthyDesc,
+    title: inAppTitle, type, description: inAppDescription, lengthyDesc: inAppLengthyDesc,
     memberId: recipientUser._id,
     ...(project && { projectId: project._id }),
   };
@@ -194,27 +175,60 @@ const createNotification = asyncHandler(async (req, res) => {
   if (!createdInAppNotification) {
     throw new ApiError(500, "Failed to create in-app notification in database.");
   }
+  console.log("[CreateNotification] In-App Notification Created:", createdInAppNotification._id);
 
   // --- Send Push Notification ---
+  console.log(`[CreateNotification] Attempting to send PUSH notification to user ${recipientUser._id}`);
   const fcmToken = recipientUser.notificationToken || recipientUser.fcmDeviceToken;
-  if (fcmToken) {
+  
+  console.log(`[CreateNotification] User's notificationToken: '${recipientUser.notificationToken}', fcmDeviceToken: '${recipientUser.fcmDeviceToken}'`);
+  console.log(`[CreateNotification] Effective FCM Token for push: '${fcmToken}'`);
+
+  if (fcmToken && typeof fcmToken === 'string' && fcmToken.trim() !== "") {
     const pushTitle = recipientLang === 'english' ? pushTitles.english : pushTitles.portuguese;
     const pushBody = recipientLang === 'english' ? pushBodies.english : pushBodies.portuguese;
+    
+    // Ensure pushTitle and pushBody are not empty
+    if (!pushTitle || pushTitle.trim() === "") {
+        console.warn(`[CreateNotification] Push title is empty for lang ${recipientLang}. Using a default title.`);
+        // pushTitle = "New Notification"; // Or handle as an error
+    }
+    if (!pushBody || pushBody.trim() === "") {
+        console.warn(`[CreateNotification] Push body is empty for lang ${recipientLang}. Using a default body.`);
+        // pushBody = "You have a new notification."; // Or handle
+    }
+
+
     const pushData = {
-      type: type, // Original type from request
+      type: type,
       notificationId: createdInAppNotification._id.toString(),
       ...(project && { projectId: project._id.toString() }),
-      ...(type.toLowerCase().includes("document") && { documentId: "SPECIFIC_DOCUMENT_ID_IF_APPLICABLE"}), // Example if type is document-related
-      title: baseTitle, // Original title from request for payload
+      ...(type.toLowerCase().includes("document") && { documentId: "SPECIFIC_DOCUMENT_ID_IF_APPLICABLE"}),
+      title: baseTitle,
     };
+
+    console.log(`[CreateNotification] PUSH Payload for ${recipientUser._id} (lang: ${recipientLang}):`);
+    console.log(`  Token: ${fcmToken}`);
+    console.log(`  Title: ${pushTitle}`);
+    console.log(`  Body: ${pushBody}`);
+    console.log(`  Data: ${JSON.stringify(pushData)}`);
+
     sendPushNotificationFirebase([fcmToken], pushTitle, pushBody, pushData)
-      .catch(err => console.error(`[CreateNotification] Failed to send push notification to ${recipientUser._id}:`, err.message));
+      .then(response => {
+        // Make sure your firebase.service.js actually returns a meaningful response
+        console.log(`[CreateNotification] PUSH notification sent successfully to ${recipientUser._id}. Response:`, JSON.stringify(response));
+      })
+      .catch(err => {
+        console.error(`[CreateNotification] FAILED to send PUSH notification to ${recipientUser._id} (Token: ${fcmToken}). Error:`, err.message);
+        console.error("[CreateNotification] Full Push Error Object:", err); // Log the full error
+      });
   } else {
-    // console.log(`[CreateNotification] No FCM token for user ${recipientUser._id}, skipping push notification.`);
+    console.log(`[CreateNotification] SKIPPING PUSH for user ${recipientUser._id}: No valid FCM token found.`);
   }
 
   // --- Send Email Notification ---
   if (recipientUser.email) {
+    console.log(`[CreateNotification] Attempting to send EMAIL to ${recipientUser.email}`);
     const emailDetails = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: recipientUser.email,
@@ -222,9 +236,14 @@ const createNotification = asyncHandler(async (req, res) => {
       html: emailHtmlBody,
     };
     SendEmailUtil(emailDetails)
-      .catch(err => console.error(`[CreateNotification] Failed to send email to ${recipientUser.email}:`, err.message));
+      .then(() => {
+        console.log(`[CreateNotification] Email sent successfully to ${recipientUser.email}`);
+      })
+      .catch(err => 
+        console.error(`[CreateNotification] Failed to send EMAIL to ${recipientUser.email}:`, err.message)
+      );
   } else {
-    // console.log(`[CreateNotification] No email for user ${recipientUser._id}, skipping email notification.`);
+    console.log(`[CreateNotification] SKIPPING EMAIL for user ${recipientUser._id}: No email address found.`);
   }
 
   return res
@@ -239,8 +258,8 @@ const createNotification = asyncHandler(async (req, res) => {
 });
 
 
-// --- Other controller functions (getNotifications, getNotificationById, etc.) remain unchanged ---
-// ... (paste the rest of your showNotificationController.js functions here)
+// --- Other controller functions (getNotifications, getNotificationById, etc.) ---
+// (Make sure these are also present in your file)
 const getNotifications = asyncHandler(async (req, res) => {
   const { memberId, projectId, isRead } = req.query;
   const filter = {};
@@ -249,17 +268,14 @@ const getNotifications = asyncHandler(async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(memberId)) {
       throw new ApiError(400, "Invalid recipient (memberId) format in query.");
     }
-
-    // ✅ Check NotificationSetting.status
     const setting = await NotificationSetting.findOne({ userId: memberId });
-    if (setting && setting.status === false) { // Check if setting exists before accessing status
+    if (setting && setting.status === false) {
       return res
         .status(200)
         .json(
           new ApiResponse(200, [], "Notifications are disabled for this user")
         );
     }
-
     filter.memberId = memberId;
   }
 
@@ -298,19 +314,6 @@ const getNotificationById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Notification not found.");
   }
   
-  // Optional: Check NotificationSetting.status for the recipient of THIS notification
-  // const setting = await NotificationSetting.findOne({
-  //   userId: notification.memberId,
-  // });
-  // if (setting && setting.status === false) {
-  //   return res
-  //     .status(200)
-  //     .json(
-  //       new ApiResponse(200, notification, "Notification fetched, but user has notifications disabled generally.")
-  //     );
-  // }
-
-
   if (notification.projectId) {
     const project = await editProject
       .findById(notification.projectId)
@@ -371,15 +374,6 @@ const updateNotificationStatus = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Notification not found.");
   }
 
-  // Optional: Check NotificationSetting for the user
-  // const setting = await NotificationSetting.findOne({
-  //   userId: existingNotification.memberId,
-  // });
-  // if (setting && setting.status === false) {
-  //   // User might still want to mark as read/unread even if general notifications are off
-  //   // So, perhaps allow this action regardless of general setting.
-  // }
-
   const updatedNotification = await ShowNotification.findByIdAndUpdate(
     id,
     { $set: { isRead: isRead } },
@@ -403,12 +397,6 @@ const clearAllNotifications = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(memberId)) {
     throw new ApiError(400, "Invalid format for memberId");
   }
-
-  // Optional: Check NotificationSetting.status
-  // const setting = await NotificationSetting.findOne({ userId: memberId });
-  // if (setting && setting.status === false) {
-  //    // User might still want to clear even if general notifications are off
-  // }
 
   const result = await ShowNotification.deleteMany({
     memberId: new mongoose.Types.ObjectId(memberId),
@@ -440,7 +428,7 @@ const getAllNotificationsForUser = asyncHandler(async (req, res) => {
   }
 
   const setting = await NotificationSetting.findOne({ userId });
-  if (setting && setting.status === false) { // Check if setting exists
+  if (setting && setting.status === false) { 
     return res
       .status(200)
       .json(
