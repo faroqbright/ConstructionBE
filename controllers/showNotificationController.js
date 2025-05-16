@@ -10,22 +10,26 @@ import { User } from "../models/user.model.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
 import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
 
-// Helper function to get user language preference
+// Helper function to get user language preference with better error handling
 async function getUserLanguage(userId) {
-  const preference = await LanguagePreference.findOne({ userId }).lean();
-  return preference?.languageSelected || 'portuguese'; // Default to Portuguese
+  try {
+    const preference = await LanguagePreference.findOne({ userId }).lean();
+    return preference?.languageSelected || 'portuguese';
+  } catch (error) {
+    console.error(`Error getting language preference for user ${userId}:`, error);
+    return 'portuguese'; // Fallback to Portuguese
+  }
 }
 
 const createNotification = asyncHandler(async (req, res) => {
-  const { title, type, description, lengthyDesc, memberId, projectId } =
-    req.body;
+  const { title, type, description, lengthyDesc, memberId, projectId } = req.body;
 
-  // Basic validation
+  // Basic validation (unchanged from your original)
   if (!title || !type || !memberId) {
     throw new ApiError(400, "Title, type, and memberId are required.");
   }
 
-  // ID Format validation
+  // ID Format validation (unchanged from your original)
   if (!mongoose.Types.ObjectId.isValid(memberId)) {
     throw new ApiError(400, "Invalid recipient (memberId) format.");
   }
@@ -34,32 +38,49 @@ const createNotification = asyncHandler(async (req, res) => {
   }
 
   // Get user details including notification preferences
-  const user = await User.findById(memberId)
-    .select("notificationToken fcmDeviceToken email userName")
-    .lean();
+  let user;
+  try {
+    user = await User.findById(memberId)
+      .select("notificationToken fcmDeviceToken email userName notificationEnabled")
+      .lean();
+    
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+  } catch (error) {
+    console.error("Error fetching user details:", error);
+    throw new ApiError(500, "Error fetching user information.");
+  }
 
-  if (!user) {
-    throw new ApiError(404, "User not found.");
+  // Skip if notifications are disabled for this user
+  if (user.notificationEnabled === false) {
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, {}, "Notifications are disabled for this user")
+      );
   }
 
   // Get user's language preference
   const userLanguage = await getUserLanguage(memberId);
   const isPortuguese = userLanguage === 'portuguese';
 
-  // Prepare localized notification content
-  const localizedTitle = typeof title === 'object' 
-    ? title[userLanguage] || title.portuguese 
-    : title;
-  
-  const localizedDescription = typeof description === 'object'
-    ? description[userLanguage] || description.portuguese
-    : description || "";
-    
-  const localizedLengthyDesc = typeof lengthyDesc === 'object'
-    ? lengthyDesc[userLanguage] || lengthyDesc.portuguese
-    : lengthyDesc || "";
+  // Localization function with proper fallbacks
+  const localize = (content) => {
+    if (!content) return '';
+    if (typeof content === 'string') return content;
+    if (typeof content === 'object') {
+      return content[userLanguage] || content.portuguese || content.english || '';
+    }
+    return String(content);
+  };
 
-  // Prepare data for in-app notification
+  // Prepare localized content
+  const localizedTitle = localize(title);
+  const localizedDescription = localize(description);
+  const localizedLengthyDesc = localize(lengthyDesc);
+
+  // Prepare data for in-app notification (same structure as before)
   const notificationData = {
     title: localizedTitle,
     type,
@@ -69,14 +90,19 @@ const createNotification = asyncHandler(async (req, res) => {
     ...(projectId && { projectId }),
   };
 
-  // Create in-app notification
-  const notification = await ShowNotification.create(notificationData);
-
-  if (!notification) {
-    throw new ApiError(500, "Failed to create notification in database.");
+  // Create in-app notification (unchanged logic)
+  let notification;
+  try {
+    notification = await ShowNotification.create(notificationData);
+    if (!notification) {
+      throw new ApiError(500, "Failed to create notification in database.");
+    }
+  } catch (error) {
+    console.error("Error creating notification:", error);
+    throw new ApiError(500, "Failed to create notification.");
   }
 
-  // Send push notification if user has a token
+  // Send push notification if enabled and token exists
   const pushToken = user.notificationToken || user.fcmDeviceToken;
   if (pushToken) {
     try {
@@ -90,13 +116,16 @@ const createNotification = asyncHandler(async (req, res) => {
           ...(projectId && { projectId: projectId.toString() }),
         }
       );
+      console.log(`Push notification sent to user ${memberId}`);
     } catch (error) {
-      console.error("Failed to send push notification:", error);
-      // Don't fail the request if push notification fails
+      console.error(`Failed to send push notification to user ${memberId}:`, error);
+      // Continue even if push notification fails
     }
+  } else {
+    console.log(`No push token available for user ${memberId}`);
   }
 
-  // Send email notification if user has email
+  // Send email notification if enabled and email exists
   if (user.email) {
     try {
       const emailSubject = isPortuguese
@@ -105,19 +134,19 @@ const createNotification = asyncHandler(async (req, res) => {
       
       const emailHtml = isPortuguese
         ? `
-          <p>Prezado(a) <strong>${user.userName}</strong>,</p>
+          <p>Prezado(a) <strong>${user.userName || 'Usuário'}</strong>,</p>
           <p>Você recebeu uma nova notificação:</p>
           <h3>${localizedTitle}</h3>
-          <p>${localizedDescription}</p>
+          ${localizedDescription ? `<p>${localizedDescription}</p>` : ''}
           ${localizedLengthyDesc ? `<p>${localizedLengthyDesc}</p>` : ''}
           <br/>
           <p>Atenciosamente,<br/>Equipe Soapro</p>
         `
         : `
-          <p>Dear <strong>${user.userName}</strong>,</p>
+          <p>Dear <strong>${user.userName || 'User'}</strong>,</p>
           <p>You have received a new notification:</p>
           <h3>${localizedTitle}</h3>
-          <p>${localizedDescription}</p>
+          ${localizedDescription ? `<p>${localizedDescription}</p>` : ''}
           ${localizedLengthyDesc ? `<p>${localizedLengthyDesc}</p>` : ''}
           <br/>
           <p>Best regards,<br/>Soapro Team</p>
@@ -129,12 +158,16 @@ const createNotification = asyncHandler(async (req, res) => {
         subject: emailSubject,
         html: emailHtml,
       });
+      console.log(`Email notification sent to ${user.email}`);
     } catch (error) {
-      console.error("Failed to send email notification:", error);
-      // Don't fail the request if email fails
+      console.error(`Failed to send email to ${user.email}:`, error);
+      // Continue even if email fails
     }
+  } else {
+    console.log(`No email available for user ${memberId}`);
   }
 
+  // Return success response (unchanged from your original)
   return res
     .status(201)
     .json(
