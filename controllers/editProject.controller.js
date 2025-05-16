@@ -105,8 +105,8 @@ async function sendProjectNotificationEmail(
           ? type === "update"
             ? `Atualiza  o de Projeto: ${projectInfo.projectName}`
             : type === "deletion"
-              ? `Projeto Eliminado: ${projectInfo.projectName}`
-              : `Novo Projeto: ${projectInfo.projectName}`
+              ? `Projecto Eliminado: ${projectInfo.projectName}`
+              : `Novo Projecto: ${projectInfo.projectName}`
           : type === "update"
             ? `Project Update: ${projectInfo.projectName}`
             : type === "deletion"
@@ -967,12 +967,8 @@ const editProjects = asyncHandler(async (req, res) => {
     if (isFirstUpdate) {
       updateData.isCreated = false;
       console.log("This is the first update after project creation. Setting isCreated to false.");
-      // No direct change to importantFieldsChanged or changesSummary here yet.
-      // This will be handled in the notification logic.
     }
 
-    // --- Process Updates ---
-    // Project Name
     let finalProjectName = existingProject.projectName;
     if (newProjectNameInput && newProjectNameInput !== existingProject.projectName) {
       const nameTaken = await editProject.findOne({
