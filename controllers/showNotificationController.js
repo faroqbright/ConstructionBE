@@ -6,220 +6,136 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
 
-// <<< ADDED IMPORTS based on requirements & "remembered" code >>>
-import { User } from "../models/user.model.js";
-import { LanguagePreference } from "../models/languagePreferenceSchema.js";
-import { sendNotification as sendPushNotification } from "../utils/firebase.service.js"; // Ensure this path is correct
-import { SendEmailUtil } from "../utils/emailsender.js"; // Ensure this path is correct
+import { SendEmailUtil } from "../utils/emailsender.js"
+import { User } from "../models/user.model.js"
+import { sendNotification as sendPushNotification } from "../utils/firebase.service.js"
+import { LanguagePreference } from "../models/languagePreferenceSchema.js"
+// import { Project as editProject } from "../models/project.model.js"
 
-// <<< HELPER FUNCTIONS (inspired by "remembered" code) >>>
 async function getUserLanguage(userId) {
-  if (!userId) {
-    console.warn("[getUserLanguage] No userId provided, defaulting to portuguese.");
-    return 'portuguese';
-  }
   try {
-    const preference = await LanguagePreference.findOne({ userId }).lean();
-    const lang = preference?.languageSelected || 'portuguese';
-    // console.log(`[getUserLanguage] User ${userId} language: ${lang}`);
-    return lang;
+    const preference = await LanguagePreference.findOne({ userId }).lean()
+    return preference?.languageSelected || "portuguese" // Default to Portuguese
   } catch (error) {
-    console.error(`[getUserLanguage] Error fetching language for user ${userId}:`, error.message);
-    return 'portuguese';
+    console.error("Error getting user language:", error)
+    return "portuguese" // Default to Portuguese on error
   }
 }
 
-function getLocalizedContent(userLanguage, contentObject, defaultContent = '') {
-  if (typeof contentObject === 'string') {
-    return contentObject;
-  }
-  if (contentObject && typeof contentObject === 'object') {
-    const plainContent = contentObject._doc ? { ...contentObject._doc } : contentObject;
-    // console.log(`[getLocalizedContent] Language: ${userLanguage}, Available keys: ${Object.keys(plainContent).join(', ')}`);
-    return plainContent[userLanguage] || plainContent.portuguese || plainContent.english || defaultContent;
-  }
-  // console.log(`[getLocalizedContent] ContentObject is not string or object, returning default: ${defaultContent}`);
-  return defaultContent;
+// Helper function to get language-specific content
+function getLocalizedContent(userLanguage, content) {
+  if (!content || typeof content !== "object") return content
+  return content[userLanguage] || content.portuguese || content // Fallback to Portuguese or original content
 }
 
 const createNotification = asyncHandler(async (req, res) => {
-  console.log("[createNotification] Received request:", req.body);
-  const {
-    title,
-    type,
-    description,
-    lengthyDesc,
-    memberId,
-    projectId,
-  } = req.body;
+  const { title, type, description, lengthyDesc, memberId, projectId } = req.body
 
-  // --- Basic Validation ---
-  if (!type || !memberId) {
-    console.error("[createNotification] Validation Error: Type and memberId are required.");
-    throw new ApiError(400, "Type and memberId are required.");
-  }
-  if (!title || (typeof title !== 'string' && (typeof title !== 'object' || (!title.portuguese && !title.english)))) {
-    console.error("[createNotification] Validation Error: Title format invalid.", title);
-    throw new ApiError(400, "Title must be a string or an object with 'portuguese' and/or 'english' keys.");
+  // Basic validation
+  if (!title || !type || !memberId) {
+    throw new ApiError(400, "Title, type, and memberId are required.")
   }
 
-  // --- ID Format Validation ---
+  // ID Format validation
   if (!mongoose.Types.ObjectId.isValid(memberId)) {
-    console.error("[createNotification] Validation Error: Invalid memberId format:", memberId);
-    throw new ApiError(400, "Invalid recipient (memberId) format.");
+    throw new ApiError(400, "Invalid recipient (memberId) format.")
   }
   if (projectId && !mongoose.Types.ObjectId.isValid(projectId)) {
-    console.error("[createNotification] Validation Error: Invalid projectId format:", projectId);
-    throw new ApiError(400, "Invalid project ID format.");
+    throw new ApiError(400, "Invalid project ID format.")
   }
-  console.log(`[createNotification] Target memberId: ${memberId}, ProjectId: ${projectId || 'N/A'}`);
 
-  // --- Determine User Language and Localize Content ---
-  const userLanguage = await getUserLanguage(memberId);
-  console.log(`[createNotification] User ${memberId} language set to: ${userLanguage}`);
+  try {
+    // Get user language preference
+    const userLanguage = await getUserLanguage(memberId)
+    const isPortuguese = userLanguage === "portuguese"
 
-  const localizedTitle = getLocalizedContent(userLanguage, title, "Notification");
-  const localizedDescription = getLocalizedContent(userLanguage, description, "You have a new notification.");
-  const localizedLengthyDesc = getLocalizedContent(userLanguage, lengthyDesc, "Please check your account for more details.");
-  console.log(`[createNotification] Localized Title: ${localizedTitle}`);
-  console.log(`[createNotification] Localized Description: ${localizedDescription}`);
-
-  // --- 1. Create In-App Notification (ShowNotification model) ---
-  const notificationData = {
-    title: localizedTitle,
-    type,
-    description: localizedDescription,
-    lengthyDesc: localizedLengthyDesc,
-    memberId: new mongoose.Types.ObjectId(memberId),
-    ...(projectId && { projectId: new mongoose.Types.ObjectId(projectId) }),
-  };
-
-  console.log("[createNotification] Attempting to create in-app notification with data:", notificationData);
-  const inAppNotification = await ShowNotification.create(notificationData);
-
-  if (!inAppNotification) {
-    console.error("[createNotification] CRITICAL: Failed to create in-app notification in DB.");
-    throw new ApiError(500, "Failed to create the in-app notification in the database.");
-  }
-  console.log("[createNotification] In-app notification created successfully:", inAppNotification._id.toString());
-
-  // --- Asynchronously send Push and Email notifications ---
-  (async () => {
-    console.log(`[Notification Sender ${inAppNotification._id}] Starting background processing for push/email.`);
-    try {
-      const recipientUser = await User.findById(memberId)
-        .select("_id email userName notificationToken fcmDeviceToken")
-        .lean();
-
-      if (!recipientUser) {
-        console.warn(`[Notification Sender ${inAppNotification._id}] Recipient user ${memberId} NOT FOUND. Skipping push/email.`);
-        return;
-      }
-      console.log(`[Notification Sender ${inAppNotification._id}] Found recipient: ${recipientUser.userName}, Email: ${recipientUser.email}, Token1: ${recipientUser.notificationToken}, Token2: ${recipientUser.fcmDeviceToken}`);
-
-      let projectNameForNotif = "";
-      if (projectId) {
-        try {
-          const project = await editProject.findById(projectId).select("projectName").lean();
-          if (project && project.projectName) {
-            projectNameForNotif = project.projectName;
-            console.log(`[Notification Sender ${inAppNotification._id}] Fetched project name: ${projectNameForNotif}`);
-          } else {
-            console.warn(`[Notification Sender ${inAppNotification._id}] Project ${projectId} found but has no name, or project not found.`);
-          }
-        } catch (projectError) {
-          console.error(`[Notification Sender ${inAppNotification._id}] Error fetching project ${projectId} details:`, projectError.message);
-        }
-      }
-
-      // --- 2. Send Push Notification (via Firebase) ---
-      const effectiveToken = recipientUser.notificationToken || recipientUser.fcmDeviceToken;
-      if (effectiveToken) {
-        console.log(`[Notification Sender ${inAppNotification._id}] Attempting to send PUSH to token: ${effectiveToken}`);
-        try {
-          const pushDataPayload = {
-            notificationId: inAppNotification._id.toString(),
-            type: type,
-            ...(projectId && { projectId: projectId.toString() }),
-          };
-          const pushBody = localizedDescription || (userLanguage === 'portuguese' ? 'Você tem uma nova notificação.' : 'You have a new notification.');
-          
-          // Ensure `sendPushNotification` is correctly imported and functional
-          await sendPushNotification([effectiveToken], localizedTitle, pushBody, pushDataPayload);
-          console.log(`[Notification Sender ${inAppNotification._id}] PUSH notification sent successfully to ${recipientUser.userName}.`);
-        } catch (pushError) {
-          console.error(`[Notification Sender ${inAppNotification._id}] FAILED to send push notification to ${recipientUser.userName} (${memberId}):`, pushError.message, pushError.stack);
-        }
-      } else {
-        console.log(`[Notification Sender ${inAppNotification._id}] No push token found for user ${recipientUser.userName} (${memberId}). Skipping push.`);
-      }
-
-      // --- 3. Send Email Notification ---
-      if (recipientUser.email) {
-        console.log(`[Notification Sender ${inAppNotification._id}] Attempting to send EMAIL to: ${recipientUser.email}`);
-        try {
-          const emailSubject = localizedTitle;
-          const recipientName = recipientUser.userName || (userLanguage === 'portuguese' ? 'Utilizador' : 'User');
-          const mainEmailContent = localizedLengthyDesc || localizedDescription || (userLanguage === 'portuguese' ? 'Você recebeu uma nova atualização em sua conta.' : 'You have received a new update on your account.');
-          const projectInfoHtml = projectId && projectNameForNotif
-            ? (userLanguage === 'portuguese' ? `<p>Relacionado ao projeto: <strong>${projectNameForNotif}</strong></p>` : `<p>Related to project: <strong>${projectNameForNotif}</strong></p>`)
-            : '';
-          
-          let emailHtml;
-          if (userLanguage === 'portuguese') {
-            emailHtml = `...`; // Your Portuguese HTML template
-          } else { // Default to English
-            emailHtml = `...`; // Your English HTML template
-          }
-           // For brevity, I'm not pasting the full HTML again, but ensure it's correct
-           if (userLanguage === 'portuguese') {
-            emailHtml = `
-              <p>Prezado(a) ${recipientName},</p>
-              <p>${mainEmailContent}</p>
-              ${projectInfoHtml}
-              <br />
-              <p>Para mais detalhes, acesse a plataforma.</p>
-              <p>Atenciosamente,<br/>Equipa Soapro</p>
-            `;
-          } else { // Default to English
-            emailHtml = `
-              <p>Dear ${recipientName},</p>
-              <p>${mainEmailContent}</p>
-              ${projectInfoHtml}
-              <br />
-              <p>For more details, please log in to the platform.</p>
-              <p>Best regards,<br/>The Soapro Team</p>
-            `;
-          }
-          // Ensure `SendEmailUtil` is correctly imported and functional
-          await SendEmailUtil({
-            from: process.env.EMAIL_FROM || "noreply@soapro.com",
-            to: recipientUser.email,
-            subject: emailSubject,
-            html: emailHtml,
-          });
-          console.log(`[Notification Sender ${inAppNotification._id}] EMAIL sent successfully to ${recipientUser.email}.`);
-        } catch (emailError) {
-          console.error(`[Notification Sender ${inAppNotification._id}] FAILED to send email to ${recipientUser.email}:`, emailError.message, emailError.stack);
-        }
-      } else {
-        console.log(`[Notification Sender ${inAppNotification._id}] No email address found for user ${recipientUser.userName} (${memberId}). Skipping email.`);
-      }
-    } catch (backgroundError) {
-      console.error(`[Notification Sender ${inAppNotification._id}] GENERAL ERROR in background push/email processing for ${memberId}:`, backgroundError.message, backgroundError.stack);
+    // Prepare notification data with language-specific content
+    const notificationData = {
+      title: typeof title === "object" ? getLocalizedContent(userLanguage, title) : title,
+      type,
+      description: typeof description === "object" ? getLocalizedContent(userLanguage, description) : description || "",
+      lengthyDesc: typeof lengthyDesc === "object" ? getLocalizedContent(userLanguage, lengthyDesc) : lengthyDesc || "",
+      memberId,
+      ...(projectId && { projectId }),
     }
-  })();
 
-  return res
-    .status(201)
-    .json(
-      new ApiResponse(
-        201,
-        inAppNotification,
-        "In-app notification created. Push and email notifications are being processed (check server logs)."
-      )
-    );
-});
+    const notification = await ShowNotification.create(notificationData)
+
+    if (!notification) {
+      throw new ApiError(500, "Failed to create notification in database.")
+    }
+
+    // If project exists, get project details for push notification
+    let projectName = ""
+    if (projectId) {
+      const project = await editProject.findById(projectId).select("projectName").lean()
+      if (project) {
+        projectName = project.projectName
+      }
+    }
+
+    // Send push notification if applicable
+    if (type.includes("Milestone") || type.includes("Project")) {
+      const user = await User.findById(memberId).select("notificationToken fcmDeviceToken").lean()
+      if (user && (user.notificationToken || user.fcmDeviceToken)) {
+        const token = user.notificationToken || user.fcmDeviceToken
+
+        // Prepare push notification content based on user language
+        const pushTitle = typeof title === "object" ? getLocalizedContent(userLanguage, title) : title
+
+        const pushBody =
+          typeof description === "object"
+            ? getLocalizedContent(userLanguage, description)
+            : description ||
+              (isPortuguese
+                ? `Nova notificação no ${projectName || "sistema"}`
+                : `New notification in ${projectName || "the system"}`)
+
+        // Send push notification
+        await sendPushNotification([token], pushTitle, pushBody, {
+          type,
+          notificationId: notification._id.toString(),
+          ...(projectId && { projectId: projectId.toString() }),
+        })
+      }
+    }
+
+    // Send email notification if applicable
+    if (type.includes("Milestone") || type.includes("Project") || type.includes("Task")) {
+      const user = await User.findById(memberId).select("email userName").lean()
+      if (user && user.email) {
+        // Prepare email content based on user language
+        const emailSubject = typeof title === "object" ? getLocalizedContent(userLanguage, title) : title
+
+        const emailBody =
+          typeof lengthyDesc === "object"
+            ? getLocalizedContent(userLanguage, lengthyDesc)
+            : lengthyDesc ||
+              (isPortuguese
+                ? `Prezado(a) ${user.userName},<br>Você recebeu uma nova notificação no sistema Soapro.<br><br>Atenciosamente,<br>Equipe Soapro`
+                : `Dear ${user.userName},<br>You have received a new notification in the Soapro system.<br><br>Best regards,<br>Soapro Team`)
+
+        // Format email HTML
+        const html = `
+          <p>${emailBody.split("//").join("<br>")}</p>
+        `
+
+        // Send email
+        await SendEmailUtil({
+          from: process.env.EMAIL_FROM || "noreply@soapro.com",
+          to: user.email,
+          subject: emailSubject,
+          html,
+        })
+      }
+    }
+
+    return res.status(201).json(new ApiResponse(201, notification, "Notification created successfully"))
+  } catch (error) {
+    console.error("Error in createNotification:", error)
+    throw new ApiError(500, "Failed to create and send notification: " + error.message)
+  }
+})
 
 const getNotifications = asyncHandler(async (req, res) => {
   const { memberId, projectId, isRead } = req.query;
@@ -457,5 +373,5 @@ export {
   getNotificationById,
   updateNotificationStatus,
   clearAllNotifications,
-  getAllNotificationsForUser,
+  getAllNotificationsForUser, // Add the new function here
 };
