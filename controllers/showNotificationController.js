@@ -5,12 +5,10 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import mongoose from "mongoose";
-
 import { SendEmailUtil } from "../utils/emailsender.js"
 import { User } from "../models/user.model.js"
 import { sendNotification as sendPushNotification } from "../utils/firebase.service.js"
 import { LanguagePreference } from "../models/languagePreferenceSchema.js"
-// import { Project as editProject } from "../models/project.model.js"
 
 async function getUserLanguage(userId) {
   try {
@@ -20,12 +18,6 @@ async function getUserLanguage(userId) {
     console.error("Error getting user language:", error)
     return "portuguese" // Default to Portuguese on error
   }
-}
-
-// Helper function to get language-specific content
-function getLocalizedContent(userLanguage, content) {
-  if (!content || typeof content !== "object") return content
-  return content[userLanguage] || content.portuguese || content // Fallback to Portuguese or original content
 }
 
 const createNotification = asyncHandler(async (req, res) => {
@@ -47,86 +39,90 @@ const createNotification = asyncHandler(async (req, res) => {
   try {
     // Get user language preference
     const userLanguage = await getUserLanguage(memberId)
-    const isPortuguese = userLanguage === "portuguese"
 
     // Prepare notification data with language-specific content
     const notificationData = {
-      title: typeof title === "object" ? getLocalizedContent(userLanguage, title) : title,
+      title: typeof title === "object" ? title[userLanguage] || title.portuguese || title : title,
       type,
-      description: typeof description === "object" ? getLocalizedContent(userLanguage, description) : description || "",
-      lengthyDesc: typeof lengthyDesc === "object" ? getLocalizedContent(userLanguage, lengthyDesc) : lengthyDesc || "",
+      description:
+        typeof description === "object"
+          ? description[userLanguage] || description.portuguese || description
+          : description || "",
+      lengthyDesc:
+        typeof lengthyDesc === "object"
+          ? lengthyDesc[userLanguage] || lengthyDesc.portuguese || lengthyDesc
+          : lengthyDesc || "",
       memberId,
-      ...(projectId && { projectId }),
+      ...(projectId && { projectId }), // Conditionally add projectId
     }
 
     const notification = await ShowNotification.create(notificationData)
 
     if (!notification) {
+      // Should be rare if validation passes, but good practice
       throw new ApiError(500, "Failed to create notification in database.")
-    }
-
-    // If project exists, get project details for push notification
-    let projectName = ""
-    if (projectId) {
-      const project = await editProject.findById(projectId).select("projectName").lean()
-      if (project) {
-        projectName = project.projectName
-      }
     }
 
     // Send push notification if applicable
     if (type.includes("Milestone") || type.includes("Project")) {
-      const user = await User.findById(memberId).select("notificationToken fcmDeviceToken").lean()
-      if (user && (user.notificationToken || user.fcmDeviceToken)) {
-        const token = user.notificationToken || user.fcmDeviceToken
+      const user = await User.findById(memberId).select("notificationToken fcmDeviceToken email userName").lean()
 
-        // Prepare push notification content based on user language
-        const pushTitle = typeof title === "object" ? getLocalizedContent(userLanguage, title) : title
+      if (user) {
+        // Send push notification if token exists
+        if (user.notificationToken || user.fcmDeviceToken) {
+          const token = user.notificationToken || user.fcmDeviceToken
 
-        const pushBody =
-          typeof description === "object"
-            ? getLocalizedContent(userLanguage, description)
-            : description ||
-              (isPortuguese
-                ? `Nova notificação no ${projectName || "sistema"}`
-                : `New notification in ${projectName || "the system"}`)
+          // Get project name if projectId exists
+          let projectName = ""
+          if (projectId) {
+            const project = await editProject.findById(projectId).select("projectName").lean()
+            if (project) {
+              projectName = project.projectName
+            }
+          }
 
-        // Send push notification
-        await sendPushNotification([token], pushTitle, pushBody, {
-          type,
-          notificationId: notification._id.toString(),
-          ...(projectId && { projectId: projectId.toString() }),
-        })
-      }
-    }
+          // Prepare push notification content
+          const pushTitle = typeof title === "object" ? title[userLanguage] || title.portuguese : title
 
-    // Send email notification if applicable
-    if (type.includes("Milestone") || type.includes("Project") || type.includes("Task")) {
-      const user = await User.findById(memberId).select("email userName").lean()
-      if (user && user.email) {
-        // Prepare email content based on user language
-        const emailSubject = typeof title === "object" ? getLocalizedContent(userLanguage, title) : title
+          const pushBody =
+            typeof description === "object"
+              ? description[userLanguage] || description.portuguese
+              : description ||
+                (userLanguage === "portuguese"
+                  ? `Nova notificação no ${projectName || "sistema"}`
+                  : `New notification in ${projectName || "the system"}`)
 
-        const emailBody =
-          typeof lengthyDesc === "object"
-            ? getLocalizedContent(userLanguage, lengthyDesc)
-            : lengthyDesc ||
-              (isPortuguese
-                ? `Prezado(a) ${user.userName},<br>Você recebeu uma nova notificação no sistema Soapro.<br><br>Atenciosamente,<br>Equipe Soapro`
-                : `Dear ${user.userName},<br>You have received a new notification in the Soapro system.<br><br>Best regards,<br>Soapro Team`)
+          // Send push notification
+          await sendPushNotification([token], pushTitle, pushBody, {
+            type,
+            notificationId: notification._id.toString(),
+            ...(projectId && { projectId: projectId.toString() }),
+          })
+        }
 
-        // Format email HTML
-        const html = `
-          <p>${emailBody.split("//").join("<br>")}</p>
-        `
+        // Send email notification if email exists
+        if (user.email && (type.includes("Milestone") || type.includes("Project") || type.includes("Task"))) {
+          const emailSubject = typeof title === "object" ? title[userLanguage] || title.portuguese : title
 
-        // Send email
-        await SendEmailUtil({
-          from: process.env.EMAIL_FROM || "noreply@soapro.com",
-          to: user.email,
-          subject: emailSubject,
-          html,
-        })
+          const emailBody =
+            typeof lengthyDesc === "object"
+              ? lengthyDesc[userLanguage] || lengthyDesc.portuguese
+              : lengthyDesc ||
+                (userLanguage === "portuguese"
+                  ? `Prezado(a) ${user.userName},<br>Você recebeu uma nova notificação no sistema Soapro.<br><br>Atenciosamente,<br>Equipe Soapro`
+                  : `Dear ${user.userName},<br>You have received a new notification in the Soapro system.<br><br>Best regards,<br>Soapro Team`)
+
+          // Format email HTML
+          const html = `<p>${emailBody.split("//").join("<br>")}</p>`
+
+          // Send email
+          await SendEmailUtil({
+            from: process.env.EMAIL_FROM || "noreply@soapro.com",
+            to: user.email,
+            subject: emailSubject,
+            html,
+          })
+        }
       }
     }
 
