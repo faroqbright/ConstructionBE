@@ -1,7 +1,7 @@
 import { editProject } from "../models/project.model.js";
 import { Review } from "../models/reviewsModel.js";
 import mongoose from "mongoose";
-import { User } from "../models/user.model.js"; // Example
+import { User } from "../models/user.model.js"; 
 
 export const createReview = async (req, res) => {
   const { projectId, userId, message, rating } = req.body;

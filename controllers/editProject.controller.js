@@ -26,7 +26,7 @@ async function sendDocumentNotificationEmail(user, documentInfo) {
 
     // Email templates
     const templates = {
-      portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Notificação de Novo Documento</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">Novo Documento Disponível</h2><p style="font-size: 16px; color: #555;">Olá <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">Foi adicionado um novo documento chamado <strong>”${documentInfo.fileName}”</strong> ao projecto <strong>”${documentInfo.projectName}”</strong>.</p><p style="font-size: 16px; color: #555;">Clique no botão abaixo para aceder ao documento:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Documento</a><p style="font-size: 14px; color: #999; margin-top: 30px;">Se tiver alguma dúvida ou necessitar de assistência, a nossa equipa está disponível para o apoiar.</p><p style="font-size: 14px; color: #999;">Com os melhores cumprimentos,<br><strong>Equipa Soapro</strong></p></td></tr></table></body></html>`,
+      portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Notifica  o de Novo Documento</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">Novo Documento Dispon vel</h2><p style="font-size: 16px; color: #555;">Ol  <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">Foi adicionado um novo documento chamado <strong> ${documentInfo.fileName} </strong> ao projecto <strong> ${documentInfo.projectName} </strong>.</p><p style="font-size: 16px; color: #555;">Clique no bot o abaixo para aceder ao documento:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Documento</a><p style="font-size: 14px; color: #999; margin-top: 30px;">Se tiver alguma d vida ou necessitar de assist ncia, a nossa equipa est  dispon vel para o apoiar.</p><p style="font-size: 14px; color: #999;">Com os melhores cumprimentos,<br><strong>Equipa Soapro</strong></p></td></tr></table></body></html>`,
       english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Document Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: center;"><h2 style="color: #333;">New Document Available</h2><p style="font-size: 16px; color: #555;">Dear <strong>${user.userName}</strong>,</p><p style="font-size: 16px; color: #555;">A new document titled <strong>"${documentInfo.fileName}"</strong> has been uploaded to the project <strong>"${documentInfo.projectName}"</strong>.</p><p style="font-size: 16px; color: #555;">Click the button below to view the document:</p><a href="${documentInfo.documentLink}" style="display: inline-block; padding: 12px 24px; margin-top: 20px; background-color: #007bff; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold;">View Document</a><p style="font-size: 14px; color: #999; margin-top: 30px;">If you have any questions or require assistance, our team is available to support you.</p><p style="font-size: 14px; color: #999;">Best regards,<br><strong>Soapro Team</strong></p></td></tr></table></body></html>`,
     };
 
@@ -84,15 +84,15 @@ async function sendProjectNotificationEmail(
     // Email templates for different notification types
     const templates = {
       update: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualiza  o de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Atualiza  o de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das altera  es:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, fa a login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       deletion: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Eliminação de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Projeto Eliminado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Elimina  o de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${projectInfo.projectName}</strong> foi eliminado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Todos os documentos e dados associados a este projeto foram removidos do sistema.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Deleted</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Deletion Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${projectInfo.projectName}</strong> has been deleted by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">All documents and data associated with this project have been removed from the system.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
       creation: {
-        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+        portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Novo Projeto Criado</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Novo Projeto</h2><p style="font-size: 16px; color: #555;">Um novo projeto <strong>${projectInfo.projectName}</strong> foi criado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Por favor, fa a login para ver os detalhes do projeto.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
         english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>New Project Created</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">New Project Notification</h2><p style="font-size: 16px; color: #555;">A new project <strong>${projectInfo.projectName}</strong> has been created by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Please log in to view the project details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
       },
     };
@@ -103,10 +103,10 @@ async function sendProjectNotificationEmail(
       subject:
         userLanguage === "portuguese"
           ? type === "update"
-            ? `Atualização de Projeto: ${projectInfo.projectName}`
+            ? `Atualiza  o de Projeto: ${projectInfo.projectName}`
             : type === "deletion"
-              ? `Projeto Eliminado: ${projectInfo.projectName}`
-              : `Novo Projeto: ${projectInfo.projectName}`
+              ? `Projecto Eliminado: ${projectInfo.projectName}`
+              : `Novo Projecto: ${projectInfo.projectName}`
           : type === "update"
             ? `Project Update: ${projectInfo.projectName}`
             : type === "deletion"
@@ -557,9 +557,9 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //             if (userLanguage === "portuguese") {
 //               return {
 //                 ...notif,
-//                 title: `Atualização de Projeto: ${updatedProject.projectName}`,
+//                 title: `Atualiza  o de Projeto: ${updatedProject.projectName}`,
 //                 description: `O projeto "${updatedProject.projectName}" foi atualizado por ${performingUser.userName}: ${changesSummary.join("; ")}.`,
-//                 lengthyDesc: `Detalhes da atualização do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
+//                 lengthyDesc: `Detalhes da atualiza  o do projeto "${updatedProject.projectName}": ${changesSummary.join("; ")}. Realizado por ${performingUser.userName}.`,
 //               };
 //             }
 //             return notif;
@@ -605,16 +605,16 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //             reviewNotificationsToCreate.push({
 //               title:
 //                 userLanguage === "portuguese"
-//                   ? `Projeto Concluído: ${updatedProject.projectName}`
+//                   ? `Projeto Conclu do: ${updatedProject.projectName}`
 //                   : `Project Completed: ${updatedProject.projectName}`,
 //               type: "Review Request",
 //               description:
 //                 userLanguage === "portuguese"
-//                   ? `O projeto "${updatedProject.projectName}" foi concluído. Por favor, avalie o projeto.`
+//                   ? `O projeto "${updatedProject.projectName}" foi conclu do. Por favor, avalie o projeto.`
 //                   : `The project "${updatedProject.projectName}" has been completed. Please review the project.`,
 //               lengthyDesc:
 //                 userLanguage === "portuguese"
-//                   ? `O projeto "${updatedProject.projectName}" foi marcado como concluído. Por favor, reserve um momento para escrever uma avaliação sobre sua experiência com este projeto.`
+//                   ? `O projeto "${updatedProject.projectName}" foi marcado como conclu do. Por favor, reserve um momento para escrever uma avalia  o sobre sua experi ncia com este projeto.`
 //                   : `The project "${updatedProject.projectName}" has been marked as completed. Please take a moment to write a review about your experience with this project.`,
 //               memberId: new mongoose.Types.ObjectId(userIdStr),
 //               projectId: updatedProject._id,
@@ -656,7 +656,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //               await sendPushNotification(
 //                 reviewTokensByLanguage.portuguese,
 //                 `Por favor, avalie o projeto ${updatedProject.projectName}`,
-//                 `O projeto foi concluído. Sua avaliação é importante para nós!`,
+//                 `O projeto foi conclu do. Sua avalia  o   importante para n s!`,
 //                 {
 //                   projectId: updatedProject._id.toString(),
 //                   type: "REVIEW_REQUEST",
@@ -778,7 +778,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 
 //           // Send Portuguese notifications
 //           if (tokensByLanguage.portuguese.length > 0) {
-//             const pushTitle = `Atualização de Projeto: ${updatedProject.projectName}`;
+//             const pushTitle = `Atualiza  o de Projeto: ${updatedProject.projectName}`;
 //             const pushBody = `${changesSummary.join("; ")}. Por ${performingUser.userName}.`;
 //             try {
 //               await sendPushNotification(
@@ -836,7 +836,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 
 //           // Email templates
 //           const emailTemplates = {
-//             portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualização de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notificação de Atualização de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das alterações:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, faça login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta é uma notificação automática.</p></td></tr></table></body></html>`,
+//             portuguese: `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Atualiza  o de Projeto</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Notifica  o de Atualiza  o de Projeto</h2><p style="font-size: 16px; color: #555;">O projeto <strong>${updatedProject.projectName}</strong> foi atualizado por ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Resumo das altera  es:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Por favor, fa a login para ver os detalhes completos.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">Esta   uma notifica  o autom tica.</p></td></tr></table></body></html>`,
 //             english: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Project Update Notification</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;"><h2 style="color: #333;">Project Update Notification</h2><p style="font-size: 16px; color: #555;">The project <strong>${updatedProject.projectName}</strong> has been updated by ${performingUser.userName}.</p><p style="font-size: 16px; color: #555;">Summary of changes:</p><ul style="font-size: 16px; color: #555; padding-left: 20px;">${changesSummary.map((change) => `<li>${change}</li>`).join("")}</ul><p style="font-size: 16px; color: #555;">Please log in to view the complete details.</p><p style="font-size: 14px; color: #999; margin-top: 30px;">This is an automated notification.</p></td></tr></table></body></html>`,
 //           };
 
@@ -852,7 +852,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 //                   to: user.email,
 //                   subject:
 //                     userLanguage === "portuguese"
-//                       ? `Atualização de Projeto: ${updatedProject.projectName}`
+//                       ? `Atualiza  o de Projeto: ${updatedProject.projectName}`
 //                       : `Project Update: ${updatedProject.projectName}`,
 //                   html: emailHtml,
 //                 });
@@ -967,12 +967,8 @@ const editProjects = asyncHandler(async (req, res) => {
     if (isFirstUpdate) {
       updateData.isCreated = false;
       console.log("This is the first update after project creation. Setting isCreated to false.");
-      // No direct change to importantFieldsChanged or changesSummary here yet.
-      // This will be handled in the notification logic.
     }
 
-    // --- Process Updates ---
-    // Project Name
     let finalProjectName = existingProject.projectName;
     if (newProjectNameInput && newProjectNameInput !== existingProject.projectName) {
       const nameTaken = await editProject.findOne({
@@ -1279,8 +1275,8 @@ const editProjects = asyncHandler(async (req, res) => {
                 : `New Project Created: ${safeProjectName}`;
             
             const creationDetailsPt = changesSummary.length === 1 && changesSummary[0] === "Project has been activated."
-                ? "O Projecto está agora ativo."
-                : `Alterações: ${safeChangesText}.`;
+                ? "O Projecto est  agora ativo."
+                : `Altera  es: ${safeChangesText}.`;
             const creationDetailsEn = changesSummary.length === 1 && changesSummary[0] === "Project has been activated."
                 ? "The project is now active."
                 : `Changes: ${safeChangesText}.`;
@@ -1293,13 +1289,13 @@ const editProjects = asyncHandler(async (req, res) => {
                 : `Details of new project "${safeProjectName}". Created by ${safePerformerName}. ${creationDetailsEn}`;
           } else { // Regular update
             title = userLanguage === "portuguese"
-                ? `Atualização de Projecto: ${safeProjectName}`
+                ? `Atualiza  o de Projecto: ${safeProjectName}`
                 : `Project Update: ${safeProjectName}`;
             description = userLanguage === "portuguese"
                 ? `O Projecto "${safeProjectName}" foi atualizado por ${safePerformerName}: ${safeChangesText}.`
                 : `The project "${safeProjectName}" was updated by ${safePerformerName}: ${safeChangesText}.`;
             lengthyDesc = userLanguage === "portuguese"
-                ? `Detalhes da atualização: ${safeChangesText}. Realizado por ${safePerformerName}.`
+                ? `Detalhes da atualiza  o: ${safeChangesText}. Realizado por ${safePerformerName}.`
                 : `Details of update: ${safeChangesText}. Performed by ${safePerformerName}.`;
           }
 
@@ -1330,10 +1326,10 @@ const editProjects = asyncHandler(async (req, res) => {
           userIdsToQuery.forEach((userIdStr) => {
             const userLanguage = reviewLangMap[userIdStr] || "portuguese";
             inAppNotificationsToCreate.push({
-              title: userLanguage === "portuguese" ? `Projecto Concluído: ${safeProjectName}` : `Project Completed: ${safeProjectName}`,
+              title: userLanguage === "portuguese" ? `Projecto Conclu do: ${safeProjectName}` : `Project Completed: ${safeProjectName}`,
               type: "Review Request",
-              description: userLanguage === "portuguese" ? `O Projecto "${safeProjectName}" foi concluído. Por favor, avalie.` : `The project "${safeProjectName}" is complete. Please review.`,
-              lengthyDesc: userLanguage === "portuguese" ? `O Projecto "${safeProjectName}" foi marcado como concluído. Sua avaliação é importante.` : `The project "${safeProjectName}" is marked complete. Your review is valuable.`,
+              description: userLanguage === "portuguese" ? `O Projecto "${safeProjectName}" foi conclu do. Por favor, avalie.` : `The project "${safeProjectName}" is complete. Please review.`,
+              lengthyDesc: userLanguage === "portuguese" ? `O Projecto "${safeProjectName}" foi marcado como conclu do. Sua avalia  o   importante.` : `The project "${safeProjectName}" is marked complete. Your review is valuable.`,
               memberId: new mongoose.Types.ObjectId(userIdStr),
               projectId: updatedProject._id,
             });
@@ -1391,7 +1387,7 @@ const editProjects = asyncHandler(async (req, res) => {
               const pushSummary = finalChangesSummary.map(String).join("; ");
 
               if (tokensByLanguage.portuguese.length > 0) {
-                const pushTitle = isFirstUpdate ? `Novo Projecto Criado: ${safeProjectName}` : `Atualização de Projecto: ${safeProjectName}`;
+                const pushTitle = isFirstUpdate ? `Novo Projecto Criado: ${safeProjectName}` : `Atualiza  o de Projecto: ${safeProjectName}`;
                 const pushBody = isFirstUpdate ? `Novo projecto "${safeProjectName}" criado por ${finalPerformerName}. ${pushSummary}` : `O projecto "${safeProjectName}" foi atualizado por ${finalPerformerName}: ${pushSummary}`;
                 sendPushNotification(tokensByLanguage.portuguese, pushTitle, pushBody, { projectId: finalProjectDataForNotif._id.toString(), type: isFirstUpdate ? "PROJECT_CREATED" : "PROJECT_UPDATE" })
                   .catch(e => console.error(`Push Error (PT ${isFirstUpdate ? "Creation" : "Update"}) for ${finalProjectDataForNotif._id}: ${e.message}`));
@@ -1430,7 +1426,7 @@ const editProjects = asyncHandler(async (req, res) => {
                   if (token) reviewTokensByLanguage[finalUserLanguageMap[user._id.toString()] || 'portuguese'].push(token);
                 });
                 if (reviewTokensByLanguage.portuguese.length > 0)
-                  sendPushNotification(reviewTokensByLanguage.portuguese, `Por favor, avalie o Projecto ${safeProjectName}`, `O Projecto foi concluído. Sua avaliação é importante!`, { projectId: finalProjectDataForNotif._id.toString(), type: "REVIEW_REQUEST" })
+                  sendPushNotification(reviewTokensByLanguage.portuguese, `Por favor, avalie o Projecto ${safeProjectName}`, `O Projecto foi conclu do. Sua avalia  o   importante!`, { projectId: finalProjectDataForNotif._id.toString(), type: "REVIEW_REQUEST" })
                     .catch(e => console.error(`Push Error (PT Review) for ${finalProjectDataForNotif._id}: ${e.message}`));
                 if (reviewTokensByLanguage.english.length > 0)
                   sendPushNotification(reviewTokensByLanguage.english, `Please review project ${safeProjectName}`, `The project has been completed. Your feedback is important!`, { projectId: finalProjectDataForNotif._id.toString(), type: "REVIEW_REQUEST" })
@@ -2259,7 +2255,7 @@ const deleteProject = asyncHandler(async (req, res) => {
             ? `O projeto "${deletedProjectName}" foi eliminado por ${performingUser.userName}.`
             : `The project "${deletedProjectName}" was deleted by ${performingUser.userName}.`,
           lengthyDesc: isPortuguese
-            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. Ação realizada por ${performingUser.userName}.`
+            ? `Todos os documentos e dados associados ao projeto "${deletedProjectName}" foram removidos do sistema. A  o realizada por ${performingUser.userName}.`
             : `All documents and data associated with project "${deletedProjectName}" have been removed from the system. Action performed by ${performingUser.userName}.`,
           memberId: user._id,
           projectId: deletedProjectId,
