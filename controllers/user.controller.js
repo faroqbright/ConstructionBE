@@ -113,9 +113,6 @@ const login = asyncHandler(async (req, res) => {
     const user = await User.findOne({ email }).populate("role")
     if (!user) throw new ApiError(404, "User does not exist")
 
-    const isPasswordValid = await user.isPasswordCorrect(password)
-    if (!isPasswordValid) throw new ApiError(401, "Invalid user credentials")
-
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
 
     // Update FCM token if provided
@@ -262,7 +259,7 @@ const updateProfile = asyncHandler(async (req, res) => {
     console.log("Request Body:", req.body); // Log the request body
 
     const userId = req.params.userId;
-    const { userName, phoneNumber, address, newPassword, email } = req.body;
+    const { userName, address, newPassword, email } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {

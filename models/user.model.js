@@ -32,9 +32,9 @@ const userSchema = new mongoose.Schema(
       lowercase: true, // Fix typo, change 'lowecase' to 'lowercase'
       trim: true, // Ensures address is also trimmed
     },
-    phoneNumber: {
-      type: String,
-    },
+    // phoneNumber: {
+    //   type: String,
+    // },
     email: {
       type: String,
       lowercase: true, // Ensures the email is stored in lowercase
@@ -80,20 +80,8 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
-
-// Pre-save hook to hash password before saving it
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-// Method to check if the password is correct
-userSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcrypt.compare(password, this.password);
-};
 
 // Method to generate an access token
 userSchema.methods.generateAccessToken = function () {
