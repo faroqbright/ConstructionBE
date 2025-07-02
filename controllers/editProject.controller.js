@@ -918,7 +918,7 @@ const editProjects = asyncHandler(async (req, res) => {
     const { projectId } = req.params;
     const performingUser = req.user;
 
-    if (!performingUser || !performingUser._id || !performingUser.userName) {
+    if (!performingUser || !performingUser._id) {
       throw new ApiError(401, "Unauthorized: User information is missing.");
     }
 

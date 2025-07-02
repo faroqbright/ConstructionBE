@@ -104,68 +104,115 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
+// In controllers/user.controller.js
+
 const login = asyncHandler(async (req, res) => {
-  try {
-    const { email, password, fcmDeviceToken } = req.body
+    const { email, password, fcmDeviceToken } = req.body;
 
-    if (!email) throw new ApiError(400, "Email is required")
+    if (!email || !password) {
+        throw new ApiError(400, "Email and password are required");
+    }
 
-    const user = await User.findOne({ email }).populate("role")
-    if (!user) throw new ApiError(404, "User does not exist")
+    // Find the user and explicitly include the password field for comparison
+    const user = await User.findOne({ email }).select("+password").populate("role");
 
-    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
+    if (!user) {
+        throw new ApiError(401, "Invalid credentials"); // Use 401 for failed auth
+    }
 
-    // Update FCM token if provided
+    // Use the method from the model to check if the password is correct
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if (!isPasswordValid) {
+        throw new ApiError(401, "Invalid credentials"); // Same error for security
+    }
+    
+    // --- If password is valid, the rest of your logic can proceed ---
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+
+    user.refreshToken = refreshToken;
+
     if (fcmDeviceToken) {
-      user.fcmDeviceToken = fcmDeviceToken
-      await user.save()
+        user.fcmDeviceToken = fcmDeviceToken;
     }
 
-    // Fetch assigned business areas
-    let assignedBusinessAreas = []
+    let assignedBusinessAreas = [];
     if (user.role && user.role._id) {
-      assignedBusinessAreas = await BusinessArea.find({
-        role: user.role._id,
-      }).select("businessArea")
+        assignedBusinessAreas = await BusinessArea.find({
+            role: user.role._id,
+        }).select("businessArea");
 
-      // If user doesn't have a business area set and there are assigned areas, set the first one
-      if (!user.businessArea && assignedBusinessAreas.length > 0) {
-        const firstBusinessArea = assignedBusinessAreas[0]?.businessArea
-        if (firstBusinessArea) {
-          user.businessArea = firstBusinessArea
-          await user.save()
+        if (!user.businessArea && assignedBusinessAreas.length > 0) {
+            const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
+            if (firstBusinessArea) {
+                user.businessArea = firstBusinessArea;
+            }
         }
-      }
     }
+    
+    // Save the user to store the new refresh/fcm tokens
+    await user.save({ validateBeforeSave: false });
 
     const options = {
-      httpOnly: true,
-      secure: true,
-    }
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+    };
 
-    const loggedInUser = await User.findById(user._id).select("-password -refreshToken").populate("role")
+    // Find the user again without the password/refresh token to send to the client
+    const loggedInUser = await User.findById(user._id)
+        .select("-refreshToken")
+        .populate("role");
 
-    return res
-      .status(200)
-      .cookie("accessToken", accessToken, options)
-      .cookie("refreshToken", refreshToken, options)
-      .json(
-        new ApiResponse(
-          200,
-          {
-            user: loggedInUser,
-            assignedBusinessAreas,
-            accessToken,
-            refreshToken,
-          },
-          "User logged in successfully",
-        ),
-      )
-  } catch (error) {
-    console.error("Login Error:", error)
-    throw new ApiError(500, error.message || "Internal server error")
+    return res.status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200,
+                {
+                    user: loggedInUser,
+                    assignedBusinessAreas,
+                    accessToken,
+                    refreshToken,
+                },
+                "User logged in successfully"
+            )
+        );
+});
+
+const updatePassword = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    throw new ApiError(400, "Email and a new password are required.");
   }
-})
+
+  if (password.length < 6) {
+    throw new ApiError(400, "Password must be at least 6 characters long.");
+  }
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    throw new ApiError(404, "User with this email does not exist.");
+  }
+
+  user.password = password;
+  user.isPasswordChanged = true;
+
+  await user.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        {},
+        "Password has been updated successfully. The user will need to log in with the new password."
+      )
+    );
+});
 
 const forgetPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
@@ -403,7 +450,6 @@ const updateFcmToken = asyncHandler(async (req, res) => {
   }
 });
 
-
 export {
   registerUser,
   verifyOTP,
@@ -415,5 +461,6 @@ export {
   getUserProfile,
   updateProfile,
   refreshAccessToken,
-  updateFcmToken, // Add this line
+  updateFcmToken,
+  updatePassword,
 };

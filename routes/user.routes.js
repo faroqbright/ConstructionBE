@@ -9,7 +9,8 @@ import {
     resetPassword, 
     logoutUser, 
     updateProfile, 
-    refreshAccessToken 
+    refreshAccessToken,
+    updatePassword
 } from '../controllers/user.controller.js';
 import { upload } from '../middlewares/multer.middleware.js'; 
 import { verifyJWT } from '../middlewares/auth.middleware.js';
@@ -26,6 +27,7 @@ router.route('/verify-otp').post(verifyOTP);
 router.route('/resend-otp').post(resendOTP);
 router.route('/reset-password').post(resetPassword);
 router.route("/logout").post(verifyJWT, logoutUser);
+router.route("/update-password").post(verifyJWT, updatePassword);
 
 // --- FIX IS HERE ---
 // Apply the upload middleware specifically for the avatar field

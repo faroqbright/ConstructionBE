@@ -1,17 +1,17 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
+import bcryptjs from "bcryptjs"; // Corrected import
 import jwt from "jsonwebtoken";
 
 const userSchema = new mongoose.Schema(
   {
     role: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Role", // Reference to the Role model
+      ref: "Role",
     },
     userName: {
       type: String,
-      lowercase: true, // Ensures the username is stored in lowercase
-      trim: true, // Removes any leading/trailing spaces
+      lowercase: true,
+      trim: true,
     },
     avatar: {
       type: String,
@@ -29,19 +29,19 @@ const userSchema = new mongoose.Schema(
     },
     address: {
       type: String,
-      lowercase: true, // Fix typo, change 'lowecase' to 'lowercase'
-      trim: true, // Ensures address is also trimmed
+      lowercase: true,
+      trim: true,
     },
-    // phoneNumber: {
-    //   type: String,
-    // },
     email: {
       type: String,
-      lowercase: true, // Ensures the email is stored in lowercase
-      trim: true, // Removes any leading/trailing spaces
+      lowercase: true,
+      trim: true,
     },
     password: {
       type: String,
+      // ✨ --- CHANGE 1: Added for security ---
+      // This prevents the password from being returned in queries by default.
+      select: false, 
     },
     otp: {
       type: String,
@@ -55,72 +55,76 @@ const userSchema = new mongoose.Schema(
     accessToken: {
       type: String,
     },
-        // Added for Firebase Cloud Messaging
     notificationToken: {
       type: String,
       default: null,
-      index: true, // Added index for better query performance
+      index: true,
     },
-    // Keeping your existing fcmDeviceToken for backward compatibility
     fcmDeviceToken: {
       type: String,
       default: null,
     },
     userType: {
       type: String,
-      enum: ["Finance", "Production"], // Enum to limit userType to specific values
+      enum: ["Finance", "Production"],
     },
     companyName: {
       type: String,
-      trim: true, // Ensures companyName doesn't have leading/trailing spaces
+      trim: true,
     },
     businessArea: {
       type: String,
-    } 
+    }, 
+    isPasswordChanged: {
+      type: Boolean,
+      default: false,
+    }
   },
   {
     timestamps: true,
-  }
+  },
 );
+
+// Hashes password before saving
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  // ✨ --- CHANGE 2: Using bcryptjs consistently ---
+  this.password = await bcryptjs.hash(this.password, 10);
+  next();
+});
+
+// ✨ --- CHANGE 3: THE CRITICAL FIX ---
+// This method compares the provided password with the hashed one in the database.
+userSchema.methods.isPasswordCorrect = async function (password) {
+  // `password` is the plain-text password from the user's login attempt.
+  // `this.password` is the hashed password from the database.
+  return await bcryptjs.compare(password, this.password);
+};
 
 // Method to generate an access token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
-    {
-      _id: this._id,
-      email: this.email,
-      userName: this.userName,
-    },
+    { _id: this._id, email: this.email, userName: this.userName },
     process.env.ACCESS_TOKEN_SECRET,
-    {
-      expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
-    }
+    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY }
   );
 };
 
 // Method to generate a refresh token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
-    {
-      _id: this._id,
-      email: this.email,
-      userName: this.userName,
-    },
+    { _id: this._id, email: this.email, userName: this.userName },
     process.env.REFRESH_TOKEN_SECRET,
-    {
-      expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
-    }
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY }
   );
 };
 
 // Method to update notification token
 userSchema.methods.updateNotificationToken = async function (token) {
   this.notificationToken = token;
-  // Also update fcmDeviceToken for backward compatibility
   this.fcmDeviceToken = token;
   await this.save();
   return this;
 };
-
 
 export const User = mongoose.model("User", userSchema);
