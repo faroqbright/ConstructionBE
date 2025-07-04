@@ -17,7 +17,7 @@ const financeDocumentSchema = new mongoose.Schema({
               },
             ],
     projName: { type: String, required: true },
-    fileName: { type: String, required: true },
+    fileName: { type: String, required: false },
     reference: { type: String, required: true },
     fileUrl: { type: String, required: true },
     user: { type: String, required: true },

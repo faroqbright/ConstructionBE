@@ -6,29 +6,37 @@ import { User } from "../models/user.model.js";
 import { Role } from "../models/role.model.js";
 import { generateRandomPassword } from "../utils/generatePassword.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
+import { LanguagePreference } from "../models/languagePreferenceSchema.js"; // Added import
 
 const createroleUser = asyncHandler(async (req, res) => {
   try {
-    const { body } = req;
+    // 1. Destructure language preference from the request body
+    const { languageSelected = "portuguese", ...roleUserData } = req.body;
 
-    const emailPresent = await User.findOne({ email: body.email });
+    // Validate the provided language
+    if (!["portuguese", "english"].includes(languageSelected)) {
+      throw new ApiError(
+        400,
+        "Invalid language selected. Must be 'portuguese' or 'english'."
+      );
+    }
+
+    const emailPresent = await User.findOne({ email: roleUserData.email });
     if (emailPresent) {
       throw new ApiError(400, "Email already exists");
     }
 
-    const existingRole = await Role.findOne({ _id: body?.role });
+    const existingRole = await Role.findById(roleUserData.role);
     if (!existingRole) {
       throw new ApiError(400, "Role does not exist");
     }
 
-    const generatedPassword = generateRandomPassword(); // simple password
-    // NO bcrypt.hash used here
-
-    const createdBy = await User.findOne(req.user._id);
+    const generatedPassword = generateRandomPassword();
+    const createdBy = await User.findById(req.user._id);
 
     const userData = {
-      ...body,
-      password: generatedPassword, // storing as plain text
+      ...roleUserData,
+      password: generatedPassword,
       firstLogin: true,
       createdBy: {
         userName: createdBy?.userName,
@@ -36,26 +44,67 @@ const createroleUser = asyncHandler(async (req, res) => {
       },
     };
 
-    const userDataNew = await User.create(userData);
+    const newUser = await User.create(userData);
 
+    // 2. Create the language preference entry for the new user
+    await LanguagePreference.create({
+      userId: newUser._id,
+      languageSelected: languageSelected,
+    });
+
+    // 3. Send the welcome email in the selected language
     try {
-      const subject = "Your account has been created!";
-      const html = `
-        <p>Hello ${body.userName || "User"},</p>
-        <p>Your account has been created successfully.</p>
-        <p><strong>Email:</strong> ${body.email}</p>
-        <p><strong>Password:</strong> ${generatedPassword}</p>
-        <p>Please change your password after login.</p>
-      `;
+      let subject;
+      let html;
+      const userName = roleUserData.userName || "User";
 
-      const emailResponse = await SendEmailUtil({
+      if (languageSelected === "portuguese") {
+        subject = "A sua conta foi criada com sucesso";
+        html = `
+          <!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Credenciais da Conta</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;">
+          <h2 style="color: #333;">A sua conta foi criada com sucesso</h2>
+          <p style="font-size: 16px; color: #555;">Olá <strong>${userName}</strong>,</p>
+          <p style="font-size: 16px; color: #555;">Informamos que a sua conta foi criada com sucesso na nossa plataforma MySOAPRO.</p>
+          <p style="font-size: 16px; color: #555;">Dados de acesso:</p>
+          <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Email:</strong> ${roleUserData.email}</p>
+              <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Palavra-passe temporária:</strong> <span style="font-weight: bold; color: #007bff;">${generatedPassword}</span></p>
+          </div>
+          <p style="font-size: 16px; color: #555;">Recomendação de Segurança:</p?
+          <p style="font-size: 14px; color: #555;">Por favor, altere a sua palavra-passe após o primeiro acesso para garantir a proteção da sua conta.</p>
+          <p style="font-size: 14px; color: #555;">Se não reconhece esta criação de conta, contacte de imediato a nossa equipa de suporte.</p>
+          <p style="font-size: 14px; color: #555;">Obrigado por confiar em nós.</p>
+          <p style="font-size: 14px; color: #999; margin-top: 30px;"><strong>Equipa SOAPRO</strong></p>
+          </td></tr></table></body></html>
+        `;
+      } else {
+        // Default to English
+        subject = "Your account has been created!";
+        html = `
+          <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Account Credentials</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;">
+          <h2 style="color: #333;">Your Account Has Been Created</h2>
+          <p style="font-size: 16px; color: #555;">Hello <strong>${userName}</strong>,</p>
+          <p style="font-size: 16px; color: #555;">Your team member account has been successfully created. Below are your login credentials:</p>
+          <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Email:</strong> ${roleUserData.email}</p>
+              <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Password:</strong> <span style="font-weight: bold; color: #007bff;">${generatedPassword}</span></p>
+          </div>
+          <p style="font-size: 16px; color: #555;">Please change your password after your first login.</p>
+          <p style="font-size: 14px; color: #999; margin-top: 30px;">Best regards,<br><strong>The Soapro Team</strong></p>
+          </td></tr></table></body></html>
+        `;
+      }
+
+      await SendEmailUtil({
         from: process.env.EMAIL_FROM || "app@soapro.ao",
-        to: body.email,
+        to: roleUserData.email,
         subject,
         html,
       });
 
-      console.log("Email sent successfully:", emailResponse);
+      console.log(
+        `Email sent successfully to ${roleUserData.email} in ${languageSelected}.`
+      );
     } catch (emailError) {
       console.error("Failed to send email:", emailError);
     }
@@ -65,12 +114,18 @@ const createroleUser = asyncHandler(async (req, res) => {
       .json(
         new ApiResponse(
           201,
-          userDataNew,
-          "New User created and email sent successfully"
+          newUser,
+          "New user created and email sent successfully!"
         )
       );
   } catch (error) {
-    throw new ApiError(400, error.message);
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new ApiError(
+      500,
+      error.message || "An internal error occurred while creating the user."
+    );
   }
 });
 

@@ -32,6 +32,9 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+    phoneNumber: {
+      type: String,
+    },
     email: {
       type: String,
       lowercase: true,
@@ -39,9 +42,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      // ✨ --- CHANGE 1: Added for security ---
-      // This prevents the password from being returned in queries by default.
-      select: false, 
+      select: false,
     },
     otp: {
       type: String,
@@ -74,15 +75,15 @@ const userSchema = new mongoose.Schema(
     },
     businessArea: {
       type: String,
-    }, 
+    },
     isPasswordChanged: {
       type: Boolean,
       default: false,
-    }
+    },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 // Hashes password before saving
@@ -93,11 +94,8 @@ userSchema.pre("save", async function (next) {
   next();
 });
 
-// ✨ --- CHANGE 3: THE CRITICAL FIX ---
-// This method compares the provided password with the hashed one in the database.
+
 userSchema.methods.isPasswordCorrect = async function (password) {
-  // `password` is the plain-text password from the user's login attempt.
-  // `this.password` is the hashed password from the database.
   return await bcryptjs.compare(password, this.password);
 };
 
