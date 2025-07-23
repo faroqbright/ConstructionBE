@@ -13,14 +13,14 @@ jobs:
       - name: Checkout Frontend Repo
         uses: actions/checkout@v3
         with:
-          repository: your-username/frontend-repo
+          repository: faroqbright/Construction
           token: ${{ secrets.GITHUB_TOKEN }}
           path: frontend
 
       - name: Checkout Backend Repo
         uses: actions/checkout@v3
         with:
-          repository: your-username/backend-repo
+          repository: faroqbright/ConstructionBE
           token: ${{ secrets.GITHUB_TOKEN }}
           path: backend
 
