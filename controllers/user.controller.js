@@ -78,8 +78,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "Strict",
+    secure: true, // Always true since you're using HTTPS
+    sameSite: "None",
   };
 
   res
@@ -108,7 +108,9 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Email and password are required");
   }
 
-  const user = await User.findOne({ email }).select("+password").populate("role");
+  const user = await User.findOne({ email })
+    .select("+password")
+    .populate("role");
 
   if (!user) {
     throw new ApiError(401, "Invalid credentials");
@@ -120,7 +122,9 @@ const login = asyncHandler(async (req, res) => {
     throw new ApiError(401, "Invalid credentials");
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
+  );
 
   user.refreshToken = refreshToken;
 
@@ -146,7 +150,8 @@ const login = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true, // Always true since you're using HTTPS
+    sameSite: "None",
   };
 
   const loggedInUser = await User.findById(user._id)
@@ -267,13 +272,22 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   const options = {
     httpOnly: true,
-    secure: true,
+    secure: true, // Always true since you're using HTTPS
+    sameSite: "None",
   };
 
   return res
     .status(200)
-    .clearCookie("accessToken", options)
-    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    })
+    .clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
+    })
     .json(new ApiResponse(200, {}, "User logged Out"));
 });
 
@@ -344,7 +358,9 @@ const updateProfile = asyncHandler(async (req, res) => {
   }
 
   await user.save();
-  const updatedUser = await User.findById(userId).select("-password -refreshToken");
+  const updatedUser = await User.findById(userId).select(
+    "-password -refreshToken"
+  );
 
   res
     .status(200)
@@ -379,8 +395,8 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       .status(200)
       .cookie("accessToken", accessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "Strict",
+        secure: true, // Always true since you're using HTTPS
+        sameSite: "None",
         maxAge: 15 * 60 * 1000,
       })
       .json(
