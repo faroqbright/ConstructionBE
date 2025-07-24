@@ -1,3 +1,4 @@
+import jwt from "jsonwebtoken";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { User } from "../models/user.model.js";
 import { generateAccessAndRefreshTokens } from "../utils/token.js";
@@ -14,14 +15,13 @@ const resendOTP = asyncHandler(async (req, res) => {
   if (!user) throw new ApiError(400, "User not found");
 
   const otp = generateOTP();
-  const otpExpires = Date.now() + 300000; // 5 min
+  const otpExpires = Date.now() + 300000;
 
   user.otp = otp;
   user.otpExpires = otpExpires;
   await user.save();
 
   const body = {
-    // from: process.env.EMAIL_USER,
     from: `"Construction Management" <${process.env.EMAIL_USER}>`,
     to: email,
     subject: "Authentication",
@@ -36,7 +36,6 @@ const resendOTP = asyncHandler(async (req, res) => {
     await SendEmailUtil(body);
     res.status(200).json({ message: "Please check your email to verify!" });
   } catch (error) {
-    console.error("Error sending email:", error.message);
     throw new ApiError(500, "Error sending email");
   }
 });
@@ -44,8 +43,9 @@ const resendOTP = asyncHandler(async (req, res) => {
 const verifyOTP = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
   const user = await User.findOne({ email, otp });
-  if (!user || user.otpExpires < Date.now())
+  if (!user || user.otpExpires < Date.now()) {
     throw new ApiError(400, "Invalid or expired OTP");
+  }
 
   user.otp = undefined;
   user.otpExpires = undefined;
@@ -56,9 +56,7 @@ const verifyOTP = asyncHandler(async (req, res) => {
 
 const registerUser = asyncHandler(async (req, res) => {
   const { email, password, fcmDeviceToken, userName } = req.body;
-  console.log("🚀 ~ registerUser ~ req.body:", req.body);
 
-  // Check if the user already exists
   const existingUser = await User.findOne({ email });
   if (existingUser) {
     throw new ApiError(400, "Email is already in use");
@@ -67,14 +65,13 @@ const registerUser = asyncHandler(async (req, res) => {
   const newUser = new User({
     email,
     password,
-    userName, // Store userName
+    userName,
     isMain: true,
     fcmDeviceToken,
   });
 
   await newUser.save();
 
-  // Generate access and refresh tokens
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     newUser._id
   );
@@ -104,81 +101,74 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// In controllers/user.controller.js
-
 const login = asyncHandler(async (req, res) => {
-    const { email, password, fcmDeviceToken } = req.body;
+  const { email, password, fcmDeviceToken } = req.body;
 
-    if (!email || !password) {
-        throw new ApiError(400, "Email and password are required");
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
+  }
+
+  const user = await User.findOne({ email }).select("+password").populate("role");
+
+  if (!user) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
+
+  user.refreshToken = refreshToken;
+
+  if (fcmDeviceToken) {
+    user.fcmDeviceToken = fcmDeviceToken;
+  }
+
+  let assignedBusinessAreas = [];
+  if (user.role && user.role._id) {
+    assignedBusinessAreas = await BusinessArea.find({
+      role: user.role._id,
+    }).select("businessArea");
+
+    if (!user.businessArea && assignedBusinessAreas.length > 0) {
+      const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
+      if (firstBusinessArea) {
+        user.businessArea = firstBusinessArea;
+      }
     }
+  }
 
-    // Find the user and explicitly include the password field for comparison
-    const user = await User.findOne({ email }).select("+password").populate("role");
+  await user.save({ validateBeforeSave: false });
 
-    if (!user) {
-        throw new ApiError(401, "Invalid credentials"); // Use 401 for failed auth
-    }
+  const options = {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+  };
 
-    // Use the method from the model to check if the password is correct
-    const isPasswordValid = await user.isPasswordCorrect(password);
+  const loggedInUser = await User.findById(user._id)
+    .select("-refreshToken")
+    .populate("role");
 
-    if (!isPasswordValid) {
-        throw new ApiError(401, "Invalid credentials"); // Same error for security
-    }
-    
-    // --- If password is valid, the rest of your logic can proceed ---
-
-    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
-
-    user.refreshToken = refreshToken;
-
-    if (fcmDeviceToken) {
-        user.fcmDeviceToken = fcmDeviceToken;
-    }
-
-    let assignedBusinessAreas = [];
-    if (user.role && user.role._id) {
-        assignedBusinessAreas = await BusinessArea.find({
-            role: user.role._id,
-        }).select("businessArea");
-
-        if (!user.businessArea && assignedBusinessAreas.length > 0) {
-            const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
-            if (firstBusinessArea) {
-                user.businessArea = firstBusinessArea;
-            }
-        }
-    }
-    
-    // Save the user to store the new refresh/fcm tokens
-    await user.save({ validateBeforeSave: false });
-
-    const options = {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-    };
-
-    // Find the user again without the password/refresh token to send to the client
-    const loggedInUser = await User.findById(user._id)
-        .select("-refreshToken")
-        .populate("role");
-
-    return res.status(200)
-        .cookie("accessToken", accessToken, options)
-        .cookie("refreshToken", refreshToken, options)
-        .json(
-            new ApiResponse(
-                200,
-                {
-                    user: loggedInUser,
-                    assignedBusinessAreas,
-                    accessToken,
-                    refreshToken,
-                },
-                "User logged in successfully"
-            )
-        );
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          assignedBusinessAreas,
+          accessToken,
+          refreshToken,
+        },
+        "User logged in successfully"
+      )
+    );
 });
 
 const updatePassword = asyncHandler(async (req, res) => {
@@ -243,7 +233,6 @@ const forgetPassword = asyncHandler(async (req, res) => {
     await SendEmailUtil(body);
     res.status(200).json({ message });
   } catch (error) {
-    console.error("Error sending email:", error.message);
     throw new ApiError(500, "Error sending email");
   }
 
@@ -262,6 +251,7 @@ const resetPassword = asyncHandler(async (req, res) => {
     .status(200)
     .json(new ApiResponse(200, { user }, "Password reset successful"));
 });
+
 const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
@@ -286,6 +276,7 @@ const logoutUser = asyncHandler(async (req, res) => {
     .clearCookie("refreshToken", options)
     .json(new ApiResponse(200, {}, "User logged Out"));
 });
+
 const getUserProfile = asyncHandler(async (req, res) => {
   const userId = req.user._id.toString();
 
@@ -293,95 +284,77 @@ const getUserProfile = asyncHandler(async (req, res) => {
     .select("-password -refreshToken")
     .populate("role");
   if (!user) {
-    throw new ApiError(404, "User not found", [], { user: "User not found" });
+    throw new ApiError(404, "User not found");
   }
 
   res
     .status(200)
-    .json(new ApiResponse(200, user, "Account details updated successfully"));
+    .json(new ApiResponse(200, user, "Account details retrieved successfully"));
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
-  try {
-    console.log("Request Body:", req.body); // Log the request body
+  const userId = req.params.userId;
+  const { userName, address, phoneNumber, newPassword, email } = req.body;
 
-    const userId = req.params.userId;
-    const { userName, address, newPassword, email } = req.body;
-
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new ApiError(404, "User not found");
-    }
-
-    // Update fields only if they're provided in the request body
-    if (userName) {
-      console.log("Updating userName:", userName); // Log the new username
-      user.userName = userName;
-    }
-
-    if (address) user.address = address;
-    if (phoneNumber) user.phoneNumber = phoneNumber;
-
-    // Email update with validation
-    if (email) {
-      const normalizedEmail = email.toLowerCase();
-      if (normalizedEmail !== user.email.toLowerCase()) {
-        const existingUser = await User.findOne({ email: normalizedEmail });
-        if (existingUser && existingUser._id.toString() !== userId) {
-          throw new ApiError(400, "Email already in use by another account");
-        }
-        user.email = normalizedEmail;
-      }
-    }
-
-    // Password update logic
-    if (newPassword) {
-      if (newPassword.length < 6) {
-        throw new ApiError(400, "Password must be at least 6 characters long.");
-      }
-      user.password = await bcrypt.hash(newPassword, 10);
-    }
-
-    // Handling avatar upload (if present)
-    const { files } = req;
-    if (files?.avatar?.length > 0) {
-      const avatarFile = files.avatar[0];
-      console.log("Avatar file received:", avatarFile);
-      const avatarUrl = await uploadToS3(
-        avatarFile.buffer,
-        avatarFile.originalname,
-        avatarFile.mimetype
-      );
-      if (!avatarUrl) {
-        throw new ApiError(400, "Failed to upload profile image");
-      }
-      user.avatar = avatarUrl;
-    }
-
-    // Save the updated user
-    await user.save();
-
-    // Return the updated user details with avatar (even if unchanged)
-    res
-      .status(200)
-      .json(new ApiResponse(200, user, "Account details updated successfully"));
-  } catch (error) {
-    console.error("Error in updateProfile:", error);
-    res
-      .status(error.statusCode || 500)
-      .json(
-        new ApiResponse(
-          error.statusCode || 500,
-          null,
-          error.message || "An error occurred while updating the profile"
-        )
-      );
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
   }
+
+  if (userName) {
+    user.userName = userName;
+  }
+  if (address) {
+    user.address = address;
+  }
+  if (phoneNumber) {
+    user.phoneNumber = phoneNumber;
+  }
+
+  if (email) {
+    const normalizedEmail = email.toLowerCase();
+    if (normalizedEmail !== user.email.toLowerCase()) {
+      const existingUser = await User.findOne({ email: normalizedEmail });
+      if (existingUser && existingUser._id.toString() !== userId) {
+        throw new ApiError(400, "Email already in use by another account");
+      }
+      user.email = normalizedEmail;
+    }
+  }
+
+  if (newPassword) {
+    if (newPassword.length < 6) {
+      throw new ApiError(400, "Password must be at least 6 characters long.");
+    }
+    user.password = newPassword;
+  }
+
+  const { files } = req;
+  if (files?.avatar?.length > 0) {
+    const avatarFile = files.avatar[0];
+    const avatarUrl = await uploadToS3(
+      avatarFile.buffer,
+      avatarFile.originalname,
+      avatarFile.mimetype
+    );
+    if (!avatarUrl) {
+      throw new ApiError(400, "Failed to upload profile image");
+    }
+    user.avatar = avatarUrl;
+  }
+
+  await user.save();
+  const updatedUser = await User.findById(userId).select("-password -refreshToken");
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(200, updatedUser, "Account details updated successfully")
+    );
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
   const { refreshToken } = req.cookies;
-  console.log(refreshToken);
 
   if (!refreshToken) {
     throw new ApiError(401, "Refresh token is missing");
@@ -408,7 +381,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "Strict",
-        maxAge: 15 * 60 * 1000, // 15 minutes
+        maxAge: 15 * 60 * 1000,
       })
       .json(
         new ApiResponse(
@@ -418,36 +391,31 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         )
       );
   } catch (error) {
-    console.error("Error verifying token:", error.message);
     throw new ApiError(403, "Invalid refresh token", error.message);
   }
 });
 
 const updateFcmToken = asyncHandler(async (req, res) => {
-  try {
-    const { fcmToken } = req.body;
-    const userId = req.user._id;
+  const { fcmToken } = req.body;
+  const userId = req.user._id;
 
-    if (!fcmToken) {
-      throw new ApiError(400, "FCM token is required");
-    }
-
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { fcmDeviceToken: fcmToken }, // Using fcmDeviceToken to match your existing field
-      { new: true }
-    ).select("-password -refreshToken");
-
-    if (!user) {
-      throw new ApiError(404, "User not found");
-    }
-
-    res
-      .status(200)
-      .json(new ApiResponse(200, user, "FCM token updated successfully"));
-  } catch (error) {
-    throw new ApiError(error.statusCode || 500, error.message);
+  if (!fcmToken) {
+    throw new ApiError(400, "FCM token is required");
   }
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { fcmDeviceToken: fcmToken },
+    { new: true }
+  ).select("-password -refreshToken");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  res
+    .status(200)
+    .json(new ApiResponse(200, user, "FCM token updated successfully"));
 });
 
 export {
