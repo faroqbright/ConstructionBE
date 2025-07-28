@@ -103,7 +103,78 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const login = asyncHandler(async (req, res) => {
   console.log("dsdsdsdsds")
-  
+  const { email, password, fcmDeviceToken } = req.body;
+
+  if (!email || !password) {
+    throw new ApiError(400, "Email and password are required");
+  }
+
+  const user = await User.findOne({ email })
+    .select("+password")
+    .populate("role");
+
+  if (!user) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
+  );
+
+  user.refreshToken = refreshToken;
+
+  if (fcmDeviceToken) {
+    user.fcmDeviceToken = fcmDeviceToken;
+  }
+
+  let assignedBusinessAreas = [];
+  if (user.role && user.role._id) {
+    assignedBusinessAreas = await BusinessArea.find({
+      role: user.role._id,
+    }).select("businessArea");
+
+    if (!user.businessArea && assignedBusinessAreas.length > 0) {
+      const firstBusinessArea = assignedBusinessAreas[0]?.businessArea;
+      if (firstBusinessArea) {
+        user.businessArea = firstBusinessArea;
+      }
+    }
+  }
+
+  await user.save({ validateBeforeSave: false });
+
+  const options = {
+    httpOnly: true,
+    secure: true, // Always true since you're using HTTPS
+    sameSite: "None",
+  };
+
+  const loggedInUser = await User.findById(user._id)
+    .select("-refreshToken")
+    .populate("role");
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          assignedBusinessAreas,
+          accessToken,
+          refreshToken,
+        },
+        "User logged in successfully"
+      )
+    );
 });
 
 const updatePassword = asyncHandler(async (req, res) => {
