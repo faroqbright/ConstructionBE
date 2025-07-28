@@ -258,6 +258,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
+  console.log("dsdsdsds")
   await User.findByIdAndUpdate(
     req.user._id,
     {
