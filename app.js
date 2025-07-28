@@ -3,33 +3,15 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 const app = express();
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://appsoapro.techbytech.tech",
-  "https://api.appsoapro.techbytech.tech",
-  "https://appsoapro.serveng.ao",
-];
-
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
-  })
-);
+// CORS: Allow all origins (no restrictions)
+app.use(cors());
 
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+// Routes
 import userRouter from "./routes/user.routes.js";
 import notificationsRouter from "./routes/notifications.routes.js";
 import projectRouter from "./routes/project.routes.js";
@@ -63,12 +45,13 @@ app.use("/api/v1/companies", companiesRoutes);
 app.use("/api/v1/finance", financeRoutes);
 app.use("/api/v1/additional", additionalMilestoneRouter);
 app.use("/api/v1/language", languageRouter);
-app.use("/api/v1/businessArea", businessAreaRouter),
-  app.use("/api/v1/reviews", reviewsRouter);
+app.use("/api/v1/businessArea", businessAreaRouter);
+app.use("/api/v1/reviews", reviewsRouter);
 app.use("/api/v1/notificationStatus", notificationStatusRouter);
 app.use("/api/v1/shownotifications", notificationRouter);
 app.use("/api/v1/settings", notificationSettingRouter);
 
+// Global error handler
 app.use((err, req, res, next) => {
   if (err instanceof ApiError) {
     return res.status(err.statusCode).json({
@@ -80,7 +63,6 @@ app.use((err, req, res, next) => {
     });
   }
 
-  // Handle other types of errors (optional)
   return res.status(500).json({
     statusCode: 500,
     data: null,
@@ -89,4 +71,5 @@ app.use((err, req, res, next) => {
     errors: [],
   });
 });
+
 export { app };
