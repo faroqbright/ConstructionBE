@@ -4,9 +4,17 @@ import cookieParser from "cookie-parser";
 const app = express();
 
 // CORS: Allow all origins (no restrictions)
-app.use(cors({
-  origin: '*'
-}));
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://appsoapro.techbytech.tech",
+      "https://api.appsoapro.techbytech.tech",
+      "https://appsoapro.serveng.ao",
+    ],
+    credentials: true,
+  })
+);
 
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
