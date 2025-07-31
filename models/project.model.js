@@ -50,7 +50,7 @@ const editProjectSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    comapanyName: { 
+    companyName: { 
       type: String,
       required: true,
     },

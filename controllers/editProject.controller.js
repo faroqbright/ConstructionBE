@@ -720,7 +720,7 @@ const createProject = asyncHandler(async (req, res) => {
       location,
       status,
       businessAreas,
-      comapanyName,
+      companyName,
       deadline: newDeadlineInput,
       physicalEducationRange,
       financialEducationRange,
@@ -819,7 +819,7 @@ const createProject = asyncHandler(async (req, res) => {
       projectOwners: validatedProjectOwners,
       description,
       businessAreas,
-      comapanyName,
+      companyName,
       location,
       status: status || "Ongoing",
       deadline: validatedDeadline,
@@ -987,7 +987,7 @@ const getAllProjects = asyncHandler(async (req, res) => {
         { projectName: searchRegex },
         { description: searchRegex },
         { location: searchRegex },
-        { comapanyName: searchRegex }, // Assuming this is 'companyName' in your model
+        { companyName: searchRegex }, // Assuming this is 'companyName' in your model
       ];
     }
 
