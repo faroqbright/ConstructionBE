@@ -32,6 +32,9 @@ async function initializeFirebaseAdmin() {
 initializeFirebaseAdmin();
 
 export const sendNotification = async (userId, tokens, title, body, data = {}) => {
+  // --- Temporarily disabled as per client request ---
+  // To re-enable, remove the surrounding /* and */
+  /*
   if (!initialized) {
     console.error('Firebase Admin SDK not initialized. Cannot send notification.');
     return;
@@ -98,4 +101,10 @@ export const sendNotification = async (userId, tokens, title, body, data = {}) =
   } catch (error) {
     console.error('Error sending notification via Firebase:', error);
   }
+  */
+
+  // You can add a log to confirm it's being skipped
+  console.log(`Notification sending is temporarily disabled. Call for user ${userId} was skipped.`);
+  // Return a default object if other parts of your code expect it
+  return { successCount: 0, failureCount: 0, failedTokens: [] };
 };
