@@ -5,7 +5,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { generateRandomPassword } from "../utils/generatePassword.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
-import { LanguagePreference } from "../models/languagePreferenceSchema.js"; // Added import
+import { LanguagePreference } from "../models/languagePreferenceSchema.js";
 
 const ALLOWED_USER_TYPES = ["Finance", "Production"];
 
@@ -13,7 +13,9 @@ const createClient = asyncHandler(async (req, res) => {
   try {
     const { ...clientData } = req.body;
 
-    const languagePref = await LanguagePreference.findOne({ userId: req.user._id }).lean();
+    const languagePref = await LanguagePreference.findOne({
+      userId: req.user._id,
+    }).lean();
     const userLanguage = languagePref?.languageSelected || "portuguese";
 
     if (!ALLOWED_USER_TYPES.includes(clientData.userType)) {
@@ -24,7 +26,9 @@ const createClient = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Company name is required.");
     }
 
-    const companyExists = await Company.findOne({ name: clientData.companyName });
+    const companyExists = await Company.findOne({
+      name: clientData.companyName,
+    });
     if (!companyExists) {
       throw new ApiError(400, "Company not found.");
     }
@@ -96,21 +100,29 @@ const createClient = asyncHandler(async (req, res) => {
         subject,
         html,
       });
+    } catch (emailError) {}
 
-      console.log(`Client email sent successfully to ${clientData.email} in ${userLanguage}.`);
-    } catch (emailError) {
-      console.error("Failed to send client email:", emailError);
-    }
+    const userToReturn = newUser.toObject();
+    userToReturn.generatedPassword = generatedPassword;
+    delete userToReturn.password;
 
-    res.status(201).json(
-      new ApiResponse(201, newUser, "New customer created and email sent successfully!")
-    );
-    console.log(generatedPassword)
+    res
+      .status(201)
+      .json(
+        new ApiResponse(
+          201,
+          userToReturn,
+          "New customer created and email sent successfully!"
+        )
+      );
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(500, error.message || "An internal error occurred while creating the client.");
+    throw new ApiError(
+      500,
+      error.message || "An internal error occurred while creating the client."
+    );
   }
 });
 

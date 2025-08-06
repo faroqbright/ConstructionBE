@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import bcryptjs from "bcryptjs"; // Corrected import
+import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
 
 const userSchema = new mongoose.Schema(
@@ -86,20 +86,16 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Hashes password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  // ✨ --- CHANGE 2: Using bcryptjs consistently ---
   this.password = await bcryptjs.hash(this.password, 10);
   next();
 });
-
 
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcryptjs.compare(password, this.password);
 };
 
-// Method to generate an access token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     { _id: this._id, email: this.email, userName: this.userName },
@@ -108,7 +104,6 @@ userSchema.methods.generateAccessToken = function () {
   );
 };
 
-// Method to generate a refresh token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     { _id: this._id, email: this.email, userName: this.userName },
@@ -117,7 +112,6 @@ userSchema.methods.generateRefreshToken = function () {
   );
 };
 
-// Method to update notification token
 userSchema.methods.updateNotificationToken = async function (token) {
   this.notificationToken = token;
   this.fcmDeviceToken = token;
