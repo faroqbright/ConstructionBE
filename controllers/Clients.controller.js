@@ -105,6 +105,7 @@ const createClient = asyncHandler(async (req, res) => {
     res.status(201).json(
       new ApiResponse(201, newUser, "New customer created and email sent successfully!")
     );
+    console.log(generatedPassword)
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
