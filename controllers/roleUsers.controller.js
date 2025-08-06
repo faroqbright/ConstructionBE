@@ -1,18 +1,19 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { teamMember } from "../models/teamMember.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.model.js";
 import { Role } from "../models/role.model.js";
 import { generateRandomPassword } from "../utils/generatePassword.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
-import { LanguagePreference } from "../models/languagePreferenceSchema.js"; // Added import
+import { LanguagePreference } from "../models/languagePreferenceSchema.js";
 
 const createroleUser = asyncHandler(async (req, res) => {
   try {
-    const { languageSelected = "portuguese", ...roleUserData } = req.body;
+    const { ...roleUserData } = req.body;
 
-    const languagePref = await LanguagePreference.findOne({ userId: req.user._id }).lean();
+    const languagePref = await LanguagePreference.findOne({
+      userId: req.user._id,
+    }).lean();
     const userLanguage = languagePref?.languageSelected || "portuguese";
 
     if (!roleUserData.role) {
@@ -44,13 +45,11 @@ const createroleUser = asyncHandler(async (req, res) => {
 
     const newUser = await User.create(userData);
 
-    // Save selected language in LanguagePreference
     await LanguagePreference.create({
       userId: newUser._id,
       languageSelected: userLanguage,
     });
 
-    // Send email
     try {
       const userName = roleUserData.userName || "User";
       const subject =
@@ -96,20 +95,18 @@ const createroleUser = asyncHandler(async (req, res) => {
         subject,
         html,
       });
+    } catch (emailError) {}
 
-      console.log(
-        `Email sent successfully to ${roleUserData.email} in ${userLanguage}.`
-      );
-    } catch (emailError) {
-      console.error("Failed to send email:", emailError);
-    }
+    const userToReturn = newUser.toObject();
+    userToReturn.generatedPassword = generatedPassword;
+    delete userToReturn.password;
 
     res
       .status(201)
       .json(
         new ApiResponse(
           201,
-          newUser,
+          userToReturn,
           "New user created and email sent successfully!"
         )
       );
