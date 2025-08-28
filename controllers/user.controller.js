@@ -370,7 +370,7 @@ const updateProfile = asyncHandler(async (req, res) => {
 });
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  const { refreshToken } = req.cookies;
+  const { refreshToken } = req.body;
 
   if (!refreshToken) {
     throw new ApiError(401, "Refresh token is missing");
@@ -393,16 +393,14 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     return res
       .status(200)
-      .cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: true, // Always true since you're using HTTPS
-        sameSite: "None",
-        maxAge: 15 * 60 * 1000,
-      })
       .json(
         new ApiResponse(
           200,
-          { data: user },
+          { 
+            user: user,
+            accessToken: accessToken,
+            refreshToken: refreshToken
+          },
           "Access token refreshed successfully"
         )
       );
