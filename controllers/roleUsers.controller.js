@@ -54,8 +54,8 @@ const createroleUser = asyncHandler(async (req, res) => {
       const userName = roleUserData.userName || "User";
       const subject =
         userLanguage === "portuguese"
-          ? "A sua conta foi criada com sucesso"
-          : "Your account has been created!";
+          ? "[MySOAPRO] - Conta criada com sucesso - bem-vindo(a) à plataforma SOAPRO"
+          : "[MySOAPRO] - Account created successfully - welcome to the SOAPRO platform";
 
       const html =
         userLanguage === "portuguese"
@@ -63,29 +63,36 @@ const createroleUser = asyncHandler(async (req, res) => {
         <!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>Credenciais da Conta</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;">
         <h2 style="color: #333;">A sua conta foi criada com sucesso</h2>
         <p style="font-size: 16px; color: #555;">Olá <strong>${userName}</strong>,</p>
-        <p style="font-size: 16px; color: #555;">Informamos que a sua conta foi criada com sucesso na nossa plataforma MySOAPRO.</p>
+        <p style="font-size: 16px; color: #555;">Temos o prazer de informar que a sua conta na plataforma MySOAPRO foi criada com sucesso.</p>
         <p style="font-size: 16px; color: #555;">Dados de acesso:</p>
         <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Email:</strong> ${roleUserData.email}</p>
             <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Palavra-passe temporária:</strong> <span style="font-weight: bold; color: #007bff;">${generatedPassword}</span></p>
         </div>
-        <p style="font-size: 14px; color: #555;">Por favor, altere a sua palavra-passe após o primeiro acesso para garantir a proteção da sua conta.</p>
-        <p style="font-size: 14px; color: #555;">Se não reconhece esta criação de conta, contacte de imediato a nossa equipa de suporte.</p>
-        <p style="font-size: 14px; color: #555;">Obrigado por confiar em nós.</p>
-        <p style="font-size: 14px; color: #999; margin-top: 30px;"><strong>Equipa SOAPRO</strong></p>
+        <p style="font-size: 16px; color: #555;">Por motivos de segurança, deverá alterar esta palavra-passe no primeiro acesso.</p>
+        <p style="font-size: 16px; color: #555;">Para aceder à plataforma, clique em <a href="https://appsoapro.serveng.ao/" style="color: #007bff; text-decoration: none;">https://appsoapro.serveng.ao/</a></p>
+        <p style="font-size: 16px; color: #555;">Se tiver alguma dificuldade no acesso ou utilização da plataforma, a nossa equipa de Informática está disponível para o apoiar através do email <a href="mailto:app@soapro.ao" style="color: #007bff; text-decoration: none;">app@soapro.ao</a></p>
+        <p style="font-size: 16px; color: #555;">Contamos consigo para manter a informação dos projetos sempre atualizada e contribuir para uma gestão mais eficiente e transparente.</p>
+        <p style="font-size: 16px; color: #555;">Bem-vindo à MySOAPRO.</p>
+        <p style="font-size: 14px; color: #999; margin-top: 30px;"><strong>A equipa SOAPRO</strong></p>
         </td></tr></table></body></html>
         `
           : `
         <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Account Credentials</title></head><body style="font-family: Arial, sans-serif; background-color: #f9f9f9; padding: 20px;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color: #ffffff; max-width: 600px; margin: auto; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);"><tr><td style="padding: 20px; text-align: left;">
         <h2 style="color: #333;">Your Account Has Been Created</h2>
         <p style="font-size: 16px; color: #555;">Hello <strong>${userName}</strong>,</p>
-        <p style="font-size: 16px; color: #555;">Your team member account has been successfully created. Below are your login credentials:</p>
+        <p style="font-size: 16px; color: #555;">We are pleased to inform you that your account on the MySOAPRO platform has been successfully created.</p>
+        <p style="font-size: 16px; color: #555;">Access details:</p>
         <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Email:</strong> ${roleUserData.email}</p>
-            <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Password:</strong> <span style="font-weight: bold; color: #007bff;">${generatedPassword}</span></p>
+            <p style="font-size: 16px; color: #555; margin: 5px 0;"><strong>Temporary password:</strong> <span style="font-weight: bold; color: #007bff;">${generatedPassword}</span></p>
         </div>
-        <p style="font-size: 16px; color: #555;">Please change your password after your first login.</p>
-        <p style="font-size: 14px; color: #999; margin-top: 30px;">Best regards,<br><strong>The Soapro Team</strong></p>
+        <p style="font-size: 16px; color: #555;">For security reasons, you must change this password on the first access.</p>
+        <p style="font-size: 16px; color: #555;">To access the platform, click on <a href="https://appsoapro.serveng.ao/" style="color: #007bff; text-decoration: none;">https://appsoapro.serveng.ao/</a></p>
+        <p style="font-size: 16px; color: #555;">If you have any difficulty accessing or using the platform, our IT team is available to support you via email <a href="mailto:app@soapro.ao" style="color: #007bff; text-decoration: none;">app@soapro.ao</a></p>
+        <p style="font-size: 16px; color: #555;">We count on you to keep project information always updated and contribute to more efficient and transparent management.</p>
+        <p style="font-size: 16px; color: #555;">Welcome to MySOAPRO.</p>
+        <p style="font-size: 14px; color: #999; margin-top: 30px;"><strong>The SOAPRO team</strong></p>
         </td></tr></table></body></html>
         `;
 
