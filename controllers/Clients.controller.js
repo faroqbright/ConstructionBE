@@ -107,7 +107,10 @@ const createClient = asyncHandler(async (req, res) => {
         subject,
         html,
       });
-    } catch (emailError) {}
+    } catch (emailError) {
+      console.error("Failed to send client creation email to", clientData.email, ":", emailError.message);
+      // Continue with client creation even if email fails
+    }
 
     const userToReturn = newUser.toObject();
     userToReturn.generatedPassword = generatedPassword;

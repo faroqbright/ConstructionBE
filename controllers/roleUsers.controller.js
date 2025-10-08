@@ -102,7 +102,10 @@ const createroleUser = asyncHandler(async (req, res) => {
         subject,
         html,
       });
-    } catch (emailError) {}
+    } catch (emailError) {
+      console.error("Failed to send user creation email to", roleUserData.email, ":", emailError.message);
+      // Continue with user creation even if email fails
+    }
 
     const userToReturn = newUser.toObject();
     userToReturn.generatedPassword = generatedPassword;

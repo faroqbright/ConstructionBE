@@ -232,16 +232,13 @@ const forgetPassword = asyncHandler(async (req, res) => {
         <strong>Developer Team</strong>`,
   };
 
-  const message = "Please check your email to verify!";
-
   try {
     await SendEmailUtil(body);
-    res.status(200).json({ message });
+    res.status(200).json(new ApiResponse(200, { email }, "OTP sent to email"));
   } catch (error) {
+    console.error("Failed to send OTP email to", email, ":", error.message);
     throw new ApiError(500, "Error sending email");
   }
-
-  res.status(200).json(new ApiResponse(200, { email }, "OTP sent to email"));
 });
 
 const resetPassword = asyncHandler(async (req, res) => {
