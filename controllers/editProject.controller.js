@@ -185,6 +185,16 @@ const editProjects = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Invalid project ID format.");
     }
 
+    // Support frontend that sends startDate and endDate separately by synthesizing
+    // a `deadline` string that this controller and model expect (keeps backward compatibility).
+    if (req.body.startDate !== undefined || req.body.endDate !== undefined) {
+      const start = req.body.startDate ? String(req.body.startDate).trim() : "";
+      const end = req.body.endDate ? String(req.body.endDate).trim() : "";
+      if (start && end) req.body.deadline = `${start} - ${end}`;
+      else if (start) req.body.deadline = start;
+      else if (end) req.body.deadline = end;
+    }
+
     const {
       projectName: newProjectNameInput,
       projectOwners: newProjectOwnerIdsInput,
@@ -269,32 +279,22 @@ const editProjects = asyncHandler(async (req, res) => {
       if (newStatusInput === "Completed") statusChangedToCompleted = true;
     }
 
+    // Normalize deadline as a string. The model currently stores deadline as a string
+    // (e.g. "2025-10-30 - 2025-11-01"). Avoid attempting to parse that combined
+    // string as a Date which results in Invalid Date. Compare raw trimmed strings.
     if (newDeadlineInput !== undefined) {
-      const normalizedNewDeadline = newDeadlineInput === "" || newDeadlineInput === null ? null : newDeadlineInput;
+      const normalizedNewDeadline =
+        newDeadlineInput === "" || newDeadlineInput === null
+          ? null
+          : String(newDeadlineInput).trim();
       const normalizedExistingDeadline = existingProject.deadline
-        ? new Date(existingProject.deadline).toISOString()
+        ? String(existingProject.deadline).trim()
         : null;
-      let newDeadlineForComparison = null;
-      let newDeadlineForUpdate = null;
-      if (normalizedNewDeadline) {
-        try {
-          const parsedDate = new Date(normalizedNewDeadline);
-          if (!isNaN(parsedDate.getTime())) {
-            newDeadlineForComparison = parsedDate.toISOString();
-            newDeadlineForUpdate = parsedDate;
-          } else {
-            console.warn(`Invalid date format for deadline: ${normalizedNewDeadline}`);
-          }
-        } catch (e) {
-          console.warn(`Error parsing deadline: ${normalizedNewDeadline}`, e);
-        }
-      }
-      if (newDeadlineForComparison !== normalizedExistingDeadline) {
-        updateData.deadline = newDeadlineForUpdate;
-        const oldDeadlineDisplay = existingProject.deadline
-          ? new Date(existingProject.deadline).toLocaleDateString()
-          : "N/A";
-        const newDeadlineDisplay = updateData.deadline ? new Date(updateData.deadline).toLocaleDateString() : "cleared";
+
+      if (normalizedNewDeadline !== normalizedExistingDeadline) {
+        updateData.deadline = normalizedNewDeadline;
+        const oldDeadlineDisplay = normalizedExistingDeadline || "N/A";
+        const newDeadlineDisplay = normalizedNewDeadline || "cleared";
         logs.push({
           actionType: "Deadline Change",
           message: `Deadline updated from "${oldDeadlineDisplay}" to "${newDeadlineDisplay}" by ${performingUser.userName}`,
@@ -481,11 +481,47 @@ const editProjects = asyncHandler(async (req, res) => {
       const inAppNotificationsToCreate = [];
       const performingUserIdStr = performingUser._id.toString();
       const involvedUserIdsForNotif = new Set();
-      (updatedProject.members || []).forEach((m) => m?._id && involvedUserIdsForNotif.add(m._id.toString()));
-      (updatedProject.projectOwners || []).forEach((o) => o?.ownerId?._id && involvedUserIdsForNotif.add(o.ownerId._id.toString()));
-      if (membersListChanged) (existingProject.members || []).forEach((m) => m?._id && involvedUserIdsForNotif.add(m._id.toString()));
-      if (ownersListChanged) (existingProject.projectOwners || []).forEach((o) => o?.ownerId?._id && involvedUserIdsForNotif.add(o.ownerId._id.toString()));
-      involvedUserIdsForNotif.delete(performingUserIdStr);
+      
+      console.log("[editProjects] Building notification recipient list:", {
+        projectId,
+        performingUserId: performingUserIdStr,
+        currentMembers: updatedProject.members?.map(m => m?._id?.toString()) || [],
+        currentOwners: updatedProject.projectOwners?.map(o => o?.ownerId?._id?.toString()) || [],
+        membersListChanged,
+        ownersListChanged
+      });
+
+      (updatedProject.members || []).forEach((m) => {
+        if (m?._id) {
+          involvedUserIdsForNotif.add(m._id.toString());
+          console.log(`[editProjects] Added member ${m._id.toString()} to recipients`);
+        }
+      });
+      (updatedProject.projectOwners || []).forEach((o) => {
+        if (o?.ownerId?._id) {
+          involvedUserIdsForNotif.add(o.ownerId._id.toString());
+          console.log(`[editProjects] Added owner ${o.ownerId._id.toString()} to recipients`);
+        }
+      });
+      if (membersListChanged) {
+        (existingProject.members || []).forEach((m) => {
+          if (m?._id) {
+            involvedUserIdsForNotif.add(m._id.toString());
+            console.log(`[editProjects] Added previous member ${m._id.toString()} to recipients`);
+          }
+        });
+      }
+      if (ownersListChanged) {
+        (existingProject.projectOwners || []).forEach((o) => {
+          if (o?.ownerId?._id) {
+            involvedUserIdsForNotif.add(o.ownerId._id.toString());
+            console.log(`[editProjects] Added previous owner ${o.ownerId._id.toString()} to recipients`);
+          }
+        });
+      }
+      
+      // Not removing performing user anymore - all users should receive notifications
+      console.log("[editProjects] Final notification recipients (including performing user):", Array.from(involvedUserIdsForNotif));
 
       let shouldTriggerGeneralNotification =
         (importantFieldsChanged || membersListChanged || ownersListChanged) &&
@@ -543,6 +579,9 @@ const editProjects = asyncHandler(async (req, res) => {
                 : `Details of update: ${safeChangesText}. Performed by ${safePerformerName}.`;
           }
 
+          // Debug log for client-side troubleshooting: record what notification is being prepared
+          console.log(`[editProjects] Preparing in-app notification for user ${userIdStr}: type=${notificationType}, title=${title}`);
+
           inAppNotificationsToCreate.push({
             title,
             type: notificationType,
@@ -581,8 +620,11 @@ const editProjects = asyncHandler(async (req, res) => {
       }
 
       if (inAppNotificationsToCreate.length > 0) {
+        // Log summary of notifications we will insert (IDs withheld until created)
         try {
+          console.log(`[editProjects] Inserting ${inAppNotificationsToCreate.length} in-app notification(s) for project ${projectId}. Sample:`, inAppNotificationsToCreate.slice(0,5).map(n => ({ memberId: String(n.memberId), type: n.type, title: n.title })));
           await ShowNotification.insertMany(inAppNotificationsToCreate, { session, ordered: false });
+          console.log(`[editProjects] Successfully inserted in-app notifications for project ${projectId}`);
         } catch (notificationError) {
           console.error(`In-app notification error (project ${projectId}):`, notificationError);
         }
