@@ -7,6 +7,7 @@ import { ShowNotification } from "../models/showNotificationSchema.js";
 import { User } from "../models/user.model.js";
 import { sendNotification as sendPushNotificationFirebase } from "../utils/firebase.service.js"; // Renamed to avoid conflict
 import { LanguagePreference } from "../models/languagePreferenceSchema.js"; // Added for language preferences
+import { NotificationSetting } from "../models/notificationSetting.model.js"; // Added for notification settings
 
 // Helper function to get language preferences for multiple users
 async function getUserLanguagePreferences(userIds) {
@@ -140,6 +141,18 @@ const getDocumentNotificationRecipients = async (
   };
 };
 
+// Helper function to check if user has notifications enabled
+async function checkNotificationEnabled(userId) {
+  try {
+    const setting = await NotificationSetting.findOne({ userId });
+    // If no setting exists, default to enabled (true)
+    return !setting || setting.status !== false;
+  } catch (error) {
+    console.warn(`[NotificationSetting] Error checking for user ${userId}:`, error.message);
+    return true; // Default to enabled on error
+  }
+}
+
 // Helper function to send document push notifications (now language aware)
 const sendDocumentPushNotifications = async (
   recipientsWithTokens, // These are user objects with language preference potentially
@@ -157,44 +170,73 @@ const sendDocumentPushNotifications = async (
     //   `[Document Push] Preparing to send to ${recipientsWithTokens.length} potential users`
     // );
 
+    // First, filter out users who have disabled notifications
+    const enabledRecipients = [];
+    for (const user of recipientsWithTokens) {
+      const isEnabled = await checkNotificationEnabled(user._id);
+      if (isEnabled) {
+        enabledRecipients.push(user);
+      } else {
+        console.log(`[Document Push] Skipping user ${user._id} - notifications disabled`);
+      }
+    }
+
+    if (enabledRecipients.length === 0) {
+      console.log("[Document Push] No recipients with enabled notifications.");
+      return;
+    }
+
+    // Build a map of token -> language to prevent duplicate tokens getting multiple languages
+    const tokenLanguageMap = new Map(); // token -> language
+
+    for (const user of enabledRecipients) {
+      const token = user.effectiveToken;
+      if (token && token.trim() !== '') {
+        const lang = userLanguageMap[user._id.toString()] || 'portuguese';
+        
+        // If token already exists with a different language, log warning but keep first assignment
+        if (tokenLanguageMap.has(token) && tokenLanguageMap.get(token) !== lang) {
+          console.warn(`[Document Push] Token ${token.substring(0, 20)}... assigned to both languages. User: ${user._id}, Lang: ${lang}, Existing: ${tokenLanguageMap.get(token)}`);
+          // Keep the existing assignment - don't add to second language
+          continue;
+        }
+        
+        tokenLanguageMap.set(token, lang);
+      }
+    }
+
+    // Group unique tokens by language
     const tokensByLanguage = {
-        english: [],
-        portuguese: []
+      english: [],
+      portuguese: []
     };
 
-    recipientsWithTokens.forEach(user => {
-        const token = user.effectiveToken;
-        if (token) {
-            const lang = userLanguageMap[user._id.toString()] || 'portuguese'; // Default to Portuguese
-            if (lang === 'english') {
-                tokensByLanguage.english.push(token);
-            } else {
-                tokensByLanguage.portuguese.push(token);
-            }
-        }
+    tokenLanguageMap.forEach((lang, token) => {
+      if (lang === 'english') {
+        tokensByLanguage.english.push(token);
+      } else {
+        tokensByLanguage.portuguese.push(token);
+      }
     });
-    
-    const uniqueEnglishTokens = [...new Set(tokensByLanguage.english)];
-    const uniquePortugueseTokens = [...new Set(tokensByLanguage.portuguese)];
 
     const pushPromises = [];
 
-    if (uniqueEnglishTokens.length > 0) {
-        // console.log(`[Document Push] Sending English to ${uniqueEnglishTokens.length} unique devices`);
-        pushPromises.push(
-            sendPushNotificationFirebase(uniqueEnglishTokens, titles.english, bodies.english, data)
-        );
+    if (tokensByLanguage.english.length > 0) {
+      console.log(`[Document Push] Sending English to ${tokensByLanguage.english.length} unique devices`);
+      pushPromises.push(
+        sendPushNotificationFirebase(tokensByLanguage.english, titles.english, bodies.english, data)
+      );
     }
-    if (uniquePortugueseTokens.length > 0) {
-        // console.log(`[Document Push] Sending Portuguese to ${uniquePortugueseTokens.length} unique devices`);
-        pushPromises.push(
-            sendPushNotificationFirebase(uniquePortugueseTokens, titles.portuguese, bodies.portuguese, data)
-        );
+    if (tokensByLanguage.portuguese.length > 0) {
+      console.log(`[Document Push] Sending Portuguese to ${tokensByLanguage.portuguese.length} unique devices`);
+      pushPromises.push(
+        sendPushNotificationFirebase(tokensByLanguage.portuguese, titles.portuguese, bodies.portuguese, data)
+      );
     }
     
     if (pushPromises.length === 0) {
-        // console.warn("[Document Push] No valid FCM tokens found for any recipients in specified languages");
-        return;
+      console.warn("[Document Push] No valid FCM tokens found for any recipients in specified languages");
+      return;
     }
 
     return Promise.all(pushPromises);

@@ -10,15 +10,22 @@ import { SendEmailUtil } from "../utils/emailsender.js";
 import { sendNotification as sendPushNotificationFirebase } from "../utils/firebase.service.js";
 import { LanguagePreference } from "../models/languagePreferenceSchema.js";
 
+function normalizeLanguagePreference(raw) {
+  if (raw == null || raw === "") return "portuguese";
+  const s = String(raw).trim().toLowerCase();
+  if (s === "english" || s === "en" || s.startsWith("en-")) return "english";
+  return "portuguese";
+}
+
 async function getUserLanguagePreference(userId) {
-  if (!userId) return 'portuguese';
+  if (!userId) return "portuguese";
   try {
     const objectIdUserId = new mongoose.Types.ObjectId(userId);
     const preference = await LanguagePreference.findOne({ userId: objectIdUserId }).lean();
-    return preference?.languageSelected || 'portuguese';
+    return normalizeLanguagePreference(preference?.languageSelected);
   } catch (error) {
     console.warn(`[getUserLanguagePreference] Error converting or fetching pref for ${userId}:`, error.message);
-    return 'portuguese';
+    return "portuguese";
   }
 }
 

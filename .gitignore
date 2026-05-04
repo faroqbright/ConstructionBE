@@ -41,7 +41,7 @@ bower_components
 build/Release
 
 # Firebase service account key - DO NOT PUSH
-utils/construct-flow-50bcd638645c.json
+# utils/construct-flow-50bcd638645c.json
 
 # Dependency directories
 node_modules/

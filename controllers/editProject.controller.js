@@ -14,6 +14,15 @@ import UserDocument from "../models/userdocumentModel.js";
 import Document from "../models/documentModel.js";
 import FinanceDocument from "../models/finance.model.js";
 import { LanguagePreference } from "../models/languagePreferenceSchema.js";
+import { NotificationSetting } from "../models/notificationSetting.model.js";
+
+/** Normalize DB / client language values to `english` | `portuguese` for pushes and emails */
+function normalizeLanguagePreference(raw) {
+  if (raw == null || raw === "") return "portuguese";
+  const s = String(raw).trim().toLowerCase();
+  if (s === "english" || s === "en" || s.startsWith("en-")) return "english";
+  return "portuguese";
+}
 
 // Helper function to send document notification emails based on language preference
 async function sendDocumentNotificationEmail(user, documentInfo) {
@@ -22,7 +31,7 @@ async function sendDocumentNotificationEmail(user, documentInfo) {
     const languagePref = await LanguagePreference.findOne({
       userId: user._id,
     }).lean();
-    const userLanguage = languagePref?.languageSelected || "portuguese";
+    const userLanguage = normalizeLanguagePreference(languagePref?.languageSelected);
 
     // Email templates
     const templates = {
@@ -56,7 +65,9 @@ async function getUserLanguagePreferences(userIds) {
 
     const userLanguageMap = {};
     languagePreferences.forEach((pref) => {
-      userLanguageMap[pref.userId.toString()] = pref.languageSelected;
+      userLanguageMap[pref.userId.toString()] = normalizeLanguagePreference(
+        pref.languageSelected
+      );
     });
 
     return userLanguageMap;
@@ -79,7 +90,7 @@ async function sendProjectNotificationEmail(
     const languagePref = await LanguagePreference.findOne({
       userId: user._id,
     }).lean();
-    const userLanguage = languagePref?.languageSelected || "portuguese";
+    const userLanguage = normalizeLanguagePreference(languagePref?.languageSelected);
 
     // Email templates for different notification types
     const templates = {
@@ -122,30 +133,78 @@ async function sendProjectNotificationEmail(
   }
 }
 
+// Helper function to check if user has notifications enabled
+async function checkNotificationEnabled(userId) {
+  try {
+    const setting = await NotificationSetting.findOne({ userId });
+    return !setting || setting.status !== false;
+  } catch (error) {
+    console.warn(`[NotificationSetting] Error checking for user ${userId}:`, error.message);
+    return true;
+  }
+}
+
 // Helper function to send push notifications with language support
 async function sendLanguageSpecificPushNotifications(users, title, body, data) {
   try {
-    // Get language preferences for all users
-    const userIds = users.map((user) => user._id.toString());
+    // Filter out users with disabled notifications
+    const enabledUsers = [];
+    for (const user of users) {
+      if (user && user._id) {
+        const isEnabled = await checkNotificationEnabled(user._id);
+        if (!isEnabled) {
+          console.log(`[sendLanguageSpecificPushNotifications] Skipping user ${user._id} - notifications disabled`);
+          continue;
+        }
+        enabledUsers.push(user);
+      }
+    }
+
+    if (enabledUsers.length === 0) {
+      console.log("[sendLanguageSpecificPushNotifications] No recipients with enabled notifications.");
+      return;
+    }
+
+    // Get language preferences for enabled users
+    const userIds = enabledUsers.map((user) => user._id.toString());
     const userLanguageMap = await getUserLanguagePreferences(userIds);
 
-    // Group tokens by language
+    // Build a map of token -> language to prevent duplicate tokens getting multiple languages
+    const tokenLanguageMap = new Map();
+
+    enabledUsers.forEach((user) => {
+      const userId = user._id.toString();
+      const token = user.fcmDeviceToken || user.notificationToken;
+      if (token && token.trim() !== '') {
+        const language = userLanguageMap[userId] || "portuguese";
+        
+        // If token already exists with a different language, log warning but keep first assignment
+        if (tokenLanguageMap.has(token) && tokenLanguageMap.get(token) !== language) {
+          console.warn(`[sendLanguageSpecificPushNotifications] Token ${token.substring(0, 20)}... assigned to both languages. User: ${userId}, Lang: ${language}, Existing: ${tokenLanguageMap.get(token)}`);
+          return; // Skip adding to second language
+        }
+        
+        tokenLanguageMap.set(token, language);
+      }
+    });
+
+    // Group unique tokens by language
     const tokensByLanguage = {
       portuguese: [],
       english: [],
     };
 
-    users.forEach((user) => {
-      const userId = user._id.toString();
-      const token = user.fcmDeviceToken || user.notificationToken;
-      if (token) {
-        const language = userLanguageMap[userId] || "portuguese";
-        tokensByLanguage[language].push(token);
+    tokenLanguageMap.forEach((lang, token) => {
+      if (lang === 'english') {
+        tokensByLanguage.english.push(token);
+      } else {
+        tokensByLanguage.portuguese.push(token);
       }
     });
 
     // Send Portuguese notifications
     if (tokensByLanguage.portuguese.length > 0) {
+      console.log(`[sendLanguageSpecificPushNotifications] Sending Portuguese to ${tokensByLanguage.portuguese.length} unique devices`);
       await sendPushNotification(
         tokensByLanguage.portuguese,
         title.portuguese,
@@ -156,6 +215,7 @@ async function sendLanguageSpecificPushNotifications(users, title, body, data) {
 
     // Send English notifications
     if (tokensByLanguage.english.length > 0) {
+      console.log(`[sendLanguageSpecificPushNotifications] Sending English to ${tokensByLanguage.english.length} unique devices`);
       await sendPushNotification(
         tokensByLanguage.english,
         title.english,
@@ -538,13 +598,21 @@ const editProjects = asyncHandler(async (req, res) => {
         const userIdsToQuery = Array.from(involvedUserIdsForNotif);
         const languagePreferences = await LanguagePreference.find({ userId: { $in: userIdsToQuery } }).lean();
         const userLanguageMap = {};
-        languagePreferences.forEach((pref) => { userLanguageMap[pref.userId.toString()] = pref.languageSelected; });
+        languagePreferences.forEach((pref) => {
+          userLanguageMap[pref.userId.toString()] = normalizeLanguagePreference(
+            pref.languageSelected
+          );
+        });
         
         const safeProjectName = updatedProject.projectName || "the project";
         const safePerformerName = performingUser.userName || "A user";
         const safeChangesText = changesSummary.map(String).join("; ");
 
-        userIdsToQuery.forEach((userIdStr) => {
+        for (const userIdStr of userIdsToQuery) {
+          if (!(await checkNotificationEnabled(new mongoose.Types.ObjectId(userIdStr)))) {
+            console.log(`[editProjects] Skipping in-app for user ${userIdStr} - notifications disabled`);
+            continue;
+          }
           const userLanguage = userLanguageMap[userIdStr] || "portuguese";
           const notificationType = isFirstUpdate ? "Project Creation" : "Project Update";
           let title, description, lengthyDesc;
@@ -590,7 +658,7 @@ const editProjects = asyncHandler(async (req, res) => {
             memberId: new mongoose.Types.ObjectId(userIdStr),
             projectId: updatedProject._id,
           });
-        });
+        }
       }
 
       if (statusChangedToCompleted) {
@@ -602,10 +670,18 @@ const editProjects = asyncHandler(async (req, res) => {
           const userIdsToQuery = Array.from(reviewUserIds);
           const langPrefs = await LanguagePreference.find({ userId: { $in: userIdsToQuery } }).lean();
           const reviewLangMap = {};
-          langPrefs.forEach((pref) => { reviewLangMap[pref.userId.toString()] = pref.languageSelected; });
+          langPrefs.forEach((pref) => {
+            reviewLangMap[pref.userId.toString()] = normalizeLanguagePreference(
+              pref.languageSelected
+            );
+          });
           const safeProjectName = updatedProject.projectName || "the project";
 
-          userIdsToQuery.forEach((userIdStr) => {
+          for (const userIdStr of userIdsToQuery) {
+            if (!(await checkNotificationEnabled(new mongoose.Types.ObjectId(userIdStr)))) {
+              console.log(`[editProjects] Skipping review in-app for user ${userIdStr} - notifications disabled`);
+              continue;
+            }
             const userLanguage = reviewLangMap[userIdStr] || "portuguese";
             inAppNotificationsToCreate.push({
               title: userLanguage === "portuguese" ? `Projecto Conclu do: ${safeProjectName}` : `Project Completed: ${safeProjectName}`,
@@ -615,7 +691,7 @@ const editProjects = asyncHandler(async (req, res) => {
               memberId: new mongoose.Types.ObjectId(userIdStr),
               projectId: updatedProject._id,
             });
-          });
+          }
         }
       }
 
@@ -651,17 +727,30 @@ const editProjects = asyncHandler(async (req, res) => {
           notificationRecipientsMap.delete(performingUser._id.toString());
 
           const usersToNotify = Array.from(notificationRecipientsMap.values());
+          const usersForOutbound = [];
+          for (const user of usersToNotify) {
+            if (!user?._id) continue;
+            if (!(await checkNotificationEnabled(user._id))) {
+              console.log(`[editProjects] Skipping user ${user._id} for push/email - notifications disabled`);
+              continue;
+            }
+            usersForOutbound.push(user);
+          }
 
-          if (usersToNotify.length > 0) {
-            const userIdsToNotify = usersToNotify.map((u) => u._id.toString());
+          if (usersForOutbound.length > 0) {
+            const userIdsToNotify = usersForOutbound.map((u) => u._id.toString());
             const finalLanguagePrefs = await LanguagePreference.find({ userId: { $in: userIdsToNotify } }).lean();
             const finalUserLanguageMap = {};
-            finalLanguagePrefs.forEach((pref) => { finalUserLanguageMap[pref.userId.toString()] = pref.languageSelected; });
+            finalLanguagePrefs.forEach((pref) => {
+              finalUserLanguageMap[pref.userId.toString()] = normalizeLanguagePreference(
+                pref.languageSelected
+              );
+            });
             const safeProjectName = finalProjectDataForNotif.projectName || "Unknown Project";
 
             if ((isFirstUpdate || importantFieldsChanged || membersListChanged || ownersListChanged) && finalChangesSummary.length > 0) {
               const tokensByLanguage = { portuguese: [], english: [] };
-              usersToNotify.forEach((user) => {
+              usersForOutbound.forEach((user) => {
                 const token = user.fcmDeviceToken || user.notificationToken;
                 if (token) tokensByLanguage[finalUserLanguageMap[user._id.toString()] || "portuguese"].push(token);
               });
@@ -681,8 +770,8 @@ const editProjects = asyncHandler(async (req, res) => {
               }
             }
 
-            if ((isFirstUpdate || importantFieldsChanged || membersListChanged || ownersListChanged) && finalChangesSummary.length > 0 && usersToNotify.some(u => u.email)) {
-              for (const user of usersToNotify) {
+            if ((isFirstUpdate || importantFieldsChanged || membersListChanged || ownersListChanged) && finalChangesSummary.length > 0 && usersForOutbound.some(u => u.email)) {
+              for (const user of usersForOutbound) {
                 if (user.email) {
                   const emailType = isFirstUpdate ? "creation" : "update";
                   await sendProjectNotificationEmail(user, { projectName: safeProjectName }, performingUser, finalChangesSummary, emailType)
@@ -697,7 +786,7 @@ const editProjects = asyncHandler(async (req, res) => {
               (finalProjectDataForNotif.projectOwners || []).forEach(o => o?.ownerId?._id && reviewUserIds.add(o.ownerId._id.toString()));
               reviewUserIds.delete(performingUser._id.toString()); 
               
-              const usersForReviewPush = usersToNotify.filter(u => reviewUserIds.has(u._id.toString()));
+              const usersForReviewPush = usersForOutbound.filter(u => reviewUserIds.has(u._id.toString()));
               if (usersForReviewPush.length > 0) {
                 const reviewTokensByLanguage = { portuguese: [], english: [] };
                 usersForReviewPush.forEach(user => {
@@ -892,7 +981,7 @@ const createProject = asyncHandler(async (req, res) => {
 
       if (recipientUserIds.size > 0) {
         try {
-          const usersForNotification = await User.find({
+          const usersForNotificationRaw = await User.find({
             _id: {
               $in: Array.from(recipientUserIds).map(
                 (id) => new mongoose.Types.ObjectId(id)
@@ -902,9 +991,21 @@ const createProject = asyncHandler(async (req, res) => {
             .select("email userName _id notificationToken fcmDeviceToken")
             .lean();
 
+          const usersForNotification = [];
+          for (const u of usersForNotificationRaw) {
+            if (await checkNotificationEnabled(u._id)) {
+              usersForNotification.push(u);
+            } else {
+              console.log(`[createProject] Skipping user ${u._id} - notifications disabled`);
+            }
+          }
+
+          if (usersForNotification.length === 0) {
+            // No recipients with notifications enabled
+          } else {
           // Get language preferences
           const userLanguageMap = await getUserLanguagePreferences(
-            Array.from(recipientUserIds)
+            usersForNotification.map((u) => u._id.toString())
           );
 
           // Create in-app notifications with language support
@@ -966,6 +1067,7 @@ const createProject = asyncHandler(async (req, res) => {
               [],
               "creation"
             );
+          }
           }
         } catch (error) {
           console.error(
@@ -1512,14 +1614,23 @@ const deleteProject = asyncHandler(async (req, res) => {
     }
 
     const usersToNotify = Array.from(notificationRecipients.values());
+    const usersToNotifyEnabled = [];
+    for (const user of usersToNotify) {
+      if (!user?._id) continue;
+      if (await checkNotificationEnabled(user._id)) {
+        usersToNotifyEnabled.push(user);
+      } else {
+        console.log(`[deleteProject] Skipping user ${user._id} - notifications disabled`);
+      }
+    }
 
-    if (usersToNotify.length > 0) {
+    if (usersToNotifyEnabled.length > 0) {
       // Get language preferences for all users
-      const userIds = usersToNotify.map((user) => user._id.toString());
+      const userIds = usersToNotifyEnabled.map((user) => user._id.toString());
       const userLanguageMap = await getUserLanguagePreferences(userIds);
 
       // Create in-app notifications with language support
-      const inAppNotificationsToCreate = usersToNotify.map((user) => {
+      const inAppNotificationsToCreate = usersToNotifyEnabled.map((user) => {
         const userLanguage =
           userLanguageMap[user._id.toString()] || "portuguese";
         const isPortuguese = userLanguage === "portuguese";
@@ -1548,9 +1659,9 @@ const deleteProject = asyncHandler(async (req, res) => {
 
     await session.commitTransaction();
 
-    if (usersToNotify.length > 0) {
+    if (usersToNotifyEnabled.length > 0) {
       // Send push notifications with language support
-      const usersWithTokens = usersToNotify.filter(
+      const usersWithTokens = usersToNotifyEnabled.filter(
         (u) => u.fcmDeviceToken || u.notificationToken
       );
 
@@ -1573,7 +1684,7 @@ const deleteProject = asyncHandler(async (req, res) => {
       }
 
       // Send emails with language support
-      const usersWithEmails = usersToNotify.filter((u) => u.email);
+      const usersWithEmails = usersToNotifyEnabled.filter((u) => u.email);
       for (const user of usersWithEmails) {
         await sendProjectNotificationEmail(
           user,

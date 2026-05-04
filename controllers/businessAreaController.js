@@ -4,6 +4,18 @@ import { ShowNotification } from "../models/showNotificationSchema.js";
 import { sendNotification as sendPushNotification } from "../utils/firebase.service.js";
 import { SendEmailUtil } from "../utils/emailsender.js";
 import { LanguagePreference } from "../models/languagePreferenceSchema.js";
+import { NotificationSetting } from "../models/notificationSetting.model.js";
+
+// Helper function to check if user has notifications enabled
+async function checkNotificationEnabled(userId) {
+  try {
+    const setting = await NotificationSetting.findOne({ userId });
+    return !setting || setting.status !== false;
+  } catch (error) {
+    console.warn(`[NotificationSetting] Error checking for user ${userId}:`, error.message);
+    return true;
+  }
+}
 
 // Helper function to get user language preference
 async function getUserLanguage(userId) {
@@ -44,66 +56,82 @@ const sendBusinessAreaPushNotifications = async (title, body, data) => {
       return;
     }
 
-    // Group recipients by language
-    const recipientsByLanguage = {
+    // Filter out admins with disabled notifications and get their languages
+    const enabledAdminsWithLang = [];
+    for (const user of adminRecipients) {
+      if (user && user._id) {
+        const isEnabled = await checkNotificationEnabled(user._id);
+        if (!isEnabled) {
+          console.log(`[Business Area Push] Skipping admin ${user._id} - notifications disabled`);
+          continue;
+        }
+        const language = await getUserLanguage(user._id);
+        enabledAdminsWithLang.push({ user, language });
+      }
+    }
+
+    if (enabledAdminsWithLang.length === 0) {
+      console.log("[Business Area Push] No admin recipients with enabled notifications.");
+      return;
+    }
+
+    // Build a map of token -> language to prevent duplicate tokens getting multiple languages
+    const tokenLanguageMap = new Map();
+
+    for (const { user, language } of enabledAdminsWithLang) {
+      const token = user.notificationToken;
+      if (token && token.trim() !== '') {
+        // If token already exists with a different language, log warning but keep first assignment
+        if (tokenLanguageMap.has(token) && tokenLanguageMap.get(token) !== language) {
+          console.warn(`[Business Area Push] Token ${token.substring(0, 20)}... assigned to both languages. User: ${user._id}, Lang: ${language}, Existing: ${tokenLanguageMap.get(token)}`);
+          continue; // Skip adding to second language
+        }
+        tokenLanguageMap.set(token, language);
+      }
+    }
+
+    // Group unique tokens by language
+    const tokensByLanguage = {
       portuguese: [],
       english: [],
     };
 
-    // Get language preferences for all recipients
-    const languagePromises = adminRecipients.map(async (user) => {
-      const language = await getUserLanguage(user._id);
-      return { user, language };
-    });
-
-    const usersWithLanguage = await Promise.all(languagePromises);
-
-    usersWithLanguage.forEach(({ user, language }) => {
-      if (language === "portuguese") {
-        recipientsByLanguage.portuguese.push(user);
+    tokenLanguageMap.forEach((lang, token) => {
+      if (lang === 'english') {
+        tokensByLanguage.english.push(token);
       } else {
-        recipientsByLanguage.english.push(user);
+        tokensByLanguage.portuguese.push(token);
       }
     });
 
     // Send notifications for each language group
     const sendPromises = [];
 
-    if (recipientsByLanguage.portuguese.length > 0) {
-      const portugueseTokens = recipientsByLanguage.portuguese
-        .map((r) => r.notificationToken)
-        .filter(Boolean);
+    if (tokensByLanguage.portuguese.length > 0) {
+      console.log(`[Business Area Push] Sending Portuguese to ${tokensByLanguage.portuguese.length} unique devices`);
+      const portugueseTitle =
+        typeof title === "object" ? title.portuguese : title;
+      const portugueseBody =
+        typeof body === "object" ? body.portuguese : body;
 
-      if (portugueseTokens.length > 0) {
-        const portugueseTitle =
-          typeof title === "object" ? title.portuguese : title;
-        const portugueseBody =
-          typeof body === "object" ? body.portuguese : body;
-
-        sendPromises.push(
-          sendPushNotification(
-            portugueseTokens,
-            portugueseTitle,
-            portugueseBody,
-            data
-          )
-        );
-      }
+      sendPromises.push(
+        sendPushNotification(
+          tokensByLanguage.portuguese,
+          portugueseTitle,
+          portugueseBody,
+          data
+        )
+      );
     }
 
-    if (recipientsByLanguage.english.length > 0) {
-      const englishTokens = recipientsByLanguage.english
-        .map((r) => r.notificationToken)
-        .filter(Boolean);
+    if (tokensByLanguage.english.length > 0) {
+      console.log(`[Business Area Push] Sending English to ${tokensByLanguage.english.length} unique devices`);
+      const englishTitle = typeof title === "object" ? title.english : title;
+      const englishBody = typeof body === "object" ? body.english : body;
 
-      if (englishTokens.length > 0) {
-        const englishTitle = typeof title === "object" ? title.english : title;
-        const englishBody = typeof body === "object" ? body.english : body;
-
-        sendPromises.push(
-          sendPushNotification(englishTokens, englishTitle, englishBody, data)
-        );
-      }
+      sendPromises.push(
+        sendPushNotification(tokensByLanguage.english, englishTitle, englishBody, data)
+      );
     }
 
     await Promise.all(sendPromises);

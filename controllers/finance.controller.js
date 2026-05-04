@@ -7,8 +7,21 @@ import { ShowNotification } from "../models/showNotificationSchema.js";
 import { sendNotification as sendPushNotificationFirebase } from "../utils/firebase.service.js"; // Renamed for clarity
 import { deleteFromS3, uploadToS3 } from "../utils/uploadService.js";
 import { LanguagePreference } from "../models/languagePreferenceSchema.js"; // Assuming this model exists
+import { NotificationSetting } from "../models/notificationSetting.model.js"; // Added for notification settings
 
 // --- HELPER FUNCTIONS FOR LOCALIZED NOTIFICATIONS ---
+
+// Helper function to check if user has notifications enabled
+async function checkNotificationEnabled(userId) {
+  try {
+    const setting = await NotificationSetting.findOne({ userId });
+    // If no setting exists, default to enabled (true)
+    return !setting || setting.status !== false;
+  } catch (error) {
+    console.warn(`[NotificationSetting] Error checking for user ${userId}:`, error.message);
+    return true; // Default to enabled on error
+  }
+}
 
 // Helper function to get user language preference
 async function getUserLanguage(userId) {
@@ -112,66 +125,79 @@ async function sendLocalizedPushNotifications(
     return;
   }
   try {
-    const recipientsByLanguage = { portuguese: [], english: [] };
-    const languagePromises = recipients.map(async (user) => {
-      // Ensure user and user._id are valid before calling getUserLanguage
+    // Filter out users with disabled notifications and get their languages
+    const enabledUsersWithLang = [];
+    for (const user of recipients) {
       if (user && user._id) {
+        const isEnabled = await checkNotificationEnabled(user._id);
+        if (!isEnabled) {
+          console.log(`[sendLocalizedPushNotifications] Skipping user ${user._id} - notifications disabled`);
+          continue;
+        }
         const language = await getUserLanguage(user._id);
-        return { user, language };
+        enabledUsersWithLang.push({ user, language });
       }
-      return { user, language: "portuguese" }; // Default if user or user._id is invalid
-    });
-    const usersWithLanguage = await Promise.all(languagePromises);
+    }
 
-    usersWithLanguage.forEach(({ user, language }) => {
-      if (language === "portuguese") recipientsByLanguage.portuguese.push(user);
-      else recipientsByLanguage.english.push(user);
+    if (enabledUsersWithLang.length === 0) {
+      console.log("[sendLocalizedPushNotifications] No recipients with enabled notifications.");
+      return;
+    }
+
+    // Build a map of token -> language to prevent duplicate tokens getting multiple languages
+    const tokenLanguageMap = new Map(); // token -> language
+
+    for (const { user, language } of enabledUsersWithLang) {
+      const token = user.effectiveToken;
+      if (token && token.trim() !== '') {
+        // If token already exists with a different language, log warning but keep first assignment
+        if (tokenLanguageMap.has(token) && tokenLanguageMap.get(token) !== language) {
+          console.warn(`[sendLocalizedPushNotifications] Token ${token.substring(0, 20)}... assigned to both languages. User: ${user._id}, Lang: ${language}, Existing: ${tokenLanguageMap.get(token)}`);
+          // Keep the existing assignment - don't add to second language
+          continue;
+        }
+        tokenLanguageMap.set(token, language);
+      }
+    }
+
+    // Group unique tokens by language
+    const tokensByLanguage = { portuguese: [], english: [] };
+    tokenLanguageMap.forEach((lang, token) => {
+      if (lang === 'english') {
+        tokensByLanguage.english.push(token);
+      } else {
+        tokensByLanguage.portuguese.push(token);
+      }
     });
 
     const sendPromises = [];
 
-    if (recipientsByLanguage.portuguese.length > 0) {
-      const portugueseTokens = [
-        ...new Set(
-          recipientsByLanguage.portuguese
-            .map((u) => u.effectiveToken)
-            .filter(Boolean)
-        ),
-      ];
-      if (portugueseTokens.length > 0) {
-        sendPromises.push(
-          sendPushNotificationFirebase(
-            portugueseTokens,
-            titleObj.portuguese,
-            bodyObj.portuguese,
-            data
-          )
-        );
-      }
+    if (tokensByLanguage.portuguese.length > 0) {
+      console.log(`[sendLocalizedPushNotifications] Sending Portuguese to ${tokensByLanguage.portuguese.length} unique devices`);
+      sendPromises.push(
+        sendPushNotificationFirebase(
+          tokensByLanguage.portuguese,
+          titleObj.portuguese,
+          bodyObj.portuguese,
+          data
+        )
+      );
     }
-    if (recipientsByLanguage.english.length > 0) {
-      const englishTokens = [
-        ...new Set(
-          recipientsByLanguage.english
-            .map((u) => u.effectiveToken)
-            .filter(Boolean)
-        ),
-      ];
-      if (englishTokens.length > 0) {
-        sendPromises.push(
-          sendPushNotificationFirebase(
-            englishTokens,
-            titleObj.english,
-            bodyObj.english,
-            data
-          )
-        );
-      }
+    if (tokensByLanguage.english.length > 0) {
+      console.log(`[sendLocalizedPushNotifications] Sending English to ${tokensByLanguage.english.length} unique devices`);
+      sendPromises.push(
+        sendPushNotificationFirebase(
+          tokensByLanguage.english,
+          titleObj.english,
+          bodyObj.english,
+          data
+        )
+      );
     }
     if (sendPromises.length > 0) {
       await Promise.all(sendPromises);
       console.log(
-        `Localized push notifications initiated for: ${titleObj.english} / ${titleObj.portuguese}`
+        `Localized push notifications sent for: ${titleObj.english} / ${titleObj.portuguese}`
       );
     } else {
       console.warn(
